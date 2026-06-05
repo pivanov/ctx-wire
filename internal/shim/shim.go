@@ -340,6 +340,19 @@ func shimScript(cmd, ctxWire string) string {
 cmd=%s
 ctx_wire=%s
 shim_dir=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)
+
+# is_ctx_wire_shim reports whether $1 is a ctx-wire-managed shim. It reads only
+# the first two lines so it never scans a real (binary) executable: the marker
+# sits near the top of every shim and never inside a real tool.
+is_ctx_wire_shim() {
+  _l1=; _l2=
+  { IFS= read -r _l1; IFS= read -r _l2; } < "$1" 2>/dev/null || return 1
+  case $_l1$_l2 in
+    *'ctx-wire shim'*) return 0 ;;
+  esac
+  return 1
+}
+
 new_path=
 old_ifs=$IFS
 IFS=:
@@ -365,6 +378,29 @@ real=$(command -v "$cmd" 2>/dev/null) || {
   echo "ctx-wire shim: $cmd not found after removing $shim_dir from PATH" >&2
   exit 127
 }
+# If command -v resolved to ANOTHER ctx-wire shim (e.g. a second install left on
+# PATH by an upgrade), scan PATH for the first non-shim executable instead.
+# Without this, two shim dirs can bounce a command between shims without end.
+if is_ctx_wire_shim "$real"; then
+  real=
+  old_ifs=$IFS
+  IFS=:
+  for part in ${PATH-}; do
+    [ -n "$part" ] || part=.
+    cand=$part/$cmd
+    [ -f "$cand" ] && [ -x "$cand" ] || continue
+    if is_ctx_wire_shim "$cand"; then
+      continue
+    fi
+    real=$cand
+    break
+  done
+  IFS=$old_ifs
+  if [ -z "$real" ]; then
+    echo "ctx-wire shim: no real '$cmd' on PATH (only ctx-wire shims); check for duplicate installs" >&2
+    exit 127
+  fi
+fi
 should_wire=0
 case "${CTX_WIRE_DISABLE_SHIMS:-}" in
   1|true|TRUE|yes|YES|on|ON)
@@ -405,6 +441,19 @@ fi
 if [ "$should_wire" != 1 ]; then
   exec "$real" "$@"
 fi
+# Recursion backstop: cap how deep ctx-wire may wrap itself (the counter rides
+# in the env across exec). A misconfigured PATH then degrades to running the
+# real command directly instead of forking without bound.
+wrap_depth=${CTX_WIRE_SHIM_DEPTH:-0}
+case $wrap_depth in
+  ''|*[!0-9]*) wrap_depth=0 ;;
+esac
+if [ "$wrap_depth" -ge 10 ]; then
+  echo "ctx-wire shim: wrap depth $wrap_depth exceeded for '$cmd'; running it directly (check for duplicate ctx-wire installs on PATH)" >&2
+  exec "$real" "$@"
+fi
+CTX_WIRE_SHIM_DEPTH=$((wrap_depth + 1))
+export CTX_WIRE_SHIM_DEPTH
 CTX_WIRE_SHIM=$cmd
 export CTX_WIRE_SHIM
 # Attribute the command to the detected agent, unless an outer hook already set
@@ -493,12 +542,83 @@ func lookPathSkippingDir(cmd, skipDir string) (string, bool) {
 		for _, ext := range executableExts() {
 			candidate := filepath.Join(dir, cmd+ext)
 			info, err := os.Stat(candidate)
-			if err == nil && !info.IsDir() && isExecutable(info) {
-				return candidate, true
+			if err != nil || info.IsDir() || !isExecutable(info) {
+				continue
 			}
+			if isManagedShimFile(candidate) {
+				continue // another ctx-wire shim; keep scanning for the real binary
+			}
+			return candidate, true
 		}
 	}
 	return "", false
+}
+
+// isManagedShimFile reports whether the file at path is a ctx-wire-managed shim,
+// reading only a small prefix so it never scans a real (possibly large, binary)
+// executable. The marker sits in the first line of every shim.
+func isManagedShimFile(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var buf [256]byte
+	n, _ := f.Read(buf[:])
+	return strings.Contains(string(buf[:n]), marker)
+}
+
+// CtxWireBinariesOnPATH returns the distinct ctx-wire executables found on PATH,
+// in PATH order. More than one means a stale or duplicate install that can
+// shadow the intended binary and contribute to shim recursion; callers surface
+// this as a warning.
+func CtxWireBinariesOnPATH() []string {
+	var bins []string
+	seen := map[string]bool{}
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == "" {
+			dir = "."
+		}
+		candidate := filepath.Join(dir, shimFileName("ctx-wire"))
+		info, err := os.Stat(candidate)
+		if err != nil || info.IsDir() || !isExecutable(info) {
+			continue
+		}
+		clean := cleanPath(candidate)
+		if seen[clean] {
+			continue
+		}
+		seen[clean] = true
+		bins = append(bins, candidate)
+	}
+	return bins
+}
+
+// ManagedShimDirsOnPATH returns the distinct directories on PATH that hold at
+// least one ctx-wire-managed shim. More than one indicates a stale install
+// (commonly left by an upgrade) that can make command resolution bounce between
+// shim sets; callers surface this as a warning.
+func ManagedShimDirsOnPATH() []string {
+	var dirs []string
+	seen := map[string]bool{}
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == "" {
+			dir = "."
+		}
+		clean := cleanPath(dir)
+		if seen[clean] {
+			continue
+		}
+		for _, cmd := range DefaultCommands {
+			p := filepath.Join(dir, shimFileName(cmd))
+			if info, err := os.Stat(p); err == nil && !info.IsDir() && isManagedShimFile(p) {
+				seen[clean] = true
+				dirs = append(dirs, dir)
+				break
+			}
+		}
+	}
+	return dirs
 }
 
 func samePath(a, b string) bool {

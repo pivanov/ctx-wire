@@ -144,6 +144,11 @@ func binarySection(opts Options) Section {
 				fmt.Sprintf("PATH `ctx-wire` is %s, not this binary (run `ctx-wire init <agent>`)", onPath)})
 		}
 	}
+	if bins := shim.CtxWireBinariesOnPATH(); len(bins) > 1 {
+		sec.Checks = append(sec.Checks, Check{"duplicates", Warn,
+			fmt.Sprintf("%d ctx-wire binaries on PATH: %s; remove the stale one (a leftover install can shadow this binary and cause shim recursion)",
+				len(bins), strings.Join(bins, ", "))})
+	}
 	return sec
 }
 
@@ -200,6 +205,11 @@ func shimsSection() Section {
 	if len(st.Skipped) > 0 {
 		sec.Checks = append(sec.Checks, Check{"conflicts", Warn,
 			"existing non-ctx-wire files skipped: " + strings.Join(st.Skipped, ", ")})
+	}
+	if shimDirs := shim.ManagedShimDirsOnPATH(); len(shimDirs) > 1 {
+		sec.Checks = append(sec.Checks, Check{"duplicates", Warn,
+			fmt.Sprintf("managed shims in %d PATH dirs: %s; an upgrade left a stale set (remove the old dir's shims to avoid recursion)",
+				len(shimDirs), strings.Join(shimDirs, ", "))})
 	}
 	if len(st.Active) > 0 {
 		sec.Checks = append(sec.Checks, Check{"PATH", OK,

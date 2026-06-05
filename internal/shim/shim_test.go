@@ -40,6 +40,8 @@ func TestInstallWritesManagedExecutableShim(t *testing.T) {
 		"export CTX_WIRE_SHIM",
 		"command -v \"$cmd\"",
 		"exec \"$ctx_wire\" run \"$real\"",
+		"is_ctx_wire_shim",
+		"CTX_WIRE_SHIM_DEPTH",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("shim missing %q:\n%s", want, text)
@@ -189,6 +191,71 @@ func TestResolveRealSkipsManagedShim(t *testing.T) {
 	}
 	if cleanPath(got) != cleanPath(realGit) {
 		t.Fatalf("ResolveReal absolute = %q, want %q", got, realGit)
+	}
+}
+
+func TestResolveRealSkipsSecondShimDir(t *testing.T) {
+	// Two managed shim dirs on PATH (the classic post-upgrade state) ahead of the
+	// real binary. ResolveReal must skip BOTH shim sets and land on the real git,
+	// never resolving one shim to the other (which is the fork-bomb condition).
+	shimA := t.TempDir()
+	shimB := t.TempDir()
+	realDir := t.TempDir()
+	ctxWire := filepath.Join(shimA, "ctx-wire")
+	if err := os.WriteFile(ctxWire, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	realGit := filepath.Join(realDir, "git")
+	if err := os.WriteFile(realGit, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sep := string(os.PathListSeparator)
+	t.Setenv("PATH", shimA+sep+shimB+sep+realDir)
+	if _, err := Install(shimA, ctxWire, []string{"git"}); err != nil {
+		t.Fatalf("Install shimA: %v", err)
+	}
+	if _, err := Install(shimB, ctxWire, []string{"git"}); err != nil {
+		t.Fatalf("Install shimB: %v", err)
+	}
+
+	got, ok := ResolveReal("git")
+	if !ok {
+		t.Fatal("ResolveReal did not detect the managed shim")
+	}
+	if cleanPath(got) != cleanPath(realGit) {
+		t.Fatalf("ResolveReal = %q, want real git %q (must skip both shim dirs)", got, realGit)
+	}
+}
+
+func TestManagedShimDirsAndBinariesOnPATH(t *testing.T) {
+	shimA := t.TempDir()
+	shimB := t.TempDir()
+	realDir := t.TempDir()
+	ctxWire := filepath.Join(shimA, "ctx-wire")
+	if err := os.WriteFile(ctxWire, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A second ctx-wire binary in shimB simulates a stale install.
+	if err := os.WriteFile(filepath.Join(shimB, "ctx-wire"), []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(realDir, "git"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sep := string(os.PathListSeparator)
+	t.Setenv("PATH", shimA+sep+shimB+sep+realDir)
+	if _, err := Install(shimA, ctxWire, []string{"git"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(shimB, ctxWire, []string{"git"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if dirs := ManagedShimDirsOnPATH(); len(dirs) != 2 {
+		t.Fatalf("ManagedShimDirsOnPATH = %v, want 2 dirs", dirs)
+	}
+	if bins := CtxWireBinariesOnPATH(); len(bins) != 2 {
+		t.Fatalf("CtxWireBinariesOnPATH = %v, want 2 binaries", bins)
 	}
 }
 
