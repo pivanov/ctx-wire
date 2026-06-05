@@ -1,0 +1,20 @@
+[filters.brew-list]
+description = "Compact brew list/info/outdated/search/doctor output"
+match_command = "^brew\\s+(list|info|outdated|search|doctor|services\\s+list)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "Your system is ready to brew", message = "brew: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 120
+
+[[tests.brew-list]]
+name = "doctor success collapses"
+input = "Your system is ready to brew."
+expected = "brew: ok"
+
+[[tests.brew-list]]
+name = "list output preserved"
+input = "git\njq\nripgrep"
+expected = "git\njq\nripgrep"

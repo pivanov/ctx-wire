@@ -1,0 +1,23 @@
+[filters.terraform-show-json]
+description = "Pass `terraform output/show -json` through untouched: structured JSON payload must not be capped/truncated. Longer match span than terraform-show wins."
+match_command = "^terraform\\s+(output|show|state\\s+(list|show))\\b.*\\s--?json\\b"
+
+[[tests.terraform-show-json]]
+name = "show -json unchanged"
+input = '''
+{
+  "format_version": "1.0",
+  "values": { "outputs": { "bucket": { "value": "my-app" } } }
+}
+'''
+expected = '''
+{
+  "format_version": "1.0",
+  "values": { "outputs": { "bucket": { "value": "my-app" } } }
+}
+'''
+
+[[tests.terraform-show-json]]
+name = "output -json unchanged"
+input = '{"bucket":{"sensitive":false,"value":"my-app"}}'
+expected = '{"bucket":{"sensitive":false,"value":"my-app"}}'

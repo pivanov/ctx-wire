@@ -1,0 +1,22 @@
+[filters.pylint]
+description = "Compact pylint output"
+match_command = "^(uv\\s+run\\s+|python3?\\s+-m\\s+)?pylint\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "Your code has been rated at 10\\.00/10", message = "pylint: ok" },
+]
+strip_lines_matching = ["^\\s*$", "^[-]+$"]
+max_lines = 160
+
+[[tests.pylint]]
+name = "perfect score collapses"
+input = """
+--------------------------------------------------------------------
+Your code has been rated at 10.00/10
+"""
+expected = "pylint: ok"
+
+[[tests.pylint]]
+name = "lint issue preserved"
+input = "app.py:1:0: C0114: Missing module docstring (missing-module-docstring)"
+expected = "app.py:1:0: C0114: Missing module docstring (missing-module-docstring)"

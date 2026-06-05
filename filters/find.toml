@@ -1,0 +1,27 @@
+[filters.find]
+description = "Compact find output: strip blanks, cap path rows, truncate long paths"
+match_command = "^find\\b"
+strip_ansi = true
+replace = [
+  # Absolute find roots are often repeated hundreds of times; keep the tail
+  # where the useful file/directory identity lives.
+  { pattern = "^/(?:[^/\\s]+/)+([^/\\s]+/[^/\\s]+/[^/\\s]+/[^/\\s]+)$", replacement = ".../$1" },
+]
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 120
+
+[[tests.find]]
+name = "paths preserved"
+input = "./cmd/ctx-wire/main.go\n./internal/filter/filter.go"
+expected = "./cmd/ctx-wire/main.go\n./internal/filter/filter.go"
+
+[[tests.find]]
+name = "absolute path prefix compacted"
+input = "/Users/pivanov/workspace/pivanov/edynamix/WebComponents/packages/design-system/src\n/Users/pivanov/workspace/pivanov/edynamix/WebComponents/packages/design-system/tokens"
+expected = ".../WebComponents/packages/design-system/src\n.../WebComponents/packages/design-system/tokens"
+
+[[tests.find]]
+name = "caps rows"
+input = "a\nb\nc\nd"
+expected = "a\nb\nc\nd"

@@ -1,0 +1,11 @@
+[filters.pwd]
+description = "Compact pwd output: strip ANSI, truncate a very long path"
+match_command = "^pwd\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 5
+
+[[tests.pwd]]
+name = "path preserved"
+input = "/home/user/workspace/project"
+expected = "/home/user/workspace/project"

@@ -1,0 +1,38 @@
+# ctx-wire
+
+> ctx-wire is a small Go binary that sits between AI coding agents and the shell. It runs a command, compresses the output with declarative filters, scrubs secrets, and hands the agent a short result, cutting the tokens agents pay to read noisy command output. The full (scrubbed) log stays on disk for when something actually fails.
+
+## What it does
+
+- Runs your agent's command, then compresses the output with declarative TOML filters before the agent reads it.
+- Scrubs secrets globally and fail-closed (a redaction failure withholds output rather than leaking).
+- Keeps the full, scrubbed log on disk so nothing is lost when a command fails.
+
+## Key facts
+
+- Language: Go, single static binary, no CGO. Runs on macOS, Linux, and Windows.
+- 142 built-in declarative filters, verified by 326 conformance tests (`ctx-wire verify`).
+- Integration: Bash pre-tool hook, PATH shims (catch commands nested scripts spawn), and an MCP server exposing `run_command` and `read_file`.
+- Works with Claude, Cursor, Codex, Gemini, Copilot, Cline, Windsurf, and more (14 targets).
+- Streaming-aware bypass auto-detects dev servers, watchers, and interactive commands so they never deadlock.
+- Per-agent attribution: every recorded command carries the agent that issued it, so savings can be split by agent.
+- Telemetry is anonymous, aggregate, token-only, and opt-out. Pricing/$ estimates live on the website, never in the binary.
+- License: MIT. Free and open source.
+
+## Install
+
+```sh
+curl -fsSL https://ctx-wire.dev/install.sh | sh
+ctx-wire init claude   # or cursor, codex, gemini, copilot
+ctx-wire gain          # see token savings recorded so far
+```
+
+## Links
+
+- [Website](https://ctx-wire.dev)
+- [GitHub repository](https://github.com/pivanov/ctx-wire)
+- [README](https://github.com/pivanov/ctx-wire#readme)
+
+## Author
+
+Pavel Ivanov ([@pivanov](https://github.com/pivanov))

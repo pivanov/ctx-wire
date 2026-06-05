@@ -1,0 +1,31 @@
+[filters.pip-install]
+description = "Compact pip install output"
+match_command = "^(?:(python3?\\s+-m\\s+)?pip\\s+(install|sync)\\b|pip3?\\s+install\\b)"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)(Successfully installed|Requirement already satisfied)", message = "pip: ok", unless = "(?i)(error|failed|traceback|Could not)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^Collecting ",
+  "^Downloading ",
+  "^Installing collected packages:",
+  "^Requirement already satisfied:",
+]
+max_lines = 100
+on_empty = "pip: ok"
+
+[[tests.pip-install]]
+name = "success collapses"
+input = """
+Collecting requests
+Downloading requests-2.32.0-py3-none-any.whl
+Installing collected packages: requests
+Successfully installed requests-2.32.0
+"""
+expected = "pip: ok"
+
+[[tests.pip-install]]
+name = "error preserved"
+input = "ERROR: Could not find a version that satisfies the requirement missing-package"
+expected = "ERROR: Could not find a version that satisfies the requirement missing-package"

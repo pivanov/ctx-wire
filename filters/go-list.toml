@@ -1,0 +1,17 @@
+[filters.go-list]
+description = "Compact go list output: strip blanks, cap package rows, truncate long lines"
+match_command = "^go\\s+list\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 200
+max_lines = 80
+
+[[tests.go-list]]
+name = "short package list unchanged"
+input = "example.com/m/internal/filter\nexample.com/m/internal/runner"
+expected = "example.com/m/internal/filter\nexample.com/m/internal/runner"
+
+[[tests.go-list]]
+name = "blank lines stripped"
+input = "pkg/a\n\npkg/b"
+expected = "pkg/a\npkg/b"

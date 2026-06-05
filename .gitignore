@@ -1,0 +1,29 @@
+node_modules/
+
+# build output (root binary only; not the cmd/ctx-wire/ source dir)
+/ctx-wire
+/dist/
+/web/dist/
+/web/node_modules/
+.wrangler/
+ctx-wire_*.tar.gz
+ctx-wire_*.tar.gz.sha256
+ctx-wire-tune*.tar.gz
+
+# test / temp artifacts
+*.log
+*.bak
+
+# macOS
+.DS_Store
+
+# brainstorming visual-companion mockups
+.superpowers/
+.vercel
+
+.docs/
+.agents/
+.cursor/
+.claude/
+CLAUDE.md
+AGENTS.md

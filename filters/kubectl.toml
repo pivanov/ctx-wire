@@ -1,0 +1,25 @@
+[filters.kubectl]
+description = "Compact kubectl output without hiding resource payloads"
+match_command = "^kubectl\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)(configured|created|unchanged|deleted|rolled out)", message = "kubectl: ok", unless = "(?i)(error|failed|forbidden|denied)" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 140
+
+[[tests.kubectl]]
+name = "apply success collapses"
+input = """
+deployment.apps/web configured
+service/web unchanged
+"""
+expected = "kubectl: ok"
+
+[[tests.kubectl]]
+name = "get output preserved"
+input = """
+NAME      READY   STATUS
+web-123   1/1     Running
+"""
+expected = "NAME      READY   STATUS\nweb-123   1/1     Running"

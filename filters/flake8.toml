@@ -1,0 +1,17 @@
+[filters.flake8]
+description = "Compact flake8 output"
+match_command = "^(uv\\s+run\\s+|python3?\\s+-m\\s+)?flake8\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+max_lines = 160
+on_empty = "flake8: ok"
+
+[[tests.flake8]]
+name = "empty success collapses"
+input = ""
+expected = "flake8: ok"
+
+[[tests.flake8]]
+name = "lint issue preserved"
+input = "app.py:1:1: F401 'os' imported but unused"
+expected = "app.py:1:1: F401 'os' imported but unused"

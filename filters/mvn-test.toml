@@ -1,0 +1,35 @@
+[filters.mvn-test]
+description = "Compact Maven test output"
+match_command = "^mvn\\s+(test|verify)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)(BUILD SUCCESS|Tests run: .*Failures: 0, Errors: 0)", message = "mvn test: ok", unless = "(?i)(BUILD FAILURE|FAILURE!|\\[ERROR\\]|Errors: [1-9])" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\[INFO\\] ---",
+  "^\\[INFO\\] Building\\s",
+  "^\\[INFO\\] Downloading\\s",
+  "^\\[INFO\\] Downloaded\\s",
+  "^Downloading:",
+  "^Downloaded:",
+]
+max_lines = 120
+
+[[tests.mvn-test]]
+name = "success collapses"
+input = """
+[INFO] --- maven-surefire-plugin:test ---
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+"""
+expected = "mvn test: ok"
+
+[[tests.mvn-test]]
+name = "failure preserved"
+input = """
+[ERROR] Failures:
+[ERROR]   AppTest.shouldWork:42 expected true
+[INFO] BUILD FAILURE
+"""
+expected = "[ERROR] Failures:\n[ERROR]   AppTest.shouldWork:42 expected true\n[INFO] BUILD FAILURE"

@@ -1,0 +1,36 @@
+[filters.node-build]
+description = "Compact npm/pnpm/yarn build script output"
+match_command = "^(npm|pnpm|yarn)\\s+(run\\s+)?(build|compile|bundle)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(✓ built in|built in \\d|compiled successfully|build successful|build completed|Done in)", message = "node build: ok", unless = "(?i)(ERR!|ERR_PNPM|error|failed|failure|ELIFECYCLE|Command failed)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^vite v\\d",
+  "^transforming\\.\\.\\.",
+  "^rendering chunks\\.\\.\\.",
+  "^computing gzip size\\.\\.\\.",
+]
+max_lines = 120
+
+[[tests.node-build]]
+name = "npm run build collapses vite success"
+input = """
+vite v5.4.0 building for production...
+transforming...
+✓ 123 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/app.js  120.4 kB
+✓ built in 1.23s
+"""
+expected = "node build: ok"
+
+[[tests.node-build]]
+name = "build error preserved"
+input = """
+src/app.ts:10:7: error: No matching export in "src/lib.ts"
+ELIFECYCLE Command failed with exit code 1.
+"""
+expected = "src/app.ts:10:7: error: No matching export in \"src/lib.ts\"\nELIFECYCLE Command failed with exit code 1."

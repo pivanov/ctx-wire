@@ -1,0 +1,24 @@
+[filters.gh-pr]
+description = "Compact high-volume gh list/check/view output"
+match_command = "^gh\\s+(pr|issue|run|workflow)\\s+(list|view|checks|status)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(All checks were successful|✓ .* passing|no open pull requests|no open issues)", message = "gh: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 260
+max_lines = 100
+
+[[tests.gh-pr]]
+name = "checks success collapses"
+input = """
+build  ✓ passing  1m
+test   ✓ passing  2m
+All checks were successful
+"""
+expected = "gh: ok"
+
+[[tests.gh-pr]]
+name = "failed check preserved"
+input = "test  X failing  2m  https://github.com/org/repo/actions/runs/1"
+expected = "test  X failing  2m  https://github.com/org/repo/actions/runs/1"

@@ -1,0 +1,29 @@
+[filters.rspec]
+description = "Compact RSpec output"
+match_command = "^(bundle\\s+exec\\s+)?rspec\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)\\d+ examples?, 0 failures?", message = "rspec: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 140
+
+[[tests.rspec]]
+name = "success collapses"
+input = """
+....
+
+Finished in 0.02 seconds
+4 examples, 0 failures
+"""
+expected = "rspec: ok"
+
+[[tests.rspec]]
+name = "failure preserved"
+input = """
+Failures:
+  1) User validates email
+     expected false to be true
+4 examples, 1 failure
+"""
+expected = "Failures:\n  1) User validates email\n     expected false to be true\n4 examples, 1 failure"

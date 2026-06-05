@@ -1,0 +1,35 @@
+[filters.docker]
+description = "Compact docker build and compose output"
+match_command = "^(docker\\s+(build|pull|push|compose\\s+(build|up|run|exec))|docker-compose\\s+(build|up|run|exec))\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)(DONE|Successfully built|writing image sha256|exporting to image|Downloaded newer image)", message = "docker: ok", unless = "(?i)(error|failed|denied)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^#\\d+ \\[",
+  "^#\\d+ CACHED",
+  "^#\\d+ sha256:",
+  "^#\\d+ transferring ",
+  "^#\\d+ extracting ",
+  "^#\\d+ pulling ",
+]
+max_lines = 140
+
+[[tests.docker]]
+name = "build success collapses"
+input = """
+#1 [internal] load build definition from Dockerfile
+#2 CACHED [2/5] WORKDIR /app
+#8 exporting to image
+#8 writing image sha256:abc done
+"""
+expected = "docker: ok"
+
+[[tests.docker]]
+name = "build error preserved"
+input = """
+#4 1.234 ERROR: failed to solve: process exited with code 1
+failed to solve: process exited with code 1
+"""
+expected = "#4 1.234 ERROR: failed to solve: process exited with code 1\nfailed to solve: process exited with code 1"

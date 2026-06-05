@@ -1,0 +1,17 @@
+[filters.fd]
+description = "Compact fd/fdfind output: strip ANSI and blank lines, cap path rows, truncate long paths"
+match_command = "^(fd|fdfind)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 120
+
+[[tests.fd]]
+name = "paths preserved"
+input = "cmd/ctx-wire/main.go\ninternal/filter/filter.go"
+expected = "cmd/ctx-wire/main.go\ninternal/filter/filter.go"
+
+[[tests.fd]]
+name = "blank lines stripped"
+input = "a.go\n\nb.go"
+expected = "a.go\nb.go"

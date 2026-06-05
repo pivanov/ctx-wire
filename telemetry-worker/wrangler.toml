@@ -1,0 +1,19 @@
+name = "ctx-wire-telemetry"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+[[d1_databases]]
+binding = "ctx_wire_telemetry"
+database_name = "ctx-wire-telemetry"
+database_id = "10035374-0167-442f-8ca8-e1ce3a934312"
+
+# Per-IP rate limit on the write path. This is the meaningful protection for an
+# anonymous public endpoint: a token baked into the open-source CLI would be
+# trivially extractable and is not real auth, but bounding write volume per IP
+# stops a single source from flooding/skewing the aggregate stats. period must be
+# 10 or 60 (seconds); tune `limit` if legitimate shared-NAT traffic trips it.
+[[unsafe.bindings]]
+name = "WRITE_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }

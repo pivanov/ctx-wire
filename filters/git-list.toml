@@ -1,0 +1,17 @@
+[filters.git-list]
+description = "Compact git list output (branch/remote/stash/ls-files/tag): strip blanks, cap rows, truncate long lines"
+match_command = "^git\\s+(?:(--no-pager|-C\\s+\\S+|-c\\s+\\S+)\\s+)*(branch|remote|tag|ls-files|show-ref|stash\\s+list)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 200
+max_lines = 80
+
+[[tests.git-list]]
+name = "branch list unchanged"
+input = "* main\n  feature/x\n  feature/y"
+expected = "* main\n  feature/x\n  feature/y"
+
+[[tests.git-list]]
+name = "blank lines stripped"
+input = "main\n\nrelease"
+expected = "main\nrelease"

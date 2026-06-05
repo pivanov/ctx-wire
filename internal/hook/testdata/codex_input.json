@@ -1,0 +1,12 @@
+{
+  "session_id": "s1",
+  "transcript_path": null,
+  "cwd": "/work",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.5",
+  "turn_id": "turn-1",
+  "tool_name": "Bash",
+  "tool_use_id": "tu-1",
+  "tool_input": { "command": "git status" },
+  "permission_mode": "default"
+}

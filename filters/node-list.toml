@@ -1,0 +1,25 @@
+[filters.node-list]
+description = "Compact npm/pnpm/yarn list, outdated, and why output"
+match_command = "^(npm|pnpm|yarn)\\s+(list|ls|outdated|why)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$", "^Legend:", "^Done in"]
+truncate_lines_at = 220
+max_lines = 120
+
+[[tests.node-list]]
+name = "short dependency tree preserved"
+input = """
+app@0.1.0 /repo
+├── react@19.0.0
+└── vite@6.0.0
+"""
+expected = "app@0.1.0 /repo\n├── react@19.0.0\n└── vite@6.0.0"
+
+[[tests.node-list]]
+name = "strips yarn footer"
+input = """
+=> Found "react@19.0.0"
+
+Done in 0.11s.
+"""
+expected = "=> Found \"react@19.0.0\""

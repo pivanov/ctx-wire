@@ -1,0 +1,37 @@
+[filters.search-tools]
+description = "Compact ag/ack search output"
+match_command = "^(ag|ack)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 500
+group_by = { key = "^(.+?):[0-9]+(?::[0-9]+)?:", max_per_group = 5, max_groups = 50, omit_label = "... +%d more matches in %s" }
+max_lines = 320
+
+[[tests.search-tools]]
+name = "short output unchanged"
+input = '''
+src/a.ts:1:first match
+src/a.ts:2:second match
+'''
+expected = '''
+src/a.ts:1:first match
+src/a.ts:2:second match
+'''
+
+[[tests.search-tools]]
+name = "groups and caps matches per file"
+input = '''
+src/a.ts:1:m1
+src/a.ts:2:m2
+src/a.ts:3:m3
+src/a.ts:4:m4
+src/a.ts:5:m5
+src/a.ts:6:m6
+'''
+expected = '''
+src/a.ts:1:m1
+src/a.ts:2:m2
+src/a.ts:3:m3
+src/a.ts:4:m4
+src/a.ts:5:m5
+... +1 more matches in src/a.ts'''

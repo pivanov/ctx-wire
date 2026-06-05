@@ -1,0 +1,24 @@
+[filters.node-audit]
+description = "Compact npm/pnpm/yarn audit output"
+match_command = "^(npm|pnpm|yarn)\\s+audit\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(found 0 vulnerabilities|No known vulnerabilities found|0 vulnerabilities found)", message = "node audit: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 240
+max_lines = 160
+
+[[tests.node-audit]]
+name = "clean audit collapses"
+input = "found 0 vulnerabilities"
+expected = "node audit: ok"
+
+[[tests.node-audit]]
+name = "vulnerability preserved"
+input = """
+high severity vulnerability
+Package lodash
+Patched in >=4.17.21
+"""
+expected = "high severity vulnerability\nPackage lodash\nPatched in >=4.17.21"

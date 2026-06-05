@@ -1,0 +1,19 @@
+[filters.mypy]
+description = "Compact mypy output"
+match_command = "^(uv\\s+run\\s+|python3?\\s+-m\\s+)?mypy\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "Success: no issues found", message = "mypy: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 120
+
+[[tests.mypy]]
+name = "success collapses"
+input = "Success: no issues found in 42 source files"
+expected = "mypy: ok"
+
+[[tests.mypy]]
+name = "type error preserved"
+input = "app.py:10: error: Incompatible return value type"
+expected = "app.py:10: error: Incompatible return value type"

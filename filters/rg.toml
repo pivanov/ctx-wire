@@ -1,0 +1,97 @@
+[filters.rg]
+description = "Compact ripgrep output: strip blanks, group matches by file, cap rows, truncate long matches"
+match_command = "^(rg|ripgrep)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 500
+# Group by filename, but only for file-prefixed, line-numbered output
+# (file:line:  or  file:line:col:). Single-file `rg -n` output (`8:text`, no
+# filename) and non-grep output do not match, so they pass through untouched.
+group_by = { key = "^(.+?):[0-9]+(?::[0-9]+)?:", max_per_group = 5, max_groups = 50, omit_label = "... +%d more matches in %s" }
+# Backstop above the group_by ceiling (50 groups x ~6 lines); group_by is the
+# primary reducer, max_lines only caps non-matching/pathological output.
+max_lines = 320
+
+[[tests.rg]]
+name = "short output unchanged"
+input = '''
+src/a.ts:1:first match
+src/a.ts:2:second match
+src/a.ts:3:third match
+'''
+expected = '''
+src/a.ts:1:first match
+src/a.ts:2:second match
+src/a.ts:3:third match
+'''
+
+[[tests.rg]]
+name = "strips blank lines"
+input = "src/a.ts:1:first\n\nsrc/b.ts:2:second"
+expected = "src/a.ts:1:first\nsrc/b.ts:2:second"
+
+[[tests.rg]]
+name = "groups and caps matches per file"
+input = '''
+src/a.ts:1:m1
+src/a.ts:2:m2
+src/a.ts:3:m3
+src/a.ts:4:m4
+src/a.ts:5:m5
+src/a.ts:6:m6
+src/a.ts:7:m7
+src/a.ts:8:m8
+'''
+expected = '''
+src/a.ts:1:m1
+src/a.ts:2:m2
+src/a.ts:3:m3
+src/a.ts:4:m4
+src/a.ts:5:m5
+... +3 more matches in src/a.ts'''
+
+[[tests.rg]]
+name = "files-list output passes through"
+input = "src/a.ts\nsrc/b.ts\nsrc/c.ts"
+expected = "src/a.ts\nsrc/b.ts\nsrc/c.ts"
+
+[[tests.rg]]
+name = "single-file line-numbered output passes through unchanged"
+input = "8:func x\n9:func y\n10:func z"
+expected = "8:func x\n9:func y\n10:func z"
+
+[[tests.rg]]
+name = "vimgrep column output groups by filename not file:line"
+input = '''
+src/a.go:10:4:h1
+src/a.go:11:4:h2
+src/a.go:12:4:h3
+src/a.go:13:4:h4
+src/a.go:14:4:h5
+src/a.go:15:4:h6
+'''
+expected = '''
+src/a.go:10:4:h1
+src/a.go:11:4:h2
+src/a.go:12:4:h3
+src/a.go:13:4:h4
+src/a.go:14:4:h5
+... +1 more matches in src/a.go'''
+
+[[tests.rg]]
+name = "windows path groups by full path not drive letter"
+input = '''
+C:\repo\a.go:10:h1
+C:\repo\a.go:11:h2
+C:\repo\a.go:12:h3
+C:\repo\a.go:13:h4
+C:\repo\a.go:14:h5
+C:\repo\a.go:15:h6
+'''
+expected = '''
+C:\repo\a.go:10:h1
+C:\repo\a.go:11:h2
+C:\repo\a.go:12:h3
+C:\repo\a.go:13:h4
+C:\repo\a.go:14:h5
+... +1 more matches in C:\repo\a.go'''

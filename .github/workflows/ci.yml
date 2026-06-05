@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+          cache: true
+      - uses: extractions/setup-just@v2
+      # fmt-check + vet + test + race + verify (filter conformance).
+      - name: Validate
+        run: just check
+      # Hermetic end-to-end smoke suite.
+      - name: Smoke
+        run: just smoke

@@ -1,0 +1,12 @@
+[filters.tree]
+description = "Compact tree output: strip ANSI, cap rows, keep summary"
+match_command = "^tree\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 180
+max_lines = 140
+
+[[tests.tree]]
+name = "tree preserved"
+input = ".\n|-- cmd\n|   `-- ctx-wire\n`-- internal\n\n2 directories, 0 files"
+expected = ".\n|-- cmd\n|   `-- ctx-wire\n`-- internal\n2 directories, 0 files"

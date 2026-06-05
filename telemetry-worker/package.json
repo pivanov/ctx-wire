@@ -1,0 +1,18 @@
+{
+  "name": "ctx-wire-telemetry-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "schema:local": "wrangler d1 execute ctx-wire-telemetry --local --file=./schema.sql",
+    "schema:remote": "wrangler d1 execute ctx-wire-telemetry --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "latest",
+    "wrangler": "^4.97.0"
+  }
+}

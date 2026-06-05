@@ -1,0 +1,16 @@
+[filters.cut]
+description = "Compact cut output: strip ANSI, cap rows, gently truncate long lines, preserve short output"
+match_command = "^cut\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 200
+
+[[tests.cut]]
+name = "short columns preserved"
+input = "alpha\nbeta\ngamma"
+expected = "alpha\nbeta\ngamma"
+
+[[tests.cut]]
+name = "tab fields preserved"
+input = "id\tname\n1\tone\n2\ttwo"
+expected = "id\tname\n1\tone\n2\ttwo"

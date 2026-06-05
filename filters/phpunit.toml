@@ -1,0 +1,29 @@
+[filters.phpunit]
+description = "Compact PHPUnit output"
+match_command = "^(vendor/bin/)?phpunit\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)^OK \\(\\d+ tests?, \\d+ assertions?\\)$", message = "phpunit: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 140
+
+[[tests.phpunit]]
+name = "success collapses"
+input = """
+PHPUnit 11.0.0 by Sebastian Bergmann.
+
+....                                                                4 / 4 (100%)
+
+OK (4 tests, 8 assertions)
+"""
+expected = "phpunit: ok"
+
+[[tests.phpunit]]
+name = "failure preserved"
+input = """
+There was 1 failure:
+1) AppTest::testThing
+Failed asserting that false is true.
+"""
+expected = "There was 1 failure:\n1) AppTest::testThing\nFailed asserting that false is true."

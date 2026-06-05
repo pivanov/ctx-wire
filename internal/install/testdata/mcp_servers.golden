@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "ctx-wire": {
+      "args": [
+        "mcp"
+      ],
+      "command": "ctx-wire",
+      "type": "stdio"
+    }
+  }
+}

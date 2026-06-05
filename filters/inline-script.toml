@@ -1,0 +1,17 @@
+[filters.inline-script]
+description = "Pass through inline script runner output without treating it as a package script"
+match_command = "^(?:bun\\s+(?:-e|--eval\\b)|node\\s+(?:-e|--eval\\b)|deno\\s+eval\\b|python3?\\s+-c\\b)"
+priority = 0
+
+[[tests.inline-script]]
+name = "bun eval payload unchanged"
+input = """
+#### [auth] C0 H1 M2 L3
+OVERALL: some summarized payload
+"""
+expected = "#### [auth] C0 H1 M2 L3\nOVERALL: some summarized payload"
+
+[[tests.inline-script]]
+name = "node eval payload unchanged"
+input = "custom output\nbuilt in but this is payload"
+expected = "custom output\nbuilt in but this is payload"

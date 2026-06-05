@@ -1,0 +1,17 @@
+[filters.ls]
+description = "Compact ls output: strip blanks, cap inventory rows, truncate wide listings"
+match_command = "^ls\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 160
+max_lines = 100
+
+[[tests.ls]]
+name = "listing preserved"
+input = "README.md\ncmd\ninternal"
+expected = "README.md\ncmd\ninternal"
+
+[[tests.ls]]
+name = "blank lines stripped"
+input = "README.md\n\ncmd"
+expected = "README.md\ncmd"

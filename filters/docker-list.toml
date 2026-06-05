@@ -1,0 +1,20 @@
+[filters.docker-list]
+description = "Compact docker inventory output"
+match_command = "^(docker\\s+(ps|images|container\\s+ls|volume\\s+ls|network\\s+ls|compose\\s+ps)|docker-compose\\s+ps)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 100
+
+[[tests.docker-list]]
+name = "ps output preserved"
+input = """
+CONTAINER ID   IMAGE      STATUS
+abc123         postgres   Up 2 minutes
+"""
+expected = "CONTAINER ID   IMAGE      STATUS\nabc123         postgres   Up 2 minutes"
+
+[[tests.docker-list]]
+name = "blank lines stripped"
+input = "REPOSITORY TAG\n\napp latest"
+expected = "REPOSITORY TAG\napp latest"

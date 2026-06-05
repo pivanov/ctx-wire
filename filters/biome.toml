@@ -1,0 +1,68 @@
+[filters.biome]
+description = "Compact Biome lint/format output: strip blank lines, keep diagnostics. Matches direct biome plus npx/bunx/pnpm dlx/yarn dlx runners."
+match_command = "^(?:(npx|bunx)\\s+|(pnpm|yarn)\\s+dlx\\s+)?biome\\b"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Checked \\d+ file",
+  "^Fixed \\d+ file",
+  "^The following command",
+  "^Run it with",
+]
+max_lines = 50
+on_empty = "biome: ok"
+
+[[tests.biome]]
+name = "lint strips noise, keeps diagnostics"
+input = """
+Checked 42 files in 0.5s
+
+src/app.tsx:5:3 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━
+  × Unexpected any. Specify a different type.
+  3 │ interface Props {
+  4 │   data: any;
+  5 │         ^^^
+
+src/utils.ts:12:1 lint/complexity/noForEach ━━━━━━━━━━━━━━━━━━━━
+  × Prefer for...of instead of forEach.
+ 12 │ items.forEach(item => process(item));
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Found 2 errors.
+"""
+expected = "src/app.tsx:5:3 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━\n  × Unexpected any. Specify a different type.\n  3 │ interface Props {\n  4 │   data: any;\n  5 │         ^^^\nsrc/utils.ts:12:1 lint/complexity/noForEach ━━━━━━━━━━━━━━━━━━━━\n  × Prefer for...of instead of forEach.\n 12 │ items.forEach(item => process(item));\n    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFound 2 errors."
+
+[[tests.biome]]
+name = "clean check"
+input = """
+Checked 42 files in 0.3s
+"""
+expected = "biome: ok"
+
+[[tests.biome]]
+name = "empty input returns on_empty message"
+input = ""
+expected = "biome: ok"
+
+[[tests.biome]]
+name = "format --write clean output collapses to ok"
+input = """
+Checked 10 files in 0.2s
+Fixed 3 files in 0.1s
+"""
+expected = "biome: ok"
+
+[[tests.biome]]
+name = "format diagnostics preserved, noise stripped"
+input = """
+Checked 1 file in 0.1s
+
+src/app.tsx:1:1 format ━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  - import {foo} from 'bar';
+  + import { foo } from 'bar';
+
+Found 1 error.
+"""
+expected = "src/app.tsx:1:1 format ━━━━━━━━━━━━━━━━━━━━\n  × Formatter would have printed the following content:\n  - import {foo} from 'bar';\n  + import { foo } from 'bar';\nFound 1 error."

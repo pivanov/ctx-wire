@@ -1,0 +1,22 @@
+[filters.httpie]
+description = "Compact HTTPie output"
+match_command = "^(http|https)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 500
+max_lines = 240
+
+[[tests.httpie]]
+name = "short response preserved"
+input = """
+HTTP/1.1 200 OK
+content-type: application/json
+
+{"status":"ok"}
+"""
+expected = "HTTP/1.1 200 OK\ncontent-type: application/json\n{\"status\":\"ok\"}"
+
+[[tests.httpie]]
+name = "error response preserved"
+input = "HTTP/1.1 500 Internal Server Error"
+expected = "HTTP/1.1 500 Internal Server Error"

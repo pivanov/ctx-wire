@@ -1,0 +1,22 @@
+[filters.agent-browser]
+description = "Compact agent-browser inspection output"
+match_command = "^agent-browser\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 800
+max_lines = 120
+
+[[tests.agent-browser]]
+name = "short eval json preserved"
+input = """[{"variant":"primary","width":"120px","height":"40px"}]"""
+expected = """[{"variant":"primary","width":"120px","height":"40px"}]"""
+
+[[tests.agent-browser]]
+name = "wide eval row under cap preserved"
+input = "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffffffgggggggggghhhhhhhhhhiiiiiiiiiijjjjjjjjjjkkkkkkkkkk"
+expected = "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffffffgggggggggghhhhhhhhhhiiiiiiiiiijjjjjjjjjjkkkkkkkkkk"
+
+[[tests.agent-browser]]
+name = "blank lines stripped"
+input = "ok\n\nnext"
+expected = "ok\nnext"

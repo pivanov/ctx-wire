@@ -1,0 +1,54 @@
+[filters.package-script]
+description = "Conservative fallback for package-manager scripts with arbitrary names"
+match_command = "^(?:bun(?:\\s+(?:--filter|-F)\\s+\\S+)*\\s+(?:run\\s+)?[A-Za-z0-9_.:@/-]+|(?:npm|pnpm)\\s+run\\s+[A-Za-z0-9_.:@/-]+|yarn\\s+(?:run\\s+)?[A-Za-z0-9_.:@/-]+)\\b"
+# Fallback only: when this ties a specific filter on matched span, the specific
+# filter should win.
+priority = -100
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(✓ built in|built in \\d|compiled successfully|build successful|build completed|Storybook build completed|Output directory:|Checked .* No fixes applied|0 problems|0 errors?[, ]+0 warnings?|Found 0 errors?\\.|Test Suites: .*passed|Tests: .*passed|Test Files\\s+\\d+ passed|Done in)", message = "package script: ok", unless = "(?i)(ERR!|\\b[1-9][0-9]* errors?\\b|\\berror:\\b|\\bfailed\\b|\\bfailures?\\b|panic|exception|TypeError|SyntaxError|Command failed|ELIFECYCLE|Unhandled|\\bWARN\\b|warning)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^vite v\\d",
+  "^transforming\\.\\.\\.",
+  "^✓ \\d+ modules transformed\\.",
+  "^rendering chunks\\.\\.\\.",
+  "^computing gzip size\\.\\.\\.",
+]
+max_lines = 160
+
+[[tests.package-script]]
+name = "arbitrary storybook script collapses on vite success"
+input = """
+vite v6.0.0 building for production...
+transforming...
+✓ 1234 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/iframe.html  14.2 kB │ gzip: 4.1 kB
+✓ built in 8.42s
+"""
+expected = "package script: ok"
+
+[[tests.package-script]]
+name = "lint clean collapses"
+input = "Checked 42 files in 12ms. No fixes applied."
+expected = "package script: ok"
+
+[[tests.package-script]]
+name = "warnings preserved"
+input = """
+vite v6.0.0 building for production...
+WARN No story files found for the specified pattern.
+✓ built in 1.23s
+"""
+expected = "WARN No story files found for the specified pattern.\n✓ built in 1.23s"
+
+[[tests.package-script]]
+name = "unknown script output stays visible"
+input = """
+custom preflight output
+artifact: /tmp/build/result.json
+"""
+expected = "custom preflight output\nartifact: /tmp/build/result.json"

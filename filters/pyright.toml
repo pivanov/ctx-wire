@@ -1,0 +1,19 @@
+[filters.pyright]
+description = "Compact pyright output"
+match_command = "^(uv\\s+run\\s+|python3?\\s+-m\\s+)?pyright\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)0 errors?, 0 warnings?", message = "pyright: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 160
+
+[[tests.pyright]]
+name = "success collapses"
+input = "0 errors, 0 warnings, 0 informations"
+expected = "pyright: ok"
+
+[[tests.pyright]]
+name = "type error preserved"
+input = "/repo/app.py:10:5 - error: Type \"str\" is not assignable to \"int\""
+expected = "/repo/app.py:10:5 - error: Type \"str\" is not assignable to \"int\""

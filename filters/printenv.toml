@@ -1,0 +1,12 @@
+[filters.printenv]
+description = "Compact printenv output: strip blanks, cap variables, truncate long values"
+match_command = "^printenv(\\s|$)"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 120
+
+[[tests.printenv]]
+name = "variables preserved"
+input = "SHELL=/bin/zsh\nUSER=pivanov"
+expected = "SHELL=/bin/zsh\nUSER=pivanov"

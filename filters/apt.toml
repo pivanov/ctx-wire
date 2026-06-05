@@ -1,0 +1,37 @@
+[filters.apt]
+description = "Compact apt and apt-get output"
+match_command = "^(sudo\\s+)?apt(-get)?\\s+(install|update|upgrade)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)(Setting up|Fetched|0 upgraded|Reading package lists\\.\\.\\. Done)", message = "apt: ok", unless = "(?i)(error|failed|unable|held broken)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^Hit:",
+  "^Get:",
+  "^Ign:",
+  "^Fetched ",
+  "^Reading package lists",
+  "^Building dependency tree",
+  "^Reading state information",
+  "^Selecting previously unselected package",
+  "^Preparing to unpack",
+  "^Unpacking ",
+]
+max_lines = 100
+on_empty = "apt: ok"
+
+[[tests.apt]]
+name = "install success collapses"
+input = """
+Reading package lists... Done
+Building dependency tree... Done
+Unpacking jq (1.6) ...
+Setting up jq (1.6) ...
+"""
+expected = "apt: ok"
+
+[[tests.apt]]
+name = "error preserved"
+input = "E: Unable to locate package nope"
+expected = "E: Unable to locate package nope"

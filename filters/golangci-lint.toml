@@ -1,0 +1,18 @@
+[filters.golangci-lint]
+description = "Compact golangci-lint output"
+match_command = "^golangci-lint\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 260
+max_lines = 180
+on_empty = "golangci-lint: ok"
+
+[[tests.golangci-lint]]
+name = "empty success collapses"
+input = ""
+expected = "golangci-lint: ok"
+
+[[tests.golangci-lint]]
+name = "issue preserved"
+input = "main.go:10:6: func unused is unused (unused)"
+expected = "main.go:10:6: func unused is unused (unused)"

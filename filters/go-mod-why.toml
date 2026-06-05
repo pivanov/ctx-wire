@@ -1,0 +1,11 @@
+[filters.go-mod-why]
+description = "Compact go mod why: conservative cap/truncate (output is a payload explanation)"
+match_command = "^go\\s+mod\\s+why\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 120
+
+[[tests.go-mod-why]]
+name = "why output unchanged"
+input = "# github.com/foo/bar\nexample.com/m\nexample.com/m/internal\ngithub.com/foo/bar"
+expected = "# github.com/foo/bar\nexample.com/m\nexample.com/m/internal\ngithub.com/foo/bar"

@@ -1,0 +1,16 @@
+[filters.cat]
+description = "Compact cat output: cap file reads, truncate huge lines, keep full spool on cap"
+match_command = "^cat\\b"
+strip_ansi = true
+truncate_lines_at = 500
+max_lines = 160
+
+[[tests.cat]]
+name = "short file preserved"
+input = "package main\n\nfunc main() {}"
+expected = "package main\n\nfunc main() {}"
+
+[[tests.cat]]
+name = "caps file"
+input = "a\nb\nc\nd"
+expected = "a\nb\nc\nd"

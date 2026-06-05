@@ -1,0 +1,37 @@
+[filters.js-test]
+description = "Compact Jest and Vitest output"
+match_command = "^(?:(npx\\s+)?(jest|vitest)\\b|(npm|pnpm|yarn)\\s+(test|run\\s+(test|jest|vitest))\\b)"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)(Test Suites: .*passed|Tests: .*passed|Test Files\\s+\\d+ passed|✓ .*passed)", message = "js tests: ok", unless = "(?i)(fail|failed|error|unhandled)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\s*PASS\\s+",
+  "^\\s*✓\\s+",
+  "^\\s*Snapshots:",
+  "^\\s*Time:",
+]
+max_lines = 120
+on_empty = "js tests: ok"
+
+[[tests.js-test]]
+name = "jest success collapses"
+input = """
+ PASS  src/app.test.ts
+  ✓ renders (3 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       8 passed, 8 total
+Time:        1.23 s
+"""
+expected = "js tests: ok"
+
+[[tests.js-test]]
+name = "failure preserved"
+input = """
+ FAIL  src/app.test.ts
+  ● renders
+    Expected true to be false
+"""
+expected = " FAIL  src/app.test.ts\n  ● renders\n    Expected true to be false"

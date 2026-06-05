@@ -1,0 +1,21 @@
+[filters.git-diff]
+description = "Compact git diff/show output: cap large diffs and keep full spool on cap"
+match_command = "^git\\s+(?:(--no-pager|-C\\s+\\S+|-c\\s+\\S+)\\s+)*(diff|show)\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 220
+
+[[tests.git-diff]]
+name = "short diff preserved"
+input = '''
+diff --git a/a.go b/a.go
+@@ -1 +1 @@
+-old
++new
+'''
+expected = '''
+diff --git a/a.go b/a.go
+@@ -1 +1 @@
+-old
++new
+'''

@@ -1,0 +1,36 @@
+[filters.go-mod-download]
+description = "Compact go mod download/verify: drop download noise, short-circuit quiet success, keep errors"
+match_command = "^go\\s+mod\\s+(download|verify)\\b"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^go: downloading ",
+  "^go: finding ",
+  "^go: extracting ",
+]
+match_output = [
+  { pattern = "^all modules verified$", message = "go mod: ok (all modules verified)" },
+]
+max_lines = 80
+on_empty = "go mod: ok"
+
+[[tests.go-mod-download]]
+name = "download noise collapses to ok"
+input = '''
+go: downloading github.com/foo/bar v1.2.3
+go: downloading golang.org/x/sys v0.1.0
+'''
+expected = "go mod: ok"
+
+[[tests.go-mod-download]]
+name = "verify short-circuits"
+input = "all modules verified"
+expected = "go mod: ok (all modules verified)"
+
+[[tests.go-mod-download]]
+name = "errors preserved"
+input = '''
+go: downloading github.com/foo/bar v1.2.3
+go: github.com/foo/bar@v1.2.3: missing go.sum entry; to add it: go mod download
+'''
+expected = "go: github.com/foo/bar@v1.2.3: missing go.sum entry; to add it: go mod download"

@@ -1,0 +1,20 @@
+[filters.docker-logs]
+description = "Cap docker logs output; follow mode is bypassed by the runner"
+match_command = "^(docker\\s+(logs|compose\\s+logs)|docker-compose\\s+logs)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 500
+max_lines = 240
+
+[[tests.docker-logs]]
+name = "short logs preserved"
+input = """
+web-1  | started
+web-1  | listening on :3000
+"""
+expected = "web-1  | started\nweb-1  | listening on :3000"
+
+[[tests.docker-logs]]
+name = "blank lines stripped"
+input = "line one\n\nline two"
+expected = "line one\nline two"

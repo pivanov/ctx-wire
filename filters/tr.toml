@@ -1,0 +1,16 @@
+[filters.tr]
+description = "Compact tr output: strip ANSI, cap rows, gently truncate long lines, preserve short output"
+match_command = "^tr\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 200
+
+[[tests.tr]]
+name = "short output preserved"
+input = "HELLO\nWORLD"
+expected = "HELLO\nWORLD"
+
+[[tests.tr]]
+name = "translated case preserved"
+input = "hello\nworld"
+expected = "hello\nworld"

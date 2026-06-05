@@ -1,0 +1,23 @@
+[filters.tofu-show-json]
+description = "Pass `tofu output/show -json` through untouched: structured JSON payload must not be capped/truncated. Longer match span than tofu-show wins."
+match_command = "^tofu\\s+(output|show|state\\s+(list|show))\\b.*\\s--?json\\b"
+
+[[tests.tofu-show-json]]
+name = "show -json unchanged"
+input = '''
+{
+  "format_version": "1.0",
+  "values": { "outputs": { "vpc_id": { "value": "vpc-0a1b2c3d" } } }
+}
+'''
+expected = '''
+{
+  "format_version": "1.0",
+  "values": { "outputs": { "vpc_id": { "value": "vpc-0a1b2c3d" } } }
+}
+'''
+
+[[tests.tofu-show-json]]
+name = "output -json unchanged"
+input = '{"vpc_id":{"sensitive":false,"value":"vpc-0a1b2c3d"}}'
+expected = '{"vpc_id":{"sensitive":false,"value":"vpc-0a1b2c3d"}}'

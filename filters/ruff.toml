@@ -1,0 +1,20 @@
+[filters.ruff]
+description = "Compact Ruff output"
+match_command = "^(uv\\s+run\\s+|python3?\\s+-m\\s+)?ruff\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "All checks passed!", message = "ruff: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 120
+on_empty = "ruff: ok"
+
+[[tests.ruff]]
+name = "success collapses"
+input = "All checks passed!"
+expected = "ruff: ok"
+
+[[tests.ruff]]
+name = "lint finding preserved"
+input = "src/app.py:10:1 F401 `os` imported but unused"
+expected = "src/app.py:10:1 F401 `os` imported but unused"

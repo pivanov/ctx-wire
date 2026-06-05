@@ -1,0 +1,11 @@
+[filters.head]
+description = "Compact head output: cap rows and gently truncate long lines"
+match_command = "^head\\b"
+strip_ansi = true
+truncate_lines_at = 500
+max_lines = 80
+
+[[tests.head]]
+name = "head output preserved"
+input = "line 1\nline 2"
+expected = "line 1\nline 2"

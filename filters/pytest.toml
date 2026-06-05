@@ -1,0 +1,32 @@
+[filters.pytest]
+description = "Compact pytest output"
+match_command = "^(uv\\s+run\\s+|python3?\\s+-m\\s+)?pytest\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)=+ .* passed.*=+", message = "pytest: ok", unless = "(?i)(failed|error|traceback)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^collected \\d+ items",
+  "^=+ test session starts",
+  "^platform ",
+]
+max_lines = 140
+
+[[tests.pytest]]
+name = "success collapses"
+input = """
+============================= test session starts =============================
+collected 12 items
+tests/test_app.py ............
+============================== 12 passed in 0.42s ==============================
+"""
+expected = "pytest: ok"
+
+[[tests.pytest]]
+name = "failure preserved"
+input = """
+FAILED tests/test_app.py::test_thing - AssertionError: nope
+=========================== 1 failed, 11 passed in 0.4s ===========================
+"""
+expected = "FAILED tests/test_app.py::test_thing - AssertionError: nope\n=========================== 1 failed, 11 passed in 0.4s ==========================="

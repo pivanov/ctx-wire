@@ -1,0 +1,44 @@
+[filters.playwright-install]
+description = "Compact Playwright browser install output"
+match_command = "^(?:(npx|bunx)\\s+|pnpm\\s+exec\\s+|yarn\\s+exec\\s+)?playwright\\s+install\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(is already installed|downloaded to|Done in|Playwright browsers installed)", message = "playwright install: ok", unless = "(?i)(error|failed|failure|ERR!|warning)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^Downloading ",
+  "^\\|",
+  "^\\s*[0-9]+%",
+  "^.* downloaded to ",
+  "^Removing unused browser",
+]
+max_lines = 80
+on_empty = "playwright install: ok"
+
+[[tests.playwright-install]]
+name = "download success collapses"
+input = """
+Downloading Chromium 122.0.0 from https://playwright.azureedge.net/builds/chromium/1234/chromium-mac-arm64.zip
+|                                                                                |   0% of 120 MiB
+|████████████████████████████████████████████████████████████████████████████████| 100% of 120 MiB
+Chromium 122.0.0 downloaded to /Users/me/Library/Caches/ms-playwright/chromium-1234
+"""
+expected = "playwright install: ok"
+
+[[tests.playwright-install]]
+name = "warning preserved"
+input = """
+Downloading Chromium 122.0.0 from https://example.test/chromium.zip
+Host system is missing dependencies to run browsers.
+warning: install libnss3
+"""
+expected = "Host system is missing dependencies to run browsers.\nwarning: install libnss3"
+
+[[tests.playwright-install]]
+name = "error preserved"
+input = """
+Downloading Chromium 122.0.0 from https://example.test/chromium.zip
+error: download failed
+"""
+expected = "error: download failed"

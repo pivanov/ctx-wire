@@ -1,0 +1,37 @@
+[filters.smoke-sh]
+description = "Compact local smoke.sh test output"
+match_command = "^(?:.*/)?smoke\\.sh\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)== summary: [0-9]+ passed, 0 failed ==", message = "smoke.sh: ok", unless = "(?i)(FAIL|failed[^,]|error)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^== ",
+  "^\\s*PASS\\s+",
+  "^\\s*SKIP\\s+",
+]
+max_lines = 120
+on_empty = "smoke.sh: ok"
+
+[[tests.smoke-sh]]
+name = "success summary collapses"
+input = """
+== build with version metadata ==
+  PASS  go build
+  PASS  version reports 0.0.1-smoke
+
+== summary: 34 passed, 0 failed ==
+"""
+expected = "smoke.sh: ok"
+
+[[tests.smoke-sh]]
+name = "failure preserved"
+input = """
+== verify ==
+  PASS  build
+  FAIL  ctx-wire verify
+details here
+== summary: 1 passed, 1 failed ==
+"""
+expected = "  FAIL  ctx-wire verify\ndetails here"

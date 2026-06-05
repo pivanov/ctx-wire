@@ -1,0 +1,35 @@
+[filters.gradle-test]
+description = "Compact Gradle test/check output"
+match_command = "^(\\./)?gradlew?\\s+.*\\b(test|check)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)(BUILD SUCCESSFUL|\\d+ tests completed, 0 failed)", message = "gradle test: ok", unless = "(?i)(BUILD FAILED|[1-9][0-9]* failed|\\berror\\b)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^> Configuring project",
+  "^> Task :.*UP-TO-DATE$",
+  "^> Task :.*NO-SOURCE$",
+  "^> Task :.*FROM-CACHE$",
+  "^Starting a Gradle Daemon",
+]
+max_lines = 120
+
+[[tests.gradle-test]]
+name = "success collapses"
+input = """
+> Configuring project :app
+> Task :app:test
+42 tests completed, 0 failed
+BUILD SUCCESSFUL in 8s
+"""
+expected = "gradle test: ok"
+
+[[tests.gradle-test]]
+name = "failure preserved"
+input = """
+> Task :app:test
+3 tests completed, 1 failed
+BUILD FAILED in 12s
+"""
+expected = "> Task :app:test\n3 tests completed, 1 failed\nBUILD FAILED in 12s"

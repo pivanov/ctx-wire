@@ -1,0 +1,28 @@
+[filters.python-unittest]
+description = "Compact python -m unittest output"
+match_command = "^python3?\\s+-m\\s+unittest\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)^OK$", message = "unittest: ok", unless = "(?i)(FAILED|ERROR|FAIL)" },
+]
+strip_lines_matching = ["^\\s*$", "^Ran \\d+ tests? in "]
+max_lines = 140
+
+[[tests.python-unittest]]
+name = "success collapses"
+input = """
+....
+Ran 4 tests in 0.001s
+
+OK
+"""
+expected = "unittest: ok"
+
+[[tests.python-unittest]]
+name = "failure preserved"
+input = """
+FAIL: test_app (tests.AppTest)
+AssertionError: false is not true
+FAILED (failures=1)
+"""
+expected = "FAIL: test_app (tests.AppTest)\nAssertionError: false is not true\nFAILED (failures=1)"

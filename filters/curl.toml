@@ -1,0 +1,26 @@
+[filters.curl]
+description = "Compact curl output while preserving response payload lines"
+match_command = "^curl\\b"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\s*% Total\\s+% Received",
+  "^\\s*\\d+\\s+\\d+\\s+\\d+",
+  "^\\s*--:--:--",
+]
+truncate_lines_at = 500
+max_lines = 240
+
+[[tests.curl]]
+name = "json payload preserved"
+input = "{\"status\":\"ok\",\"count\":2}"
+expected = "{\"status\":\"ok\",\"count\":2}"
+
+[[tests.curl]]
+name = "progress stripped"
+input = """
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+100    12  100    12    0     0   1200      0 --:--:-- --:--:-- --:--:--  1200
+{"ok":true}
+"""
+expected = "{\"ok\":true}"

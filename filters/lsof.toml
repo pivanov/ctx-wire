@@ -1,0 +1,24 @@
+[filters.lsof]
+description = "Compact lsof output: strip blanks, cap process rows, truncate wide lines"
+match_command = "^lsof\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 80
+
+[[tests.lsof]]
+name = "port check output preserved"
+input = """
+COMMAND   PID    USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node    12345 pivanov   22u  IPv6 0x123456789abcdef      0t0  TCP *:7222 (LISTEN)
+"""
+expected = "COMMAND   PID    USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\nnode    12345 pivanov   22u  IPv6 0x123456789abcdef      0t0  TCP *:7222 (LISTEN)"
+
+[[tests.lsof]]
+name = "blank lines stripped"
+input = """
+COMMAND PID USER NAME
+
+node    1   me   TCP *:3000 (LISTEN)
+"""
+expected = "COMMAND PID USER NAME\nnode    1   me   TCP *:3000 (LISTEN)"

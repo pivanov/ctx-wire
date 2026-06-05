@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "ctx-wire hook cursor",
+        "matcher": "Shell"
+      }
+    ]
+  },
+  "version": 1
+}

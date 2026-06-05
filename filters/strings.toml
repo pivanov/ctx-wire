@@ -1,0 +1,24 @@
+[filters.strings]
+description = "Compact strings output: cap extracted payload rows"
+match_command = "^strings\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 120
+
+[[tests.strings]]
+name = "short strings preserved"
+input = """
+hello
+world
+"""
+expected = "hello\nworld"
+
+[[tests.strings]]
+name = "blank lines stripped"
+input = """
+hello
+
+world
+"""
+expected = "hello\nworld"

@@ -1,0 +1,11 @@
+{
+  "conversation_id": "c1",
+  "generation_id": "g1",
+  "hook_event_name": "preToolUse",
+  "cursor_version": "1.7.0",
+  "workspace_roots": ["/work"],
+  "tool_name": "Shell",
+  "tool_input": { "command": "git status", "working_directory": "/work" },
+  "tool_use_id": "t1",
+  "cwd": "/work"
+}

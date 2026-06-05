@@ -1,0 +1,27 @@
+[filters.wc]
+description = "Compact wc output: strip ANSI and blank lines, cap rows, truncate long lines"
+match_command = "^wc\\b"
+strip_ansi = true
+replace = [
+  # Preserve counts and the last few path segments; repeated absolute roots are
+  # not useful in multi-file wc output.
+  { pattern = "/(?:[^/\\s]+/)+([^/\\s]+/[^/\\s]+/[^/\\s]+)$", replacement = ".../$1" },
+]
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 200
+max_lines = 200
+
+[[tests.wc]]
+name = "counts preserved"
+input = "  42  310 2050 main.go\n  42  310 2050 total"
+expected = "  42  310 2050 main.go\n  42  310 2050 total"
+
+[[tests.wc]]
+name = "absolute path prefix compacted"
+input = "  120 /Users/pivanov/workspace/pivanov/edynamix/WebComponents/packages/web-components/src/button.ts"
+expected = "  120 .../web-components/src/button.ts"
+
+[[tests.wc]]
+name = "blank lines stripped"
+input = "  10 a.txt\n\n  20 b.txt"
+expected = "  10 a.txt\n  20 b.txt"

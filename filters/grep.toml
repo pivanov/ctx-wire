@@ -1,0 +1,75 @@
+[filters.grep]
+description = "Compact grep output: strip blanks, group matches by file, cap rows, truncate long matches"
+match_command = "^(grep|egrep|fgrep|git\\s+grep)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 500
+# Group by filename, but only for file-prefixed, line-numbered output
+# (file:line:  or  file:line:col:). Single-file `grep -n` output (`8:text`, no
+# filename) and no-line-number output do not match, so they pass through.
+group_by = { key = "^(.+?):[0-9]+(?::[0-9]+)?:", max_per_group = 5, max_groups = 50, omit_label = "... +%d more matches in %s" }
+# Backstop above the group_by ceiling (50 groups x ~6 lines); group_by is the
+# primary reducer, max_lines only caps non-matching/pathological output.
+max_lines = 320
+
+[[tests.grep]]
+name = "basic matches preserved"
+input = "file.txt:alpha\nfile.txt:beta"
+expected = "file.txt:alpha\nfile.txt:beta"
+
+[[tests.grep]]
+name = "long line truncated"
+input = "file.txt:abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+expected = "file.txt:abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+
+[[tests.grep]]
+name = "groups and caps matches per file"
+input = '''
+app.go:10:m1
+app.go:11:m2
+app.go:12:m3
+app.go:13:m4
+app.go:14:m5
+app.go:15:m6
+app.go:16:m7
+'''
+expected = '''
+app.go:10:m1
+app.go:11:m2
+app.go:12:m3
+app.go:13:m4
+app.go:14:m5
+... +2 more matches in app.go'''
+
+[[tests.grep]]
+name = "non-match output passes through"
+input = "Binary file logo.png matches\nfile.txt:hit"
+expected = "Binary file logo.png matches\nfile.txt:hit"
+
+[[tests.grep]]
+name = "single-file line-numbered output passes through unchanged"
+input = "8:func x\n9:func y\n10:func z"
+expected = "8:func x\n9:func y\n10:func z"
+
+[[tests.grep]]
+name = "git grep with line numbers groups by file"
+input = '''
+pkg/x.go:1:a
+pkg/x.go:2:b
+pkg/x.go:3:c
+pkg/x.go:4:d
+pkg/x.go:5:e
+pkg/x.go:6:f
+'''
+expected = '''
+pkg/x.go:1:a
+pkg/x.go:2:b
+pkg/x.go:3:c
+pkg/x.go:4:d
+pkg/x.go:5:e
+... +1 more matches in pkg/x.go'''
+
+[[tests.grep]]
+name = "git grep without line numbers passes through unchanged"
+input = "pkg/x.go:some matching code\npkg/y.go:another match"
+expected = "pkg/x.go:some matching code\npkg/y.go:another match"

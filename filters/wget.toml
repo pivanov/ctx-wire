@@ -1,0 +1,34 @@
+[filters.wget]
+description = "Compact wget output while preserving response payload lines"
+match_command = "^wget\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(saved \\[\\d+/?\\d*\\]|downloaded)", message = "wget: ok", unless = "(?i)(error|failed|unable|not found)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^--\\d{4}-\\d{2}-\\d{2}",
+  "^Resolving ",
+  "^Connecting to ",
+  "^HTTP request sent",
+  "^Length: ",
+  "^Saving to:",
+  "^\\s*\\d+K",
+]
+truncate_lines_at = 500
+max_lines = 200
+
+[[tests.wget]]
+name = "download success collapses"
+input = """
+--2026-05-29--  https://example.com/file.tgz
+Resolving example.com... 93.184.216.34
+Saving to: 'file.tgz'
+file.tgz saved [1234/1234]
+"""
+expected = "wget: ok"
+
+[[tests.wget]]
+name = "http error preserved"
+input = "ERROR 404: Not Found."
+expected = "ERROR 404: Not Found."

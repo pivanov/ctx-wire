@@ -1,0 +1,16 @@
+[filters.awk]
+description = "Compact awk output: strip ANSI, cap rows, gently truncate long lines"
+match_command = "^awk\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 200
+
+[[tests.awk]]
+name = "normal output preserved"
+input = "alpha 1\nbeta 2\ngamma 3"
+expected = "alpha 1\nbeta 2\ngamma 3"
+
+[[tests.awk]]
+name = "ansi stripped"
+input = "\u001b[31mred\u001b[0m\nplain"
+expected = "red\nplain"

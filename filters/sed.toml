@@ -1,0 +1,11 @@
+[filters.sed]
+description = "Compact sed output: cap file slices, gently truncate long lines, keep full spool on cap"
+match_command = "^sed\\b"
+strip_ansi = true
+truncate_lines_at = 500
+max_lines = 80
+
+[[tests.sed]]
+name = "short slice preserved"
+input = "line 1\nline 2\nline 3"
+expected = "line 1\nline 2\nline 3"

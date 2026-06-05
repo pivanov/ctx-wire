@@ -1,0 +1,17 @@
+[filters.modern-ls]
+description = "Compact eza/exa/lsd output"
+match_command = "^(eza|exa|lsd)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 180
+max_lines = 120
+
+[[tests.modern-ls]]
+name = "listing preserved"
+input = "README.md\ncmd\ninternal"
+expected = "README.md\ncmd\ninternal"
+
+[[tests.modern-ls]]
+name = "blank lines stripped"
+input = "README.md\n\ncmd"
+expected = "README.md\ncmd"

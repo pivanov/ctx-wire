@@ -1,0 +1,25 @@
+[filters.shell-script]
+description = "Conservative filter for shell script runner output"
+match_command = "^(?:bash|sh|zsh)\\s+(?:--\\s+)?\\S+\\.sh\\b"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+]
+max_lines = 160
+
+[[tests.shell-script]]
+name = "shell script output preserved"
+input = """
+custom script output
+artifact: /tmp/result.json
+"""
+expected = "custom script output\nartifact: /tmp/result.json"
+
+[[tests.shell-script]]
+name = "blank lines stripped"
+input = """
+one
+
+two
+"""
+expected = "one\ntwo"

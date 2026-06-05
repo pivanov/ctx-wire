@@ -1,0 +1,12 @@
+[filters.git-log]
+description = "Compact git log output: strip blanks, cap commits, truncate long lines"
+match_command = "^git\\s+(?:(--no-pager|-C\\s+\\S+|-c\\s+\\S+)\\s+)*log\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 120
+
+[[tests.git-log]]
+name = "short log preserved"
+input = "abc1234 feat: add thing\nfed9876 fix: bug"
+expected = "abc1234 feat: add thing\nfed9876 fix: bug"

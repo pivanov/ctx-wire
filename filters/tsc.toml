@@ -1,0 +1,25 @@
+[filters.tsc]
+description = "Compact TypeScript compiler output"
+match_command = "^(?:(npx\\s+)?tsc\\b|(npm|pnpm|yarn)\\s+(run\\s+)?(tsc|typecheck|type-check|types|check-types)\\b)"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)Found 0 errors?\\.", message = "tsc: ok" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 120
+on_empty = "tsc: ok"
+
+[[tests.tsc]]
+name = "success collapses"
+input = "Found 0 errors. Watching for file changes."
+expected = "tsc: ok"
+
+[[tests.tsc]]
+name = "type error preserved"
+input = "src/app.ts(10,7): error TS2322: Type 'string' is not assignable to type 'number'."
+expected = "src/app.ts(10,7): error TS2322: Type 'string' is not assignable to type 'number'."
+
+[[tests.tsc]]
+name = "npm run typecheck success collapses"
+input = "Found 0 errors."
+expected = "tsc: ok"

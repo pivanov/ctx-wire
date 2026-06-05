@@ -1,0 +1,17 @@
+[filters.tofu-show]
+description = "Compact tofu output/show/state output: strip ANSI and blanks, cap rows, truncate long lines"
+match_command = "^tofu\\s+(output|show|state\\s+(list|show))\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 240
+max_lines = 120
+
+[[tests.tofu-show]]
+name = "outputs unchanged"
+input = "vpc_id = \"vpc-0a1b2c3d\"\nsubnet = \"subnet-11112222\""
+expected = "vpc_id = \"vpc-0a1b2c3d\"\nsubnet = \"subnet-11112222\""
+
+[[tests.tofu-show]]
+name = "blank lines stripped"
+input = "x = 1\n\ny = 2"
+expected = "x = 1\ny = 2"

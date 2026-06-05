@@ -1,0 +1,11 @@
+[filters.nl]
+description = "Compact nl output: cap numbered file reads and gently truncate long lines"
+match_command = "^nl\\b"
+strip_ansi = true
+truncate_lines_at = 500
+max_lines = 80
+
+[[tests.nl]]
+name = "numbered lines preserved"
+input = "     1\tpackage main\n     2\tfunc main() {}"
+expected = "     1\tpackage main\n     2\tfunc main() {}"

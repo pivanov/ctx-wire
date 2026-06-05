@@ -1,0 +1,27 @@
+[filters.go]
+description = "Compact go test/build/vet output"
+match_command = "^go\\s+(test|build|vet)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?m)^(ok\\s|\\?\\s|PASS$)", message = "go: ok", unless = "(?m)(^FAIL|panic:|undefined:|vet:|error:)" },
+]
+strip_lines_matching = ["^\\s*$"]
+max_lines = 140
+on_empty = "go: ok"
+
+[[tests.go]]
+name = "test success collapses"
+input = """
+ok  	example.com/app	0.123s
+?   	example.com/app/cmd	[no test files]
+"""
+expected = "go: ok"
+
+[[tests.go]]
+name = "failure preserved"
+input = """
+--- FAIL: TestThing (0.00s)
+    thing_test.go:10: got false
+FAIL
+"""
+expected = "--- FAIL: TestThing (0.00s)\n    thing_test.go:10: got false\nFAIL"

@@ -1,0 +1,17 @@
+[filters.pip-list]
+description = "Compact pip list/freeze output: strip blanks, cap rows, truncate long lines"
+match_command = "^(?:(python3?\\s+-m\\s+)?pip\\s+(list|freeze)\\b|pip3?\\s+(list|freeze)\\b)"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 200
+max_lines = 80
+
+[[tests.pip-list]]
+name = "freeze output unchanged"
+input = "certifi==2024.2.2\ncharset-normalizer==3.3.2\nrequests==2.31.0"
+expected = "certifi==2024.2.2\ncharset-normalizer==3.3.2\nrequests==2.31.0"
+
+[[tests.pip-list]]
+name = "blank lines stripped"
+input = "click==8.1.7\n\nflask==3.0.0"
+expected = "click==8.1.7\nflask==3.0.0"

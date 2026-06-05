@@ -1,0 +1,11 @@
+[filters.tail]
+description = "Compact tail output: cap rows and gently truncate long lines"
+match_command = "^tail\\b"
+strip_ansi = true
+truncate_lines_at = 500
+max_lines = 80
+
+[[tests.tail]]
+name = "tail output preserved"
+input = "line 9\nline 10"
+expected = "line 9\nline 10"

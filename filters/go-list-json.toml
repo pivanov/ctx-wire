@@ -1,0 +1,20 @@
+[filters.go-list-json]
+description = "Pass `go list -json` through untouched: structured JSON payload must not be capped/truncated. Longer match span than go-list wins."
+match_command = "^go\\s+list\\b.*\\s--?json\\b"
+
+[[tests.go-list-json]]
+name = "json output unchanged"
+input = '''
+{
+  "Dir": "/repo/internal/filter",
+  "ImportPath": "example.com/m/internal/filter",
+  "Name": "filter"
+}
+'''
+expected = '''
+{
+  "Dir": "/repo/internal/filter",
+  "ImportPath": "example.com/m/internal/filter",
+  "Name": "filter"
+}
+'''

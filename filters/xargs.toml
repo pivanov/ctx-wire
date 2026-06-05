@@ -1,0 +1,20 @@
+# xargs runs a command once per input batch, so its output is whatever that
+# sub-command emits. The filter is deliberately conservative: it only caps rows
+# and truncates very long lines (full output stays in the spool on cap), and it
+# never strips or rewrites content, so it cannot corrupt the wrapped command.
+[filters.xargs]
+description = "Compact xargs output: cap rows and truncate long lines only, preserve short output"
+match_command = "^xargs\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 200
+
+[[tests.xargs]]
+name = "short output preserved"
+input = "one\ntwo\nthree"
+expected = "one\ntwo\nthree"
+
+[[tests.xargs]]
+name = "single line preserved"
+input = "result"
+expected = "result"

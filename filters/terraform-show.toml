@@ -1,0 +1,17 @@
+[filters.terraform-show]
+description = "Compact terraform output/show/state output: strip ANSI and blanks, cap rows, truncate long lines"
+match_command = "^terraform\\s+(output|show|state\\s+(list|show))\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 240
+max_lines = 120
+
+[[tests.terraform-show]]
+name = "outputs unchanged"
+input = "bucket_name = \"my-app-assets\"\nregion = \"us-east-1\""
+expected = "bucket_name = \"my-app-assets\"\nregion = \"us-east-1\""
+
+[[tests.terraform-show]]
+name = "blank lines stripped"
+input = "a = 1\n\nb = 2"
+expected = "a = 1\nb = 2"

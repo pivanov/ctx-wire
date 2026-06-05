@@ -1,0 +1,17 @@
+[filters.uniq]
+description = "Compact uniq output: strip blanks, cap rows, truncate long lines, preserve short output"
+match_command = "^uniq\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 240
+max_lines = 200
+
+[[tests.uniq]]
+name = "counted output unchanged"
+input = "   3 alpha\n   1 beta\n   7 gamma"
+expected = "   3 alpha\n   1 beta\n   7 gamma"
+
+[[tests.uniq]]
+name = "blank lines stripped"
+input = "alpha\n\nbeta"
+expected = "alpha\nbeta"

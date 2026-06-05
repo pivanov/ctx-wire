@@ -1,0 +1,112 @@
+[filters.bun]
+description = "Compact Bun install/build/test output"
+match_command = "^bun(?:\\s+(?:--filter|-F)\\s+\\S+)*\\s+(build-storybook|storybook|typecheck|install|remove|build|test|lint|add|run\\s+(build-storybook|storybook|typecheck|build|test|lint))\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(installed .* packages?|Saved lockfile|\\bpass\\b|tests? passed|built in|Done in|Output directory:|=> (Manager|Preview|Storybook) built|Storybook (built|build complete|build completed)|Checked .* No fixes applied)", message = "bun: ok", unless = "(?i)(error|failed|failures?|panic|exception|TypeError|SyntaxError|\\bWARN\\b|warning)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^\\$\\s+storybook\\s+build\\b",
+  "^storybook\\s+v?\\d",
+  "^@storybook/",
+  "^Resolving dependencies",
+  "^Resolved, downloaded and extracted",
+  "^Saved lockfile",
+  "^\\s*info\\s+=>\\s+(Cleaning outputDir|Loading presets|Building manager|Building preview|Copying static files|Manager built|Preview built|Output directory:)",
+  "^vite v\\d",
+  "^transforming\\.\\.\\.",
+  "^✓ \\d+ modules transformed\\.",
+  "^rendering chunks\\.\\.\\.",
+  "^computing gzip size\\.\\.\\.",
+  "^storybook-static/",
+  "^\\s*(assets|sb-manager)/",
+]
+max_lines = 120
+on_empty = "bun: ok"
+
+[[tests.bun]]
+name = "install success collapses"
+input = """
+bun install v1.1.0
+Resolving dependencies
+Resolved, downloaded and extracted [42]
+Saved lockfile
+42 packages installed [320.00ms]
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "test failure preserved"
+input = """
+test/app.test.ts:
+1 | expect(value).toBe(true)
+error: expect(received).toBe(expected)
+"""
+expected = "test/app.test.ts:\n1 | expect(value).toBe(true)\nerror: expect(received).toBe(expected)"
+
+[[tests.bun]]
+name = "lint success collapses"
+input = """
+Checked 42 files in 12ms. No fixes applied.
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "workspace storybook build collapses"
+input = """
+info => Cleaning outputDir: storybook-static
+info => Loading presets
+info => Building manager..
+info => Building preview..
+info => Preview built (1.2 s)
+info => Output directory: /repo/storybook-static
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "storybook vite build collapses"
+input = """
+$ storybook build
+storybook v8.6.14
+info => Cleaning outputDir: storybook-static
+info => Loading presets
+info => Building manager..
+info => Building preview..
+vite v6.0.0 building for production...
+transforming...
+✓ 1234 modules transformed.
+rendering chunks...
+computing gzip size...
+storybook-static/iframe.html  14.2 kB │ gzip: 4.1 kB
+storybook-static/assets/index-Bgi8.css  25.1 kB │ gzip: 5.1 kB
+✓ built in 8.42s
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "storybook build complete collapses"
+input = """
+@storybook/core v8.6.14
+Storybook build completed in 11 s.
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "storybook warning preserved"
+input = """
+storybook v8.6.14
+info => Building preview..
+WARN No story files found for the specified pattern.
+✓ built in 1.23s
+"""
+expected = "WARN No story files found for the specified pattern.\n✓ built in 1.23s"
+
+[[tests.bun]]
+name = "storybook error preserved"
+input = """
+info => Building preview..
+src/Button.stories.ts:12:7: error: No matching export in src/Button.ts
+TypeError: Cannot read properties of undefined
+"""
+expected = "src/Button.stories.ts:12:7: error: No matching export in src/Button.ts\nTypeError: Cannot read properties of undefined"

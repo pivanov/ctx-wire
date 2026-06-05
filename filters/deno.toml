@@ -1,0 +1,27 @@
+[filters.deno]
+description = "Compact Deno test/check/fmt/lint output"
+match_command = "^deno\\s+(test|check|fmt|lint)\\b"
+strip_ansi = true
+match_output = [
+  { pattern = "(?mi)(ok \\|.*passed|Checked \\d+ files?|Checked file:|Found 0 problems|formatted \\d+ files?)", message = "deno: ok", unless = "(?i)(error|uncaught|[1-9][0-9]* failed)" },
+]
+strip_lines_matching = ["^\\s*$", "^Check file:", "^Download "]
+max_lines = 120
+on_empty = "deno: ok"
+
+[[tests.deno]]
+name = "test success collapses"
+input = """
+Check file:///repo/mod_test.ts
+running 2 tests from ./mod_test.ts
+ok | 2 passed | 0 failed
+"""
+expected = "deno: ok"
+
+[[tests.deno]]
+name = "lint issue preserved"
+input = """
+error[no-unused-vars]: `x` is never used
+ --> /repo/main.ts:1:7
+"""
+expected = "error[no-unused-vars]: `x` is never used\n --> /repo/main.ts:1:7"

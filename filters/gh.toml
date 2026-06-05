@@ -1,0 +1,16 @@
+[filters.gh]
+description = "Compact GitHub CLI output"
+match_command = "^gh\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+max_lines = 140
+
+[[tests.gh]]
+name = "short output preserved"
+input = "https://github.com/org/repo/pull/123"
+expected = "https://github.com/org/repo/pull/123"
+
+[[tests.gh]]
+name = "blank lines stripped"
+input = "title\n\nbody"
+expected = "title\nbody"

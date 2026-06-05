@@ -1,0 +1,16 @@
+[filters.base64]
+description = "Compact base64 output: cap rows, truncate very long encoded lines, keep short output whole"
+match_command = "^base64\\b"
+strip_ansi = true
+truncate_lines_at = 500
+max_lines = 200
+
+[[tests.base64]]
+name = "short encoding preserved"
+input = "aGVsbG8gd29ybGQ="
+expected = "aGVsbG8gd29ybGQ="
+
+[[tests.base64]]
+name = "multi-line decode preserved"
+input = "alpha\nbeta\ngamma"
+expected = "alpha\nbeta\ngamma"

@@ -1,0 +1,11 @@
+[filters.sort]
+description = "Compact sort output: cap rows, truncate long lines, preserve short output"
+match_command = "^sort\\b"
+strip_ansi = true
+truncate_lines_at = 240
+max_lines = 200
+
+[[tests.sort]]
+name = "short output unchanged"
+input = "alpha\nbeta\ngamma"
+expected = "alpha\nbeta\ngamma"

@@ -1,0 +1,17 @@
+[filters.which]
+description = "Compact which/whereis output: strip ANSI and blank lines, cap rows, truncate long lines"
+match_command = "^(which|whereis)\\b"
+strip_ansi = true
+strip_lines_matching = ["^\\s*$"]
+truncate_lines_at = 220
+max_lines = 60
+
+[[tests.which]]
+name = "path preserved"
+input = "/usr/bin/git"
+expected = "/usr/bin/git"
+
+[[tests.which]]
+name = "blank lines stripped"
+input = "/usr/bin/go\n\n/usr/local/bin/go"
+expected = "/usr/bin/go\n/usr/local/bin/go"
