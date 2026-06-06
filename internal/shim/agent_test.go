@@ -98,7 +98,7 @@ func TestShimPreservesOuterAgent(t *testing.T) {
 	// the shim and real dirs ahead of it.
 	sep := string(os.PathListSeparator)
 	cmd := exec.Command(shimPath, "status")
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(shimTestEnv(),
 		"PATH="+dir+sep+realDir+sep+os.Getenv("PATH"),
 		"CTX_WIRE_SHIMS=1",     // force wiring without a recognized parent
 		"CTX_WIRE_AGENT=codex", // outer hook already attributed this run
@@ -110,6 +110,21 @@ func TestShimPreservesOuterAgent(t *testing.T) {
 	if got := strings.TrimSpace(string(out)); got != "AGENT=codex" {
 		t.Fatalf("shim output = %q, want AGENT=codex (outer agent preserved)", got)
 	}
+}
+
+// shimTestEnv returns os.Environ() with any CTX_WIRE_* variable removed, so the
+// shim run is hermetic even when the suite itself is invoked through a ctx-wire
+// dogfood wrapper (which sets CTX_WIRE_DISABLE_SHIMS=1 for its children, and
+// would otherwise make the shim bail before the agent-export logic under test).
+func shimTestEnv() []string {
+	var env []string
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "CTX_WIRE_") {
+			continue
+		}
+		env = append(env, e)
+	}
+	return env
 }
 
 func writeScript(t *testing.T, path, body string) {

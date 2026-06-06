@@ -23,9 +23,9 @@ ctx-wire init claude   # or codex, cursor, gemini, copilot, ...
 ctx-wire gain
 ```
 
-Upgrade later with `ctx-wire update`. macOS and Linux. Windows: download a `.zip`
-from the [releases](https://github.com/pivanov/ctx-wire/releases). Building from
-source is below.
+Upgrade later with `ctx-wire update` on macOS, Linux, and Windows (it fetches the
+matching release archive, verifies its checksum, and atomically replaces the
+running binary). Building from source is below.
 
 ## Build
 
@@ -264,8 +264,10 @@ storage, unloadable filter registry).
   `ctx-wire mcp`.
 - **Uninstall**: `ctx-wire uninstall` removes managed shims, the local
   `~/.local/bin/ctx-wire` binary, and only ctx-wire-owned hook entries, MCP
-  server keys, and instruction blocks. It preserves unrelated hooks, MCP
-  servers, rule-file content, gain logs, tee logs, and trust records.
+  server keys, and instruction blocks. It then purges ctx-wire's own config and
+  data directories wholesale, so filters, trust records, gain logs, tee
+  captures, and telemetry config/state are all removed too. Unrelated hooks, MCP
+  servers, and rule-file content are left intact.
 
 ### Filters and trust
 

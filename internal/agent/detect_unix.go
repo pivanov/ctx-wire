@@ -3,10 +3,12 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // detect walks this process's ancestor chain looking for a known agent. It takes
@@ -24,7 +26,11 @@ func detect() string {
 // psSnapshot returns a pid -> {ppid, command} map from one `ps` call. Works on
 // macOS and Linux. A parse failure for one line is skipped, not fatal.
 func psSnapshot() map[int]procInfo {
-	out, err := exec.Command("ps", "-axo", "pid=,ppid=,command=").Output()
+	// Bound the call so a hung or restricted `ps` (e.g. a container with a
+	// locked-down /proc) can never stall the command this runs on.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ps", "-axo", "pid=,ppid=,command=").Output()
 	if err != nil {
 		return nil
 	}

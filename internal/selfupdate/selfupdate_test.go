@@ -2,6 +2,7 @@ package selfupdate
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
@@ -119,6 +120,57 @@ func TestExtractBinary(t *testing.T) {
 	if _, err := extractBinary(noBin); err == nil {
 		t.Error("empty binary should be rejected")
 	}
+}
+
+// TestExtractBinaryZip covers the Windows release format: a .zip carrying
+// ctx-wire.exe. extractBinary dispatches on the PK magic.
+func TestExtractBinaryZip(t *testing.T) {
+	want := []byte("WINDOWS-BINARY-CONTENTS")
+	archive := makeZip(t, "ctx-wire_1.0.0_windows_amd64/ctx-wire.exe", want)
+	got, err := extractBinary(archive)
+	if err != nil {
+		t.Fatalf("extractBinary(zip): %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("extracted %q, want %q", got, want)
+	}
+
+	// A zip without the binary is an error.
+	noBin := makeZip(t, "ctx-wire_1.0.0_windows_amd64/README.md", []byte("readme"))
+	if _, err := extractBinary(noBin); err == nil {
+		t.Error("zip without ctx-wire.exe should be rejected")
+	}
+}
+
+// TestExtractBinaryRejectsOversize ensures a binary larger than the cap is
+// refused, not silently truncated and installed.
+func TestExtractBinaryRejectsOversize(t *testing.T) {
+	defer func(old int) { maxDownload = old }(maxDownload)
+	maxDownload = 1 << 10 // 1 KiB
+	big := bytes.Repeat([]byte("A"), maxDownload+512)
+	archive := makeArchive(t, "ctx-wire_1.0.0_linux_amd64", big)
+	if _, err := extractBinary(archive); err == nil {
+		t.Error("oversize binary should be rejected, not truncated")
+	}
+}
+
+// makeZip builds a .zip with a single entry, matching what pack.sh produces for
+// Windows targets.
+func makeZip(t *testing.T, name string, data []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }
 
 func TestUpdateUpToDate(t *testing.T) {

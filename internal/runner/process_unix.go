@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"ctx-wire/internal/shim"
 )
@@ -19,15 +20,25 @@ func newCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 	// "only the final pipeline stage is wrapped" contract.
 	cmd.Env = append(os.Environ(), shim.EnvDisable+"=1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// On cancel (Ctrl-C / timeout), give the process group a chance to clean up:
+	// SIGTERM the whole group first, then the runtime escalates to SIGKILL after
+	// WaitDelay if the process has not exited. An immediate SIGKILL would make
+	// build/test tools skip cleanup and leave half-written artifacts.
+	//
+	// Tradeoff: the WaitDelay escalation kills the leader (os.Process.Kill), not
+	// the whole group, so a same-group child that ignores SIGTERM can briefly
+	// outlive us until its now-orphaned stdio pipes close. We accept that rare
+	// edge in exchange for clean shutdown; a wall-clock group SIGKILL would risk
+	// signalling a reused pgid.
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
 		}
-		pgid, err := syscall.Getpgid(cmd.Process.Pid)
-		if err != nil {
-			return cmd.Process.Kill()
+		if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
+			return syscall.Kill(-pgid, syscall.SIGTERM)
 		}
-		return syscall.Kill(-pgid, syscall.SIGKILL)
+		return cmd.Process.Signal(syscall.SIGTERM)
 	}
+	cmd.WaitDelay = 3 * time.Second
 	return cmd
 }

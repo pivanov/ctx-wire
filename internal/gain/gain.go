@@ -232,6 +232,12 @@ func RecordWithMeta(command, filterName, mode, agentName string, rawBytes, emitt
 	if err != nil {
 		return err
 	}
+	// A synthetic on_empty message can make emitted exceed raw; never record
+	// negative savings.
+	saved := rawBytes - emittedBytes
+	if saved < 0 {
+		saved = 0
+	}
 	line, err := json.Marshal(Entry{
 		TS:           time.Now().UTC().Format(time.RFC3339),
 		Command:      truncateCommandSample(scrub.Scrub(command)),
@@ -240,7 +246,7 @@ func RecordWithMeta(command, filterName, mode, agentName string, rawBytes, emitt
 		Agent:        agentName,
 		RawBytes:     rawBytes,
 		EmittedBytes: emittedBytes,
-		SavedBytes:   rawBytes - emittedBytes,
+		SavedBytes:   saved,
 		ExitCode:     exitCode,
 	})
 	if err != nil {
@@ -328,7 +334,10 @@ func scanGainLines(f *os.File, fn func([]byte)) error {
 func acquireGainLock(path string) (func(), error) {
 	lockPath := path + ".lock"
 	reclaimed := false
-	for i := 0; i < 200; i++ {
+	// Cap the wait at ~200ms (40 * 5ms). Gain recording is best-effort and sits
+	// on the command's exit path, so under heavy lock contention it is better to
+	// skip a record than to stall the user's output for up to a second.
+	for i := 0; i < 40; i++ {
 		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err == nil {
 			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())

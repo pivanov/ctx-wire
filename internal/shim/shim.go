@@ -278,7 +278,9 @@ func RecordUse(shimName, scrubbedCommand string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// 0700: the data dir holds usage logs; keep it private and consistent with
+	// the gain log dir (whichever creates it first sets the mode).
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)

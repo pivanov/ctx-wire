@@ -11,6 +11,8 @@ package selfupdate
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -30,8 +32,8 @@ import (
 const Repo = "pivanov/ctx-wire"
 
 // maxDownload bounds a release asset so a bad/huge response cannot exhaust
-// memory (a ctx-wire archive is a few MB).
-const maxDownload = 64 << 20
+// memory (a ctx-wire archive is a few MB). A var so tests can shrink it.
+var maxDownload = 64 << 20
 
 // Options controls an update run.
 type Options struct {
@@ -66,7 +68,7 @@ func realHTTPGet(url string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, maxDownload))
+	return io.ReadAll(io.LimitReader(resp.Body, int64(maxDownload)))
 }
 
 // Update checks the latest release and, unless Check is set, upgrades the running
@@ -86,7 +88,14 @@ func Update(opts Options) (*Result, error) {
 	}
 
 	version := strings.TrimPrefix(latest, "v")
-	asset := fmt.Sprintf("ctx-wire_%s_%s_%s.tar.gz", version, runtime.GOOS, runtime.GOARCH)
+	// Windows releases ship as a .zip with ctx-wire.exe; every other platform a
+	// .tar.gz. extractBinary dispatches on the archive format, and replaceSelf's
+	// rename-based swap works on a running binary on both Unix and Windows.
+	ext := "tar.gz"
+	if runtime.GOOS == "windows" {
+		ext = "zip"
+	}
+	asset := fmt.Sprintf("ctx-wire_%s_%s_%s.%s", version, runtime.GOOS, runtime.GOARCH, ext)
 	base := fmt.Sprintf("https://github.com/%s/releases/download/%s/", Repo, latest)
 
 	archive, err := httpGet(base + asset)
@@ -148,9 +157,18 @@ func verifyChecksum(archive, sumFile []byte) error {
 	return nil
 }
 
-// extractBinary returns the ctx-wire executable bytes from a release .tar.gz.
+// extractBinary returns the ctx-wire executable bytes from a release archive,
+// dispatching on format: a Windows .zip (PK magic) or a .tar.gz for every other
+// platform.
 func extractBinary(archive []byte) ([]byte, error) {
-	gz, err := gzip.NewReader(strings.NewReader(string(archive)))
+	if len(archive) >= 2 && archive[0] == 'P' && archive[1] == 'K' {
+		return extractBinaryZip(archive)
+	}
+	return extractBinaryTarGz(archive)
+}
+
+func extractBinaryTarGz(archive []byte) ([]byte, error) {
+	gz, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return nil, fmt.Errorf("open archive: %w", err)
 	}
@@ -167,19 +185,53 @@ func extractBinary(archive []byte) ([]byte, error) {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		base := filepath.Base(hdr.Name)
-		if base == "ctx-wire" || base == "ctx-wire.exe" {
-			data, err := io.ReadAll(io.LimitReader(tr, maxDownload))
-			if err != nil {
-				return nil, err
-			}
-			if len(data) == 0 {
-				return nil, fmt.Errorf("archive contained an empty binary")
-			}
-			return data, nil
+		if isCtxWireBinary(hdr.Name) {
+			return readArchiveEntry(io.LimitReader(tr, int64(maxDownload+1)))
 		}
 	}
 	return nil, fmt.Errorf("ctx-wire binary not found in the release archive")
+}
+
+func extractBinaryZip(archive []byte) ([]byte, error) {
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return nil, fmt.Errorf("open archive: %w", err)
+	}
+	for _, f := range zr.File {
+		if !isCtxWireBinary(f.Name) {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, fmt.Errorf("read archive: %w", err)
+		}
+		data, err := readArchiveEntry(io.LimitReader(rc, int64(maxDownload+1)))
+		rc.Close()
+		return data, err
+	}
+	return nil, fmt.Errorf("ctx-wire binary not found in the release archive")
+}
+
+func isCtxWireBinary(name string) bool {
+	base := filepath.Base(name)
+	return base == "ctx-wire" || base == "ctx-wire.exe"
+}
+
+// readArchiveEntry reads r (a LimitReader capped at maxDownload+1) fully and
+// rejects both an empty entry and one that hits the cap, so a truncated binary
+// is never installed.
+func readArchiveEntry(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("archive contained an empty binary")
+	}
+	if len(data) > maxDownload {
+		return nil, fmt.Errorf("binary in archive exceeds %d bytes; refusing a possibly-truncated install", maxDownload)
+	}
+	return data, nil
 }
 
 // replaceSelf atomically swaps the running binary for newBin, keeping a backup

@@ -100,8 +100,11 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  const contentLength = Number(request.headers.get("content-length") || "0");
-  if (contentLength > MAX_BODY_BYTES) {
+  // Require a valid Content-Length and reject oversize/missing before reading the
+  // body, so a client that omits the header can't force the whole body to be read
+  // before rejection. The CLI always sets it (fetch/Go http with a sized body).
+  const contentLength = Number(request.headers.get("content-length"));
+  if (!Number.isFinite(contentLength) || contentLength <= 0 || contentLength > MAX_BODY_BYTES) {
     return json({ error: "body_too_large" }, 413);
   }
 

@@ -1,9 +1,7 @@
 [filters.base64]
-description = "Compact base64 output: cap rows, truncate very long encoded lines, keep short output whole"
+description = "Pass base64 output through untouched: any truncation makes an encoded stream undecodable, and a single `base64 -w0` line easily exceeds a per-line cap."
 match_command = "^base64\\b"
 strip_ansi = true
-truncate_lines_at = 500
-max_lines = 200
 
 [[tests.base64]]
 name = "short encoding preserved"

@@ -11,6 +11,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -101,21 +102,36 @@ func New(reg *filter.Registry, version string) *mcp.Server {
 	return srv
 }
 
+// maxReadFileBytes bounds read_file's in-memory read, matching the runner's
+// command-capture cap so a huge path cannot exhaust memory.
+const maxReadFileBytes = 10 << 20 // 10 MiB
+
 // readFile reads path, scrubs secrets, applies the same filter `cat <path>`
 // would (blank-line collapse, caps), and optionally caps to maxLines. It is pure
 // Go (no shell, no `cat`), so it behaves identically on Windows.
 func readFile(reg *filter.Registry, path string, maxLines int) (string, bool, error) {
-	data, err := os.ReadFile(path)
+	fh, err := os.Open(path)
 	if err != nil {
 		return "", false, err
 	}
+	defer fh.Close()
+	// Bound the read so a multi-GB path cannot OOM the MCP server. The command
+	// path is capped the same way; read_file was not.
+	data, err := io.ReadAll(io.LimitReader(fh, maxReadFileBytes+1))
+	if err != nil {
+		return "", false, err
+	}
+	truncated := false
+	if len(data) > maxReadFileBytes {
+		data = data[:maxReadFileBytes]
+		truncated = true
+	}
 	content := scrub.Scrub(string(data))
 
-	truncated := false
 	if f := reg.Find("cat " + path); f != nil {
 		res := filter.ApplyWithMeta(f, content)
 		content = res.Output
-		truncated = res.Truncated
+		truncated = truncated || res.Truncated
 	}
 
 	if maxLines > 0 {

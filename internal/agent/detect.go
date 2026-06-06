@@ -9,7 +9,9 @@ type procInfo struct {
 }
 
 // detectMaxDepth bounds the ancestor walk so a pathological tree can never spin.
-const detectMaxDepth = 16
+// Kept in sync with the shim's own ancestor-walk depth (internal/shim/shim.go)
+// so attribution and activation agree on how far up the tree an agent counts.
+const detectMaxDepth = 12
 
 // detectFrom walks the process-ancestor chain starting at startPid, returning
 // the first recognized agent (closest ancestor wins, so codex run inside an
@@ -55,11 +57,25 @@ var detectPatterns = []detectPattern{
 // matchAgent returns the canonical agent name whose token appears in a process
 // command, or "" for none. The list is ordered, so the first matching agent wins
 // on the rare command that mentions two.
+//
+// Flag tokens are dropped before matching so a flag that merely contains an
+// agent name (e.g. `gnome-terminal --cursor-shape`, `code --gemini`) does not
+// self-attribute. Bare-word collisions (`gcloud ai gemini`) remain inherently
+// ambiguous; the explicit CTX_WIRE_AGENT marker set by hooks/shims is the
+// authoritative signal, and this process-tree match is only the fallback.
 func matchAgent(cmd string) string {
-	low := strings.ToLower(cmd)
+	var b strings.Builder
+	for _, f := range strings.Fields(strings.ToLower(cmd)) {
+		if strings.HasPrefix(f, "-") {
+			continue
+		}
+		b.WriteString(f)
+		b.WriteByte(' ')
+	}
+	scan := b.String()
 	for _, item := range detectPatterns {
 		for _, pattern := range item.patterns {
-			if strings.Contains(low, pattern) {
+			if strings.Contains(scan, pattern) {
 				return item.name
 			}
 		}

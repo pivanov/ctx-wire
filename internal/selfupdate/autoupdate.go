@@ -109,10 +109,10 @@ func due(last, now time.Time, interval time.Duration) bool {
 // It is the caller's job to invoke this only on human-facing commands; it must
 // never be wired into the run/hook/rewrite/mcp hot paths.
 func MaybeBackgroundUpdate(current string, interval time.Duration) {
-	// Windows releases ship as a .zip and replacing a running .exe is not
-	// supported by the .tar.gz updater, so Windows upgrades are manual (see
-	// README). Skip entirely: no check is stamped and no updater is spawned, so
-	// the path goes live unchanged once Windows .zip self-update is implemented.
+	// Manual `ctx-wire update` works on Windows (zip support), but a silent
+	// background swap of a running .exe is not yet validated on real Windows, and
+	// a failed swap could leave a broken install. Keep background update off there
+	// until replaceSelf is proven on Windows; manual update stays available.
 	if runtime.GOOS == "windows" {
 		return
 	}

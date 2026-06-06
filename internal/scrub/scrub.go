@@ -44,8 +44,10 @@ var rules = []rule{
 			`|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b` + // Stripe key
 			`|\bsk-(?:ant-)?[A-Za-z0-9_\-]{20,}\b`, // OpenAI / Anthropic key
 	), replacement: redacted},
-	// Authorization: Bearer <token> / Basic <token> / token <token>
-	{name: "authorization-header", re: regexp.MustCompile(`(?i)(authorization\s*[:=]\s*(?:bearer|basic|token)\s+)\S+`), replacement: "${1}" + redacted},
+	// Authorization: <scheme> <secret> -> keep the scheme, redact the secret.
+	// Any scheme word (Bearer, Basic, token, ApiKey, Digest, NTLM, custom) is
+	// matched, not just the three well-known ones.
+	{name: "authorization-header", re: regexp.MustCompile(`(?i)(authorization\s*[:=]\s*[A-Za-z][A-Za-z0-9._-]*\s+)\S+`), replacement: "${1}" + redacted},
 	// Split long flags whose following argv value is a secret. This is a
 	// defense-in-depth pass for older persisted command samples; new command
 	// records are scrubbed argv-aware by Command before they reach disk.

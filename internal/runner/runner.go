@@ -310,6 +310,12 @@ func runAndExitCode(cmd *exec.Cmd) (int, error) {
 	}
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
+		// A signal-killed child reports ExitCode() == -1 (a shell surfaces 255);
+		// translate it to the conventional 128+signal (137 for SIGKILL) so agents
+		// reading exit codes can tell a kill/timeout from a generic failure.
+		if code, ok := signalExitCode(ee); ok {
+			return code, nil
+		}
 		return ee.ExitCode(), nil
 	}
 	return 1, err

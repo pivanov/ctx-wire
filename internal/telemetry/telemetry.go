@@ -378,7 +378,12 @@ func totalsFromSummary(summary *gain.Summary) Totals {
 }
 
 func totalsFromCommand(command, agentName string, rawBytes, emittedBytes int) Totals {
+	// A synthetic on_empty message can make emitted exceed raw; never record
+	// negative savings.
 	saved := rawBytes - emittedBytes
+	if saved < 0 {
+		saved = 0
+	}
 	bucket := ProgramTotals{
 		Count:        1,
 		RawBytes:     int64(rawBytes),
