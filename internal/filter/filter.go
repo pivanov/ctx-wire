@@ -53,6 +53,12 @@ type tomlFilter struct {
 	OnEmpty            *string           `toml:"on_empty"`
 	FilterStderr       bool              `toml:"filter_stderr"`
 	GroupBy            *tomlGroupBy      `toml:"group_by"`
+	// ReduceJSON opts a filter into reducing JSON output. By default the runner
+	// passes a complete, valid JSON document through untouched (the documented
+	// "JSON payloads are not reduced" guarantee, applied by content). A filter
+	// like jq, whose whole purpose is to compact large JSON, sets this true to
+	// keep capping/truncating its JSON output.
+	ReduceJSON bool `toml:"reduce_json"`
 }
 
 // tomlGroupBy groups grep/rg-style `key:rest` output: it keeps the first
@@ -124,6 +130,7 @@ type CompiledFilter struct {
 	maxLines        *int
 	onEmpty         *string
 	groupBy         *compiledGroupBy
+	reduceJSON      bool
 }
 
 type compiledGroupBy struct {
@@ -135,6 +142,10 @@ type compiledGroupBy struct {
 
 // MaxLines exposes the absolute line cap (nil if unset).
 func (f *CompiledFilter) MaxLines() *int { return f.maxLines }
+
+// ReducesJSON reports whether this filter opts into reducing JSON output (so the
+// runner's content-based JSON passthrough must not override it).
+func (f *CompiledFilter) ReducesJSON() bool { return f.reduceJSON }
 
 // ApplyResult is the output of a filter plus metadata about whether the filter
 // dropped content due to an explicit cap.
@@ -239,6 +250,7 @@ func compile(name string, def tomlFilter) (*CompiledFilter, error) {
 		maxLines:        def.MaxLines,
 		onEmpty:         def.OnEmpty,
 		groupBy:         groupBy,
+		reduceJSON:      def.ReduceJSON,
 	}, nil
 }
 

@@ -234,7 +234,12 @@ storage, unloadable filter registry).
   an agent-looking parent process. That avoids recursive shim calls and keeps
   your ordinary terminal path native. Shim captures are counted in a scrubbed
   local usage log so `ctx-wire doctor` can show whether they are actually being
-  exercised.
+  exercised. To exempt an agent-spawned helper whose stdout must stay byte-exact
+  (a statusline command, a hook, an MCP subprocess), set
+  `CTX_WIRE_DISABLE_SHIMS=1` at the top of that script: it is the first check in
+  every shim, so the real command runs unwrapped. `ctx-wire run` already sets it
+  for the commands it wraps, so nested pipelines and helpers under a wrapped
+  command stay raw.
 - **Claude Code, Cursor, Codex, Gemini CLI**: transparent command rewrite via a
   pre-tool hook. Codex additionally requires you to enable its hooks feature and
   trust the hook (the command prints the exact steps; it never bypasses trust).
@@ -519,11 +524,16 @@ wrapped and filtered, and `ctx-wire doctor` whenever something seems off.
   are passed through for the same safety reason. The rewriter is a conservative,
   POSIX-ish recognizer, not a full shell parser; `ctx-wire explain` reports the
   exact decision.
-- **JSON payload commands are not reduced.** Structured output such as `go list
-  -json`, `terraform show -json`, `terraform output -json`, and the `tofu`
-  equivalents routes to passthrough guard filters, because capping or truncating
-  JSON could produce invalid output and mislead the agent. Their non-JSON
-  variants are still compacted.
+- **JSON payloads are not reduced.** This is enforced by content, not just by
+  command: if a filter would truncate a complete, valid JSON document on stdout,
+  ctx-wire emits the document whole instead (up to ~1 MiB; a larger one is
+  replaced with a notice rather than cut mid-structure), because capping or
+  truncating JSON produces invalid output that breaks downstream parsers. So a
+  single-line JSON flowing through `cat`, a helper script, or a statusline stays
+  intact. Commands whose job is to compact JSON (`jq`) opt out with
+  `reduce_json = true` and keep capping. Known JSON commands (`go list -json`,
+  `terraform show -json`, the `tofu` equivalents) also have explicit passthrough
+  filters; their non-JSON variants are still compacted.
 - **Project filters require trust.** A project-local `.ctx-wire/filters.toml` is
   ignored until you approve it with `ctx-wire trust` (recorded by SHA-256). If
   the file changes after approval, it reverts to untrusted until re-approved.

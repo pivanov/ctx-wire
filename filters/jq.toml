@@ -7,6 +7,9 @@ strip_lines_matching = [
 ]
 max_lines = 40
 truncate_lines_at = 120
+# jq's purpose is to compact large JSON, so it opts out of the runner's
+# content-based JSON passthrough and keeps capping its own output.
+reduce_json = true
 
 [[tests.jq]]
 name = "short output passes through"
