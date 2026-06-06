@@ -11,6 +11,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -146,10 +147,17 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 			SuppressSyntheticSuccess: failed,
 			KeepTailOnTruncate:       failed,
 		})
-		filterTruncated = applied.Truncated
-		stdoutText = withTrailingNewline(scrub.Scrub(applied.Output))
-		if !f.FilterStderr {
+		if jsonText, jsonMode, ok := jsonGuard(out, applied.Truncated, f.FilterStderr, f.ReducesJSON()); ok {
+			mode = jsonMode
+			stdoutText = jsonText
 			stderrText = scrub.Scrub(errOut)
+			filterTruncated = jsonMode == jsonModeCapped
+		} else {
+			filterTruncated = applied.Truncated
+			stdoutText = withTrailingNewline(scrub.Scrub(applied.Output))
+			if !f.FilterStderr {
+				stderrText = scrub.Scrub(errOut)
+			}
 		}
 	}
 
@@ -248,6 +256,51 @@ func withTrailingNewline(s string) string {
 		return s
 	}
 	return s + "\n"
+}
+
+// maxJSONPassthrough bounds how much complete JSON the content-based guarantee
+// emits verbatim. A valid JSON document up to this size is passed through whole;
+// a larger one is replaced (never cut mid-structure) so savings are preserved.
+// A var (not const) so tests can shrink it to exercise the oversize path.
+var maxJSONPassthrough = 1 << 20 // 1 MiB
+
+const (
+	jsonModeWhole  = "json"
+	jsonModeCapped = "json-capped"
+)
+
+// jsonGuard implements the documented "JSON payloads are not reduced" guarantee
+// by content. When a filter has truncated a complete, valid JSON document on
+// stdout (and is not one that intentionally reduces JSON, e.g. jq), the
+// truncation almost certainly produced invalid JSON that would break a
+// downstream parser (a statusline's jq, a piped consumer). It returns the text
+// to emit instead: the whole scrubbed document under the ceiling, or a
+// replacement notice for an oversize one, never a mid-structure cut. ok is false
+// when the guard does not apply and normal filtering should stand.
+func jsonGuard(out string, truncated, filterStderr, reducesJSON bool) (text, mode string, ok bool) {
+	if !truncated || filterStderr || reducesJSON || !isCompleteJSON(out) {
+		return "", "", false
+	}
+	if len(out) <= maxJSONPassthrough {
+		return withTrailingNewline(scrub.Scrub(out)), jsonModeWhole, true
+	}
+	return withTrailingNewline(jsonOversizeMarker(len(out))), jsonModeCapped, true
+}
+
+// isCompleteJSON reports whether s is a single complete JSON object or array.
+// The cheap first-byte gate keeps json.Valid off ordinary output, so noise that
+// merely starts with '{'/'[' (a bracketed log line, a brace expansion) is not
+// mistaken for JSON.
+func isCompleteJSON(s string) bool {
+	t := strings.TrimLeft(s, " \t\r\n")
+	if t == "" || (t[0] != '{' && t[0] != '[') {
+		return false
+	}
+	return json.Valid([]byte(s))
+}
+
+func jsonOversizeMarker(n int) string {
+	return fmt.Sprintf("[ctx-wire: %d-byte JSON document omitted (over the %d-byte passthrough ceiling); full log spooled]", n, maxJSONPassthrough)
 }
 
 func runAndExitCode(cmd *exec.Cmd) (int, error) {

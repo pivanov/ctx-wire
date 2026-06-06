@@ -461,6 +461,27 @@ func TestApplyWithMetaReportsTruncation(t *testing.T) {
 }
 
 // firstFilter compiles inline TOML and returns its single filter.
+func TestReduceJSONFlag(t *testing.T) {
+	on := firstFilter(t, `
+schema_version = 1
+[filters.j]
+match_command = "^jq\\b"
+reduce_json = true
+`)
+	if !on.ReducesJSON() {
+		t.Error("reduce_json = true should set ReducesJSON()")
+	}
+	off := firstFilter(t, `
+schema_version = 1
+[filters.c]
+match_command = "^cat\\b"
+truncate_lines_at = 500
+`)
+	if off.ReducesJSON() {
+		t.Error("ReducesJSON() should default to false")
+	}
+}
+
 func firstFilter(t *testing.T, content string) *CompiledFilter {
 	t.Helper()
 	got, err := parseAndCompile(content, "test")
