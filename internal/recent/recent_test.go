@@ -5,8 +5,30 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
+
+// TestConcurrentRecordNoLostWrites pins the cross-process safety of the
+// read-modify-rewrite: parallel records must not clobber each other (the bug the
+// lock fixes after moving off atomic O_APPEND).
+func TestConcurrentRecordNoLostWrites(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	opts := Options{Enabled: true, MaxEntries: 100}
+	const n = 20
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(k int) {
+			defer wg.Done()
+			Record(opts, Entry{Command: fmt.Sprintf("c%d", k), Emitted: "x"})
+		}(i)
+	}
+	wg.Wait()
+	if got := List(); len(got) != n {
+		t.Errorf("concurrent records kept %d entries, want %d (a lost write means the lock failed)", len(got), n)
+	}
+}
 
 func TestMaxEntriesEnforced(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())

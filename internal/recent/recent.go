@@ -11,11 +11,14 @@ package recent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"ctx-wire/internal/paths"
 )
@@ -25,6 +28,9 @@ const (
 	// perBodyCap bounds the emitted/raw text stored per entry, so one huge
 	// command cannot blow the store.
 	perBodyCap = 256 << 10
+	// lockTTL is how long a lock file may sit before a peer treats it as
+	// abandoned by a crashed writer and reclaims it.
+	lockTTL = 10 * time.Second
 )
 
 // Options is the retention configuration (derived from config.Retention, then
@@ -113,13 +119,56 @@ func Record(opts Options, e Entry) {
 	}
 	// Read, append, and trim to MaxEntries on every record so the count bound is
 	// always honored (the store is opt-in and bounded, so the read+rewrite cost
-	// is acceptable). Rewrite atomically and privately.
+	// is acceptable). The read-modify-rewrite is NOT atomic across processes the
+	// way an O_APPEND write was, so a cross-process lock serializes it: without
+	// it, two concurrent `ctx-wire run` processes would lose each other's entry.
+	unlock, ok := acquireLock(p)
+	if !ok {
+		return // contended or stale lock: skip this record (best-effort) rather than risk a racy rewrite
+	}
+	defer unlock()
+
 	entries := readEntries(p)
 	entries = append(entries, e)
 	if max := opts.maxEntries(); len(entries) > max {
 		entries = entries[len(entries)-max:]
 	}
 	writeEntries(p, entries)
+}
+
+// acquireLock serializes the read-modify-rewrite across processes with an
+// O_EXCL lock file, capping the wait at ~200ms (retention is best-effort and on
+// the command exit path, so skipping a record beats stalling output). A lock
+// abandoned by a crashed writer is reclaimed once.
+func acquireLock(p string) (func(), bool) {
+	lockPath := p + ".lock"
+	reclaimed := false
+	for i := 0; i < 40; i++ {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
+			_ = f.Close()
+			return func() { _ = os.Remove(lockPath) }, true
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return func() {}, false
+		}
+		if !reclaimed && staleLock(lockPath) {
+			reclaimed = true
+			_ = os.Remove(lockPath)
+			continue
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return func() {}, false
+}
+
+func staleLock(lockPath string) bool {
+	info, err := os.Stat(lockPath)
+	if err != nil {
+		return false
+	}
+	return time.Since(info.ModTime()) > lockTTL
 }
 
 // List returns the retained entries, oldest first. Best-effort: nil on error.
@@ -173,7 +222,11 @@ func writeEntries(p string, entries []Entry) {
 		os.Remove(tmpName)
 		return
 	}
-	_ = os.Rename(tmpName, p)
+	if err := os.Rename(tmpName, p); err != nil {
+		// Do not leave a private temp file (which may hold a raw body) behind on a
+		// rare rename failure.
+		os.Remove(tmpName)
+	}
 }
 
 func clip(s string) string {
