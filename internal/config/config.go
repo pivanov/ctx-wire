@@ -20,9 +20,27 @@ const envConfig = "CTX_WIRE_CONFIG"
 
 // Config is the parsed user config (~/.config/ctx-wire/config.toml).
 type Config struct {
-	Hooks  Hooks  `toml:"hooks"`
-	Output Output `toml:"output"`
-	Update Update `toml:"update"`
+	Hooks     Hooks     `toml:"hooks"`
+	Output    Output    `toml:"output"`
+	Update    Update    `toml:"update"`
+	Retention Retention `toml:"retention"`
+}
+
+// Retention controls the recent-outputs store that powers `ctx-wire inspect`
+// (and, later, dedup). It is a deliberate exception to "do not persist
+// successful output", so it is OFF unless explicitly enabled.
+type Retention struct {
+	// Enabled turns the store on. Unset or false means off (the default): no
+	// successful-command output is persisted.
+	Enabled bool `toml:"enabled"`
+
+	// RawBodies also stores the scrubbed raw (pre-filter) body, which `inspect`
+	// needs for a full raw-vs-filtered audit. Off by default; this is the larger
+	// persistence cost, paid only when the user wants the audit trail.
+	RawBodies bool `toml:"raw_bodies"`
+
+	// MaxEntries caps how many recent entries are kept (0 uses the default).
+	MaxEntries int `toml:"max_entries"`
 }
 
 // Update controls background self-update behavior.

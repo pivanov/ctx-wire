@@ -17,11 +17,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"ctx-wire/internal/agent"
 	"ctx-wire/internal/commandpolicy"
 	"ctx-wire/internal/filter"
 	"ctx-wire/internal/gain"
+	"ctx-wire/internal/recent"
 	"ctx-wire/internal/scrub"
 	"ctx-wire/internal/shim"
 	"ctx-wire/internal/tee"
@@ -174,6 +176,7 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 	}
 
 	recordGain(scrubbedCmd, filterName, mode, outCap.total+errCap.total, len(stdoutText)+len(stderrText), code)
+	recordRecent(scrubbedCmd, filterName, mode, outCap, errCap, stdoutText, stderrText, code)
 
 	if path, ok := spool.Finalize(code != 0 || truncated); ok {
 		meta = append(meta, tee.Hint(path))
@@ -194,6 +197,39 @@ func recordGain(cmdline, filterName, mode string, rawBytes, emittedBytes, exitCo
 	if err := gain.RecordWithMeta(cmdline, filterName, mode, ag, rawBytes, emittedBytes, exitCode); err == nil {
 		_, _ = telemetry.RecordCommand(cmdline, ag, rawBytes, emittedBytes)
 	}
+}
+
+// retentionOpts configures the recent-outputs store; off until main wires it
+// from config. Only the buffered (filtered) path records; streamed passthrough
+// output is not in memory to retain.
+var retentionOpts recent.Options
+
+// SetRetention configures the recent-outputs store used by `ctx-wire inspect`
+// (and, later, dedup). Disabled by default.
+func SetRetention(o recent.Options) { retentionOpts = o }
+
+// recordRecent stores the just-emitted command output, best-effort. No-op when
+// retention is off. The raw (pre-filter) body is scrubbed and stored only when
+// the raw tier is enabled; the emitted text is already scrubbed.
+func recordRecent(cmd, filterName, mode string, outCap, errCap *capWriter, stdoutText, stderrText string, code int) {
+	if !retentionOpts.Enabled {
+		return
+	}
+	var raw string
+	if retentionOpts.RawBodies {
+		raw = scrub.Scrub(outCap.String()) + scrub.Scrub(errCap.String())
+	}
+	recent.Record(retentionOpts, recent.Entry{
+		TS:        time.Now().UTC().Format(time.RFC3339Nano),
+		Command:   cmd,
+		Filter:    filterName,
+		Mode:      mode,
+		RawBytes:  outCap.total + errCap.total,
+		EmitBytes: len(stdoutText) + len(stderrText),
+		Exit:      code,
+		Emitted:   stdoutText + stderrText,
+		Raw:       raw,
+	})
 }
 
 // Capture runs the command and returns its filtered, scrubbed output as a single

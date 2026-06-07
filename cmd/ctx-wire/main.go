@@ -10,6 +10,8 @@ import (
 	"ctx-wire/internal/commandpolicy"
 	"ctx-wire/internal/config"
 	"ctx-wire/internal/filter"
+	"ctx-wire/internal/recent"
+	"ctx-wire/internal/runner"
 	"ctx-wire/internal/selfupdate"
 	"ctx-wire/internal/ui"
 )
@@ -47,6 +49,11 @@ func main() {
 		commandpolicy.SetExcludedCommands(cfg.Hooks.ExcludeCommands)
 		commandpolicy.SetTransparentPrefixes(cfg.Hooks.TransparentPrefixes)
 		filter.SetUltraCompact(cfg.Output.UltraCompact)
+		runner.SetRetention(recent.ApplyEnv(recent.Options{
+			Enabled:    cfg.Retention.Enabled,
+			RawBodies:  cfg.Retention.RawBodies,
+			MaxEntries: cfg.Retention.MaxEntries,
+		}))
 	}
 	// Auto-update is opt-out and runs only on human-facing commands, never on the
 	// run/hook/rewrite/mcp hot paths (per-command, machine-facing). It is fully
@@ -82,6 +89,8 @@ func main() {
 		os.Exit(cmdGain(os.Args[2:]))
 	case "explain":
 		os.Exit(cmdExplain(os.Args[2:]))
+	case "inspect":
+		os.Exit(cmdInspect(os.Args[2:]))
 	case "tune":
 		os.Exit(cmdTune(os.Args[2:]))
 	case "telemetry":
@@ -173,6 +182,7 @@ func usage(out *os.File) {
 	fmt.Fprintln(out)
 	usageSection(out, theme, "diagnose", []usageRow{
 		{"explain <cmd>", "diagnose one command's rewrite/filter decision (read-only)"},
+		{"inspect [n]", "show raw-vs-filtered for a recent command (needs [retention])"},
 		{"discover", "find agent commands that escaped ctx-wire (read-only, local logs)"},
 		{"learn", "mine transcripts for failed->corrected commands into rule hints"},
 		{"session", "per-session ctx-wire adoption across agent transcripts (read-only)"},
