@@ -31,6 +31,13 @@ const (
 	EnvDisable = "CTX_WIRE_DISABLE_SHIMS"
 	// EnvLog overrides the shim usage log path in tests.
 	EnvLog = "CTX_WIRE_SHIM_LOG"
+	// EnvDepth is the wrap-recursion counter carried across exec, so a
+	// misconfigured PATH degrades to running the real command instead of forking
+	// without bound. Shared by the shell shim template and `run --shim`.
+	EnvDepth = "CTX_WIRE_SHIM_DEPTH"
+	// DepthCap is the maximum number of times ctx-wire may wrap itself before a
+	// shim gives up and runs the real command directly.
+	DepthCap = 10
 
 	marker = "# ctx-wire shim v1"
 )
@@ -267,6 +274,32 @@ func ResolveReal(name string) (string, bool) {
 	return name, false
 }
 
+// ResolveRealExe returns the first real (non-shim) executable for a bare command
+// name on PATH, skipping every ctx-wire-managed shim. Unlike ResolveReal (which
+// unwraps a single hook-rewritten name and falls back to the name itself), this
+// is for `run --shim`: it must never hand back a shim, because the shim would
+// then re-exec itself. When only ctx-wire shims (or nothing) are found it
+// returns an error, which the caller surfaces as exit 127 rather than looping.
+func ResolveRealExe(name string) (string, error) {
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == "" {
+			dir = "."
+		}
+		for _, ext := range executableExts() {
+			candidate := filepath.Join(dir, name+ext)
+			info, err := os.Stat(candidate)
+			if err != nil || info.IsDir() || !isExecutable(info) {
+				continue
+			}
+			if isManagedShimFile(candidate) {
+				continue // a ctx-wire shim; keep scanning for the real binary
+			}
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no real %q on PATH (only ctx-wire shims); check for duplicate installs", name)
+}
+
 // RecordUse appends a scrubbed shim-capture entry. It is best-effort by caller
 // convention: errors should never break command execution.
 func RecordUse(shimName, scrubbedCommand string) error {
@@ -333,7 +366,11 @@ func shimFileName(cmd string) string {
 
 func shimScript(cmd, ctxWire string) string {
 	if runtime.GOOS == "windows" {
-		return fmt.Sprintf("@echo off\r\nrem %s\r\nset CTX_WIRE_SHIM=%s\r\n\"%s\" run %s %%*\r\n", marker, cmd, ctxWire, cmd)
+		// The binary owns gating (detection, opt-outs, recursion backstop) and
+		// attribution via `run --shim`, so the .cmd stays a thin launcher. The
+		// marker on line 2 keeps install/uninstall scanning working; exit /b
+		// propagates the binary's exit code.
+		return fmt.Sprintf("@echo off\r\nrem %s\r\n\"%s\" run --shim %s %%*\r\nexit /b %%errorlevel%%\r\n", marker, ctxWire, cmd)
 	}
 	qCtx := shellQuote(ctxWire)
 	qCmd := shellQuote(cmd)

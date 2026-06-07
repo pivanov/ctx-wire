@@ -60,6 +60,12 @@ func cmdRun(args []string) int {
 		usageLine(os.Stderr, "ctx-wire run [--agent <agent>] <cmd> [args]")
 		return 2
 	}
+	// --shim is an internal re-entry point used by the Windows .cmd shims: it
+	// self-gates (detection, opt-outs, recursion backstop) before filtering. Not
+	// in the public help; never typed by a person.
+	if args[0] == "--shim" {
+		return cmdRunShim(args[1:])
+	}
 	agentName := ""
 	if args[0] == "--agent" {
 		if len(args) < 3 {

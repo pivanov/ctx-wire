@@ -16,16 +16,16 @@ import (
 // call (and only on the hook path: shim-launched commands already carry
 // CTX_WIRE_AGENT). Best-effort: "" when ps fails or no agent is found.
 func detect() string {
-	procs := psSnapshot()
+	procs := procSnapshot()
 	if len(procs) == 0 {
 		return ""
 	}
 	return detectFrom(os.Getppid(), procs)
 }
 
-// psSnapshot returns a pid -> {ppid, command} map from one `ps` call. Works on
+// procSnapshot returns a pid -> {ppid, command} map from one `ps` call. Works on
 // macOS and Linux. A parse failure for one line is skipped, not fatal.
-func psSnapshot() map[int]procInfo {
+func procSnapshot() map[int]procInfo {
 	// Bound the call so a hung or restricted `ps` (e.g. a container with a
 	// locked-down /proc) can never stall the command this runs on.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

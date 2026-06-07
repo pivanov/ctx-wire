@@ -348,6 +348,29 @@ func runInherited(ctx context.Context, name string, args []string) (int, error) 
 	return code, nil
 }
 
+// RunRaw runs name+args with stdin/stdout/stderr inherited, the environment
+// unmodified, and no filtering or scrubbing, returning the command's own exit
+// code (128+signal when signaled). It is the byte-exact passthrough used by
+// `run --shim` when no agent is detected, matching the Unix shell shim's
+// `exec "$real"`. It deliberately does NOT use newCommand (which injects
+// CTX_WIRE_DISABLE_SHIMS and sets up process groups): a true passthrough must
+// leave the child's view of the world untouched, including stdin so a statusline
+// doing `input=$(cat)` still receives its piped JSON.
+func RunRaw(ctx context.Context, name string, args []string) int {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	code, err := runAndExitCode(cmd)
+	if err != nil {
+		// The resolver guarantees a real exe exists, so a start failure here is
+		// rare; surface it as "command not found" rather than a generic 1.
+		fmt.Fprintf(os.Stderr, "ctx-wire: failed to run %q: %v\n", name, err)
+		return 127
+	}
+	return code
+}
+
 // capWriter accumulates up to max bytes and discards the rest, always reporting
 // a full write so the os/exec output copier never blocks or errors. It bounds
 // memory for commands that produce huge output.
