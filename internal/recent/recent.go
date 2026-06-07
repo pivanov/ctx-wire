@@ -180,6 +180,35 @@ func List() []Entry {
 	return readEntries(p)
 }
 
+// Hash returns the content hash used for entries, so dedup can compare a fresh
+// output against a stored entry's Hash with the same function.
+func Hash(s string) string { return hashString(s) }
+
+// LastMatch returns the most recent entry whose command equals command and whose
+// timestamp is within `within` of now. ok is false when there is no such recent
+// entry. Used by dedup: a match means the same command produced this output
+// recently enough that the body is likely still in the agent's context.
+func LastMatch(command string, within time.Duration, now time.Time) (Entry, bool) {
+	entries := List()
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if e.Command != command {
+			continue
+		}
+		ts, err := time.Parse(time.RFC3339Nano, e.TS)
+		if err != nil {
+			return Entry{}, false
+		}
+		if now.Sub(ts) <= within {
+			return e, true
+		}
+		// The most recent match is already outside the window; older ones only
+		// get further away, so stop.
+		return Entry{}, false
+	}
+	return Entry{}, false
+}
+
 // readEntries decodes the JSONL store with a streaming decoder, so an entry of
 // any size is read correctly (a fixed scanner buffer could silently drop a large
 // entry, and every entry after it).

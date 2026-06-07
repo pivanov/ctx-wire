@@ -49,11 +49,21 @@ func main() {
 		commandpolicy.SetExcludedCommands(cfg.Hooks.ExcludeCommands)
 		commandpolicy.SetTransparentPrefixes(cfg.Hooks.TransparentPrefixes)
 		filter.SetUltraCompact(cfg.Output.UltraCompact)
-		runner.SetRetention(recent.ApplyEnv(recent.Options{
+		ret := recent.Options{
 			Enabled:    cfg.Retention.Enabled,
 			RawBodies:  cfg.Retention.RawBodies,
 			MaxEntries: cfg.Retention.MaxEntries,
-		}))
+		}
+		// Dedup needs the recent store to compare against and to recover from, so
+		// it records (at least the lean tier) even if retention was not explicitly
+		// enabled. ApplyEnv runs last so the CTX_WIRE_RETENTION=0 kill switch still
+		// wins: it clears retentionOpts.Enabled, and maybeDedup is gated on that,
+		// so the kill switch disables dedup too.
+		if cfg.Dedup.Enabled {
+			ret.Enabled = true
+		}
+		runner.SetRetention(recent.ApplyEnv(ret))
+		runner.SetDedup(runner.DedupOptions{Enabled: cfg.Dedup.Enabled, Recency: cfg.Dedup.Recency()})
 	}
 	// Auto-update is opt-out and runs only on human-facing commands, never on the
 	// run/hook/rewrite/mcp hot paths (per-command, machine-facing). It is fully
@@ -71,6 +81,8 @@ func main() {
 		os.Exit(cmdRun(os.Args[2:]))
 	case "mcp":
 		os.Exit(cmdMCP(os.Args[2:]))
+	case "mcp-wrap":
+		os.Exit(cmdMCPWrap(os.Args[2:]))
 	case "hook":
 		os.Exit(cmdHook(os.Args[2:]))
 	case "rewrite":
@@ -93,6 +105,8 @@ func main() {
 		os.Exit(cmdInspect(os.Args[2:]))
 	case "tune":
 		os.Exit(cmdTune(os.Args[2:]))
+	case "filters":
+		os.Exit(cmdFilters(os.Args[2:]))
 	case "telemetry":
 		os.Exit(cmdTelemetry(os.Args[2:]))
 	case "discover":
@@ -189,6 +203,7 @@ func usage(out *os.File) {
 		{"verify [filter]", "run built-in filter conformance tests"},
 		{"trust", "approve this project's .ctx-wire/filters.toml"},
 		{"untrust", "revoke trust for this project's .ctx-wire/filters.toml"},
+		{"filters pull|publish", "share filters: pull (verified, untrusted) or publish a local one"},
 	})
 	fmt.Fprintln(out)
 	usageSection(out, theme, "manage", []usageRow{

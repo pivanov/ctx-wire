@@ -66,6 +66,16 @@ func cmdRun(args []string) int {
 	if args[0] == "--shim" {
 		return cmdRunShim(args[1:])
 	}
+	// --no-dedup forces this command's output to be shown in full even if it is
+	// unchanged from a recent run (the recoverable escape hatch for dedup).
+	for len(args) > 0 && args[0] == "--no-dedup" {
+		os.Setenv("CTX_WIRE_NO_DEDUP", "1")
+		args = args[1:]
+	}
+	if len(args) == 0 {
+		usageLine(os.Stderr, "ctx-wire run [--no-dedup] [--agent <agent>] <cmd> [args]")
+		return 2
+	}
 	agentName := ""
 	if args[0] == "--agent" {
 		if len(args) < 3 {

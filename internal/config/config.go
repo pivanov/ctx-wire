@@ -24,6 +24,30 @@ type Config struct {
 	Output    Output    `toml:"output"`
 	Update    Update    `toml:"update"`
 	Retention Retention `toml:"retention"`
+	Dedup     Dedup     `toml:"dedup"`
+}
+
+// Dedup controls repeat-command dedup: when a read-only command re-runs with
+// byte-identical output, ctx-wire emits a short recoverable reference instead of
+// the body. Off by default. The command still runs; only the re-emission is
+// saved.
+type Dedup struct {
+	// Enabled turns dedup on. It implies the recent-outputs store is recording
+	// (so a reference can be compared and recovered via inspect).
+	Enabled bool `toml:"enabled"`
+
+	// RecencyMinutes bounds how recent a prior run must be to dedup against it,
+	// the dead-pointer mitigation (default 60). A reference is only emitted when
+	// the unchanged body is likely still in the agent's context.
+	RecencyMinutes int `toml:"recency_minutes"`
+}
+
+// Recency returns the configured dedup recency window, or the 60-minute default.
+func (d Dedup) Recency() time.Duration {
+	if d.RecencyMinutes <= 0 {
+		return 60 * time.Minute
+	}
+	return time.Duration(d.RecencyMinutes) * time.Minute
 }
 
 // Retention controls the recent-outputs store that powers `ctx-wire inspect`

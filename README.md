@@ -105,6 +105,7 @@ just            # list recipes
 |---|---|
 | `ctx-wire run <cmd> [args]` | Execute a command and filter/scrub its output |
 | `ctx-wire mcp` | Serve `run_command` and `read_file` filtering tools over MCP (stdio) |
+| `ctx-wire mcp-wrap -- <server>` | Transparently relay a stdio MCP server and measure per-tool token cost (experimental, no compression) |
 | `ctx-wire hook <agent>` | Run as an agent pre-tool hook (reads JSON on stdin) |
 | `ctx-wire rewrite <line>` | Print the rewritten form of a shell command line |
 | `ctx-wire init <agent>` | Install the binary into `~/.local/bin`, add managed shims, and wire an agent (claude, cursor, codex, gemini, cline, windsurf, kilocode, antigravity, opencode, pi, hermes, copilot, vscode, visualstudio) |
@@ -121,6 +122,7 @@ just            # list recipes
 | `ctx-wire gain --quota [--budget <tokens>] [--window <tokens>]` | Month-to-date savings vs a vendor-neutral token budget, with a per-agent split |
 | `ctx-wire gain clear` | Clear local gain history for a fresh dogfood window |
 | `ctx-wire explain <cmd>` | Diagnose how ctx-wire handles one command (filter, mode, hook) |
+| `ctx-wire inspect [n] \| --list` | Show raw-vs-filtered for a recent command, so you can audit what was removed (needs `[retention]`) |
 | `ctx-wire tune [--since 24h] [--top N]` | Higher-level filter improvement report from gain data (read-only) |
 | `ctx-wire discover [--since 24h] [--top N] [--all]` | Find agent commands (Claude/Codex transcripts) that escaped ctx-wire (read-only) |
 | `ctx-wire learn [--since D] [--all] [--min N] [--write]` | Mine Claude transcripts for failed->corrected commands; `--write` saves `.claude/rules/cli-corrections.md` |
@@ -128,6 +130,8 @@ just            # list recipes
 | `ctx-wire tune preview` | Dry-run the sanitized bundle contents without writing files |
 | `ctx-wire tune bundle [--out PATH]` | Write a sanitized tune bundle archive for manual sharing |
 | `ctx-wire tune issue [--open]` | Print or open a sanitized GitHub issue draft |
+| `ctx-wire tune draft <program>` | Scaffold a starter filter for a program from a real captured transcript sample (`--preview`/`--write`) |
+| `ctx-wire filters pull <name> \| publish <name>` | Share filters: pull a verified community filter (installed untrusted) or package a local one |
 | `ctx-wire telemetry [status\|enable\|disable\|forget]` | Show or change anonymous aggregate telemetry status; `forget` withdraws consent and erases local data |
 | `ctx-wire doctor [--recent N]` | Check install/hooks/MCP/storage/trust health (read-only) |
 | `ctx-wire verify [filter]` | Run the built-in filter conformance tests |
