@@ -28,6 +28,7 @@ import (
 	"ctx-wire/internal/filter"
 	"ctx-wire/internal/gain"
 	"ctx-wire/internal/scrub"
+	"ctx-wire/internal/transcript"
 )
 
 // Category is the classification of one executed command.
@@ -300,24 +301,10 @@ func EncodeClaudeProjectSlug(path string) string {
 	return encodeClaudeProjectSlug(path)
 }
 
-// encodeClaudeProjectSlug reproduces Claude Code's project-directory slug: every
-// '/', '.', '_', '\\', ' ', '[', ']' and any non-ASCII rune becomes '-'. So
-// /Users/x/ctx-wire becomes -Users-x-ctx-wire. Kept in sync with Claude Code's
-// own encoding so the right session directory is found.
+// encodeClaudeProjectSlug delegates to the canonical encoder in
+// internal/transcript so the slug convention has one source of truth.
 func encodeClaudeProjectSlug(path string) string {
-	var b strings.Builder
-	b.Grow(len(path))
-	for _, r := range path {
-		switch {
-		case r > 127:
-			b.WriteByte('-')
-		case r == '/' || r == '.' || r == '_' || r == '\\' || r == ' ' || r == '[' || r == ']':
-			b.WriteByte('-')
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return transcript.EncodeClaudeProjectSlug(path)
 }
 
 func parseClaudeFile(path string, since time.Time) []exec {

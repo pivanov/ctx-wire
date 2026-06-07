@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"ctx-wire/internal/filter"
 	"ctx-wire/internal/ui"
@@ -72,35 +73,95 @@ func cmdUntrust(args []string) int {
 	return 0
 }
 
-// cmdVerify runs the inline conformance tests for the built-in filters.
+// cmdVerify runs inline conformance tests: the built-in filters by default, or a
+// local file with --project / --file. Local verification is trust-free.
 func cmdVerify(args []string) int {
 	if isHelpArg(args) {
 		printHelp(os.Stdout, helpDoc{
-			usage:   []string{"ctx-wire verify [filter]"},
-			summary: "Run the built-in filters' inline conformance tests; pass a name to check just one.",
+			usage: []string{
+				"ctx-wire verify [filter]",
+				"ctx-wire verify --project [filter]",
+				"ctx-wire verify --file <path> [filter]",
+			},
+			summary: "Run filters' inline conformance tests; built-ins by default, or a local file.",
 			examples: []string{
 				"ctx-wire verify",
 				"ctx-wire verify git-status",
+				"ctx-wire verify --project",
+			},
+			notes: []string{
+				"--project verifies .ctx-wire/filters.toml; --file verifies a path. Both are trust-free (they run the file's own inline tests, they do not load or apply it).",
+				"A draft test (draft = true) fails verification until you trim expected and remove the marker; --allow-draft permits it for a local file. Built-ins never may carry one.",
 			},
 		})
 		return 0
 	}
-	var only string
-	if len(args) > 0 {
-		only = args[0]
+
+	var (
+		project    bool
+		allowDraft bool
+		file       string
+		only       string
+	)
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--project":
+			project = true
+		case a == "--allow-draft":
+			allowDraft = true
+		case a == "--file":
+			if i+1 >= len(args) {
+				usageLine(os.Stderr, "ctx-wire verify --file <path> [filter]")
+				return 2
+			}
+			i++
+			file = args[i]
+		case strings.HasPrefix(a, "--file="):
+			file = strings.TrimPrefix(a, "--file=")
+		case strings.HasPrefix(a, "--"):
+			fmt.Fprintf(os.Stderr, "ctx-wire verify: unknown flag %q\n", a)
+			return 2
+		default:
+			only = a
+		}
 	}
 
-	res, err := filter.VerifyBuiltin(only)
+	local := project || file != ""
+
+	var (
+		res *filter.VerifyResults
+		err error
+	)
+	switch {
+	case file != "":
+		res, err = filter.VerifyFile(file, only)
+	case project:
+		wd, werr := os.Getwd()
+		if werr != nil {
+			fmt.Fprintf(os.Stderr, "ctx-wire verify: %v\n", werr)
+			return 1
+		}
+		res, err = filter.VerifyFile(filter.ProjectFiltersPath(wd), only)
+	default:
+		res, err = filter.VerifyBuiltin(only)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ctx-wire verify: %v\n", err)
 		return 1
 	}
 
-	var passed, failed int
+	var passed, failed, drafts int
 	theme := themeForStdout()
 	for _, o := range res.Outcomes {
+		if o.Draft {
+			drafts++
+		}
 		if o.Passed {
 			passed++
+			if o.Draft {
+				fmt.Printf("%s  %s / %s (asserts nothing yet; trim expected, remove draft = true)\n",
+					theme.Warn.Render("DRAFT"), theme.Command.Render(o.FilterName), o.TestName)
+			}
 			continue
 		}
 		failed++
@@ -117,7 +178,23 @@ func cmdVerify(args []string) int {
 		fmt.Printf("%s (%d): %v\n", theme.Warn.Render("filters without inline tests"), len(res.FiltersWithoutTest), res.FiltersWithoutTest)
 	}
 
-	if failed > 0 || len(res.FiltersWithoutTest) > 0 {
+	if failed > 0 {
+		return 1
+	}
+	// A draft marker fails verification: a built-in must never ship one, and a
+	// local file is only allowed to keep it with the explicit --allow-draft.
+	if drafts > 0 {
+		if local && allowDraft {
+			fmt.Printf("%s %d draft test(s) allowed via --allow-draft\n", theme.Warn.Render("note:"), drafts)
+		} else {
+			if !local {
+				fmt.Printf("%s a built-in filter must not ship a draft test\n", theme.Fail.Render("draft:"))
+			}
+			return 1
+		}
+	}
+	// Built-in runs also flag filters that have no inline tests at all.
+	if !local && len(res.FiltersWithoutTest) > 0 {
 		return 1
 	}
 	return 0

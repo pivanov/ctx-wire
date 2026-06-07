@@ -31,6 +31,9 @@ func cmdTune(args []string) int {
 	if len(args) > 0 && args[0] == "issue" {
 		return cmdTuneIssue(args[1:])
 	}
+	if len(args) > 0 && args[0] == "draft" {
+		return cmdTuneDraft(args[1:])
+	}
 	gopts, topts, err := parseTuneOptions(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ctx-wire tune: %v\n", err)

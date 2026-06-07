@@ -2,6 +2,7 @@ package filter
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -13,6 +14,7 @@ type TestOutcome struct {
 	FilterName string
 	TestName   string
 	Passed     bool
+	Draft      bool // the test carries draft = true (asserts nothing yet)
 	Actual     string
 	Expected   string
 }
@@ -31,6 +33,26 @@ func VerifyBuiltin(filterName string) (*VerifyResults, error) {
 		return nil, err
 	}
 	return runTests(content, filterName)
+}
+
+// VerifyFile runs the inline tests in a project or standalone filter file (e.g.
+// .ctx-wire/filters.toml). It validates schema_version the way the registry does
+// on load, so a file that would not load does not silently "verify clean". It is
+// trust-free by design: it runs the file's own inline tests and never loads or
+// applies the filters to real commands, so it must not require trust.
+func VerifyFile(path, filterName string) (*VerifyResults, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var probe tomlFile
+	if _, err := toml.Decode(string(data), &probe); err != nil {
+		return nil, fmt.Errorf("TOML parse error in %s: %w", path, err)
+	}
+	if probe.SchemaVersion != 1 {
+		return nil, fmt.Errorf("unsupported schema_version %d in %s (expected 1)", probe.SchemaVersion, path)
+	}
+	return runTests(string(data), filterName)
 }
 
 func runTests(content, filterName string) (*VerifyResults, error) {
@@ -86,6 +108,7 @@ func runTests(content, filterName string) (*VerifyResults, error) {
 				FilterName: name,
 				TestName:   t.Name,
 				Passed:     actual == expected,
+				Draft:      t.Draft,
 				Actual:     actual,
 				Expected:   expected,
 			})

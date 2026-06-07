@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"ctx-wire/internal/filter"
 	"ctx-wire/internal/tee"
 )
 
@@ -26,8 +27,8 @@ func TestIsCompleteJSON(t *testing.T) {
 		`hello world`:       false,
 	}
 	for in, want := range cases {
-		if got := isCompleteJSON(in); got != want {
-			t.Errorf("isCompleteJSON(%q) = %v, want %v", in, got, want)
+		if got := filter.IsCompleteJSON(in); got != want {
+			t.Errorf("IsCompleteJSON(%q) = %v, want %v", in, got, want)
 		}
 	}
 }

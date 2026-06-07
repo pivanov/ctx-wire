@@ -11,7 +11,6 @@ package runner
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -278,25 +277,13 @@ const (
 // replacement notice for an oversize one, never a mid-structure cut. ok is false
 // when the guard does not apply and normal filtering should stand.
 func jsonGuard(out string, truncated, filterStderr, reducesJSON bool) (text, mode string, ok bool) {
-	if !truncated || filterStderr || reducesJSON || !isCompleteJSON(out) {
+	if !truncated || filterStderr || reducesJSON || !filter.IsCompleteJSON(out) {
 		return "", "", false
 	}
 	if len(out) <= maxJSONPassthrough {
 		return withTrailingNewline(scrub.Scrub(out)), jsonModeWhole, true
 	}
 	return withTrailingNewline(jsonOversizeMarker(len(out))), jsonModeCapped, true
-}
-
-// isCompleteJSON reports whether s is a single complete JSON object or array.
-// The cheap first-byte gate keeps json.Valid off ordinary output, so noise that
-// merely starts with '{'/'[' (a bracketed log line, a brace expansion) is not
-// mistaken for JSON.
-func isCompleteJSON(s string) bool {
-	t := strings.TrimLeft(s, " \t\r\n")
-	if t == "" || (t[0] != '{' && t[0] != '[') {
-		return false
-	}
-	return json.Valid([]byte(s))
 }
 
 func jsonOversizeMarker(n int) string {

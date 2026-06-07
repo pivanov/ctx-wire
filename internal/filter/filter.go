@@ -86,6 +86,11 @@ type tomlTest struct {
 	Name     string `toml:"name"`
 	Input    string `toml:"input"`
 	Expected string `toml:"expected"`
+	// Draft marks a test scaffolded by `tune draft` whose expected output still
+	// mirrors the filter (so it asserts nothing yet). verify flags it until the
+	// author trims expected and removes the marker; a built-in must never ship
+	// with it set.
+	Draft bool `toml:"draft"`
 }
 
 // ---------------------------------------------------------------------------
