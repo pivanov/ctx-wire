@@ -187,11 +187,13 @@ storage, unloadable filter registry).
 
 ## Filters and trust
 
-Filters are declarative TOML, loaded in priority order: trusted project
-`.ctx-wire/filters.toml`, then user `~/.config/ctx-wire/filters.toml`, then the
-built-in set. A project filter file is ignored until you approve it with
-`ctx-wire trust`. Bad filter files are skipped (fail-open) and never break a
-command.
+Filters are declarative TOML, loaded from three sources in precedence order:
+trusted project `.ctx-wire/filters.toml`, then user
+`~/.config/ctx-wire/filters.toml`, then the built-in set. When several filters
+match one command, the most specific (longest matched span) wins; precedence only
+breaks ties (see [FILTERS.md](FILTERS.md#selection)). A project filter file is
+ignored until you approve it with `ctx-wire trust`. Bad filter files are skipped
+(fail-open) and never break a command.
 
 The built-in set covers build/test/install tools plus common agent inspection
 commands. High-volume filters include `npm`, `pnpm`, `yarn`, `bun`, and `deno`

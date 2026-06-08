@@ -13,7 +13,8 @@ import (
 	"ctx-wire/internal/paths"
 )
 
-// Registry holds compiled filters in priority order (first match wins).
+// Registry holds compiled filters. Find selects the most specific match (longest
+// matched span, then explicit priority, then source order); see Find.
 type Registry struct {
 	Filters []*CompiledFilter
 }

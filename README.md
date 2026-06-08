@@ -44,6 +44,8 @@ rollback) on macOS, Linux, and Windows.
   `tune`, `doctor`, the agent integrations behind `init`, and filters & trust.
 - **[CONFIGURATION.md](CONFIGURATION.md)** — `config.toml`, gain storage,
   telemetry, and environment variables.
+- **[FILTERS.md](FILTERS.md)** covers writing your own filters: the TOML schema,
+  the transform pipeline, inline tests, and the publish flow.
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — common problems and known
   limitations.
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** — build from source, the `just` tasks, and
