@@ -93,6 +93,29 @@ expected = "a"
 	}
 }
 
+func TestFiltersPullRejectsNoTestAndHTTP(t *testing.T) {
+	reg := t.TempDir()
+	// Valid filter, but ships zero inline tests: nothing to verify.
+	writeReg(t, reg, "notest", `schema_version = 1
+[filters.notest]
+match_command = "^notest\\b"
+strip_lines_matching = ["^\\s*$"]
+`)
+	t.Chdir(t.TempDir())
+	if code := cmdFiltersPull([]string{"notest", "--registry", reg}); code != 1 {
+		t.Errorf("a filter with no inline tests must be refused, got exit %d", code)
+	}
+	wd, _ := os.Getwd()
+	if _, err := os.Stat(filter.ProjectFiltersPath(wd)); err == nil {
+		t.Error("a refused no-test pull must not write a project filter file")
+	}
+
+	// An explicit http:// registry must be refused before any fetch.
+	if code := cmdFiltersPull([]string{"notest", "--registry", "http://example.invalid/reg"}); code != 1 {
+		t.Errorf("an http:// registry must be refused, got exit %d", code)
+	}
+}
+
 func TestFiltersPullRejectsNameMismatch(t *testing.T) {
 	reg := t.TempDir()
 	// Fetched as "mytool" but defines a different filter key: a shadow attempt

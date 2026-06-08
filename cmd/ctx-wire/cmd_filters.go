@@ -49,9 +49,9 @@ func cmdFilters(args []string) int {
 				"ctx-wire filters pull <name> [--registry <url|dir>]",
 				"ctx-wire filters publish <name>",
 			},
-			summary: "Share filters: pull a community filter (verified before install), or package a local one to publish.",
+			summary: "Share filters: pull a community filter (parsed and inline-tested, installed untrusted), or package a local one to publish.",
 			notes: []string{
-				"pull fetches a standalone filter, runs its inline tests locally, and installs it into .ctx-wire/filters.toml UNTRUSTED (run `ctx-wire trust` after reviewing). A filter is declarative TOML and Go's RE2 has no catastrophic backtracking, but a filter can still hide output, so review it (`ctx-wire inspect`) before trusting.",
+				"pull fetches a standalone filter, runs its inline tests locally, and installs it into .ctx-wire/filters.toml UNTRUSTED (run `ctx-wire trust` after reviewing). The inline tests are author-provided: passing them only shows the filter behaves as its author intends, it is a sanity check, not a safety guarantee. A filter is declarative TOML and Go's RE2 has no catastrophic backtracking, but a filter can still hide output, so review it (`ctx-wire inspect`) before trusting.",
 				"publish prints a local filter as a standalone file ready to submit to the registry, with a reminder to genericize project-specific identifiers.",
 			},
 			examples: []string{
@@ -82,7 +82,13 @@ func validFilterName(name string) bool {
 
 func fetchFilter(registry, name string) ([]byte, error) {
 	registry = strings.TrimRight(registry, "/")
-	if strings.HasPrefix(registry, "http://") || strings.HasPrefix(registry, "https://") {
+	if strings.HasPrefix(registry, "http://") {
+		// Plain http lets a network attacker substitute filter content in flight.
+		// A pulled filter is installed untrusted, but it is still safer to refuse:
+		// use https or a local directory.
+		return nil, fmt.Errorf("refusing insecure http registry %q: use https:// or a local directory", registry)
+	}
+	if strings.HasPrefix(registry, "https://") {
 		return fetchURL(registry + "/" + name + ".toml")
 	}
 	f, err := os.Open(filepath.Join(registry, name+".toml"))
@@ -176,6 +182,13 @@ func cmdFiltersPull(args []string) int {
 			fmt.Fprintf(os.Stderr, "ctx-wire filters pull: %q has a failing inline test (%s); refusing\n", name, o.TestName)
 			return 1
 		}
+	}
+	// A filter with no inline tests has nothing to verify; "tested before install"
+	// would be a hollow claim, so refuse it rather than install it unchecked.
+	if len(res.FiltersWithoutTest) > 0 {
+		fmt.Fprintf(os.Stderr, "ctx-wire filters pull: %q ships a filter with no inline tests (%s); refusing\n",
+			name, strings.Join(res.FiltersWithoutTest, ", "))
+		return 1
 	}
 	// The fetched file must define exactly the requested filter, so a filter
 	// pulled as "mytool" cannot define [filters.git-status] and shadow a built-in
