@@ -19,6 +19,24 @@ func TestIsDedupEligible(t *testing.T) {
 		{"rm", []string{"-rf", "x"}, false},
 		{"npm", []string{"install"}, false},
 		{"sh", []string{"-c", "echo hi"}, false},
+
+		// find/fd/sort are read-only only without their side-effecting flags.
+		{"find", []string{".", "-name", "*.go"}, true},
+		{"find", []string{".", "-delete"}, false},
+		{"find", []string{".", "-exec", "rm", "{}", ";"}, false},
+		{"find", []string{".", "-fprintf", "out.txt", "%p"}, false},
+		{"fd", []string{"-e", "go"}, true},
+		{"fd", []string{"foo", "-x", "rm"}, false},
+		{"fd", []string{"foo", "--exec-batch", "rm"}, false},
+		{"sort", []string{"file"}, true},
+		{"sort", []string{"-k2", "file"}, true},
+		{"sort", []string{"-o", "out", "file"}, false},
+		{"sort", []string{"-oout", "file"}, false},
+		{"sort", []string{"--output=out", "file"}, false},
+
+		// env can exec an arbitrary command, so it is never dedup-eligible.
+		{"env", nil, false},
+		{"env", []string{"FOO=bar", "rm", "-rf", "x"}, false},
 	}
 	for _, c := range cases {
 		if got := IsDedupEligible(c.name, c.args); got != c.want {
