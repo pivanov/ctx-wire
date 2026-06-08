@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,17 +26,51 @@ import (
 func cmdMCPWrap(args []string) int {
 	if isHelpArg(args) {
 		printHelp(os.Stdout, helpDoc{
-			usage:   []string{"ctx-wire mcp-wrap -- <server> [args]"},
+			usage: []string{
+				"ctx-wire mcp-wrap -- <server> [args]",
+				"ctx-wire mcp-wrap install <server> [--config PATH]",
+				"ctx-wire mcp-wrap uninstall <server> [--config PATH]",
+			},
 			summary: "Transparently relay a stdio MCP server and measure per-tool token cost (no compression).",
 			notes: []string{
-				"Point an agent's MCP config at this instead of the server. It forwards every JSON-RPC message unchanged and records the result size of each tools/call, so you can see where MCP tokens go before building compression.",
-				"A per-tool summary is written under the data dir and printed to stderr when the session ends.",
+				"It forwards every JSON-RPC message unchanged and records the result size of each tools/call, so you can see where MCP tokens go before building compression. A per-tool summary is written under the data dir and printed to stderr when the session ends.",
+				"`install <server>` rewrites that server's entry in your MCP config (default ~/.claude.json) to launch through mcp-wrap; `uninstall` reverts it. Both back up the config and need an agent restart to take effect.",
 			},
 			examples: []string{
 				"ctx-wire mcp-wrap -- npx @playwright/mcp@latest",
+				"ctx-wire mcp-wrap install chrome-devtools",
 			},
 		})
 		return 0
+	}
+
+	// install/uninstall rewrite the MCP config rather than relaying.
+	if len(args) > 0 && (args[0] == "install" || args[0] == "uninstall") {
+		name, configPath := "", ""
+		for i, rest := 1, args; i < len(rest); i++ {
+			switch a := rest[i]; {
+			case a == "--config":
+				if i+1 < len(rest) {
+					i++
+					configPath = rest[i]
+				}
+			case strings.HasPrefix(a, "--config="):
+				configPath = strings.TrimPrefix(a, "--config=")
+			case strings.HasPrefix(a, "--"):
+				fmt.Fprintf(os.Stderr, "ctx-wire mcp-wrap %s: unknown flag %q\n", args[0], a)
+				return 2
+			default:
+				name = a
+			}
+		}
+		if name == "" {
+			usageLine(os.Stderr, "ctx-wire mcp-wrap "+args[0]+" <server> [--config PATH]")
+			return 2
+		}
+		if args[0] == "install" {
+			return mcpWrapInstall(configPath, name)
+		}
+		return mcpWrapUninstall(configPath, name)
 	}
 
 	// Everything after `--` is the real server command.
