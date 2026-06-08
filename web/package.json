@@ -10,6 +10,8 @@
     "check": "biome check . && tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.2.10",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@remixicon/react": "^4.9.0",
     "@tabler/icons-react": "^3.44.0",
     "@tailwindcss/vite": "^4.3.0",

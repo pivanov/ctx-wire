@@ -10,7 +10,7 @@ const STEPS = [
   {
     n: 2,
     title: "Compress & scrub",
-    desc: "142 declarative filters shrink the output; secrets are scrubbed fail-closed; the full log stays on disk.",
+    desc: "142 declarative filters shrink the output; secrets are scrubbed fail-closed; the full log stays on disk, and inspect shows exactly what was cut.",
   },
   {
     n: 3,
@@ -43,6 +43,18 @@ const CAPS = [
   {
     name: "142 filters · 326 tests",
     desc: "Declarative TOML corpus, conformance-tested every release.",
+  },
+  {
+    name: "See what was cut",
+    desc: "inspect shows raw-vs-filtered for any recent command, so you can audit what was hidden (opt-in retention).",
+  },
+  {
+    name: "Author + share filters",
+    desc: "tune draft scaffolds a filter from real output; pull community filters or publish your own.",
+  },
+  {
+    name: "Wrap an MCP server",
+    desc: "mcp-wrap relays any MCP server and measures what each tool costs you in tokens.",
   },
 ];
 

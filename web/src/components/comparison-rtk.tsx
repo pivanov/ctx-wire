@@ -18,7 +18,7 @@ const ROWS: Row[] = [
   },
   {
     dim: "Scrubbing secrets",
-    rtk: "Keeps secrets out of its telemetry and masks env prefixes.",
+    rtk: "Keeps secrets out of its telemetry and masks sensitive env vars.",
     ctx: "Also scrubs secrets from the output the agent sees: global, and fail-closed (it withholds rather than leak).",
     note: "fail-closed",
   },

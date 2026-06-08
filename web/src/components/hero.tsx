@@ -30,9 +30,10 @@ const AGENTS = [
 ];
 
 const TRUST = [
-  "142 built-in filters",
-  "secrets scrubbed",
-  "full logs kept on disk",
+  "142 filters, 326 tests",
+  "fail-closed scrubbing",
+  "inspect what's filtered",
+  "runs fully local",
   "MIT licensed",
 ];
 
@@ -85,7 +86,7 @@ export function Hero({ stats }: { stats: ImpactStats }) {
 
   return (
     <section id="top" className="w-full max-w-stage pt-2">
-      <div className="grid grid-cols-1 items-center gap-herogap lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-center lg:grid-cols-2">
         <motion.div
           variants={v(staggerContainer)}
           initial={reduce ? undefined : "hidden"}
@@ -104,11 +105,11 @@ export function Hero({ stats }: { stats: ImpactStats }) {
             variants={v(fadeUp)}
             className="m-0 mb-5 font-display text-hero font-extrabold text-head"
           >
-            Cut the noise
+            Cut the noise.
             <br />
-            on the{" "}
+            Keep the{" "}
             <span className="bg-linear-to-r from-green to-teal bg-clip-text text-transparent">
-              wire
+              signal
             </span>
             .
           </motion.h1>

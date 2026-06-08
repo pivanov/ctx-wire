@@ -223,7 +223,7 @@ function Meter({
       className={compact ? "meter meter-compact" : "meter"}
       aria-hidden="true"
     >
-      <span className="text-green">{"░".repeat(filled)}</span>
+      <span className="text-green">{"▓".repeat(filled)}</span>
       <span className="text-dim">{"░".repeat(width - filled)}</span>
     </span>
   );

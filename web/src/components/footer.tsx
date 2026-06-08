@@ -1,4 +1,8 @@
-import { RiGithubFill } from "@remixicon/react";
+import {
+  RiGithubFill,
+  RiLinkedinBoxFill,
+  RiTwitterXFill,
+} from "@remixicon/react";
 import { IconCheck, IconCopy, IconStarFilled } from "@tabler/icons-react";
 import { useCopy } from "../hooks/use-copy";
 import { BrandMark } from "./brand-mark";
@@ -11,6 +15,16 @@ const BACKERS = [
   { label: "SashiDo.io", href: "https://www.sashido.io" },
 ];
 
+const SOCIALS = [
+  { label: "GitHub", href: "https://github.com/pivanov/", Icon: RiGithubFill },
+  { label: "X", href: "https://x.com/ivanovpavel", Icon: RiTwitterXFill },
+  {
+    label: "LinkedIn",
+    href: "https://www.linkedin.com/in/ivanovpavel/",
+    Icon: RiLinkedinBoxFill,
+  },
+];
+
 export function Footer() {
   const [copied, copy] = useCopy();
 
@@ -19,6 +33,47 @@ export function Footer() {
       <div className="mx-auto w-full max-w-stage px-gutter">
         <div className="grid gap-10 py-12 lg:grid-cols-2 lg:items-center">
           <div>
+            <div className="flex items-center gap-3.5">
+              <img
+                src="/pavel.jpg"
+                alt="Pavel Ivanov"
+                width={48}
+                height={48}
+                loading="lazy"
+                className="size-12 rounded-full object-cover ring-1 ring-inset ring-line-soft"
+              />
+              <div className="leading-tight">
+                <div className="font-mono text-base font-bold text-fg">
+                  {"Hey, I'm Pavel"}
+                </div>
+                <div className="mt-0.5 font-mono text-2xs text-label">
+                  ❤️ the web!
+                </div>
+              </div>
+            </div>
+            <p className="mt-4 max-w-copy font-mono text-cap leading-relaxed text-label">
+              I built ctx-wire because I was tired of watching my AI agents burn
+              tokens on noisy command output. It started as a weekend itch and
+              kept going. Open source, MIT, and I am still tinkering, come say
+              hi.
+            </p>
+            <div className="mt-5 flex items-center gap-2.5">
+              {SOCIALS.map(({ Icon, href, label }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={label}
+                  className="inline-flex size-8 items-center justify-center rounded-full text-label ring-1 ring-inset ring-line-soft transition-colors hover:text-green hover:ring-green/40"
+                >
+                  <Icon size={16} />
+                </a>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 lg:items-end">
             <div className="flex items-center gap-2.5">
               <BrandMark size={30} />
               <span className="font-mono text-base font-bold tracking-tight text-fg">
@@ -28,15 +83,12 @@ export function Footer() {
                 unleashed
               </span>
             </div>
-            <p className="mt-4 max-w-copy font-mono text-cap leading-relaxed text-label">
+            <p className="max-w-copy font-mono text-cap leading-relaxed text-label">
               A small Go binary that sits between AI coding agents and the noisy
               command output they pay tokens to read. Secrets-safe, with the
               full log kept on disk.
             </p>
-          </div>
-
-          <div className="flex flex-col gap-3 lg:items-end">
-            <span className="font-mono text-2xs uppercase tracking-caps text-dim">
+            <span className="mt-1 font-mono text-2xs uppercase tracking-caps text-dim">
               Get started
             </span>
             <button
@@ -94,16 +146,6 @@ export function Footer() {
               </span>
             ))}
           </span>
-
-          <a
-            href={REPO}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-label transition-colors hover:text-green"
-          >
-            <RiGithubFill size={15} />
-            pivanov/ctx-wire
-          </a>
         </div>
       </div>
     </footer>

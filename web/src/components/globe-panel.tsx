@@ -58,6 +58,26 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
   const totals = stats.totals || {};
   const reduce = useReducedMotion();
   const [focus, setFocus] = useState<CountryRow | null>(null);
+  const [globeActive, setGlobeActive] = useState(false);
+  const globeWrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = globeWrapperRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setGlobeActive(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px", threshold: 0 }
+    );
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   return (
     <section
@@ -123,7 +143,10 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
         />
       </motion.div>
 
-      <div className="relative mx-auto grid aspect-square w-full max-w-scope place-items-center">
+      <div
+        ref={globeWrapperRef}
+        className="relative mx-auto grid aspect-square w-full max-w-scope place-items-center"
+      >
         <div className="scope-frame">
           <span className="scope-tick tl" />
           <span className="scope-tick tr" />
@@ -142,11 +165,15 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
           className="scope-sweep motion-safe:animate-sweep"
           aria-hidden="true"
         />
-        <GlobePulse
-          rows={rows}
-          focus={focus}
-          onUserRotate={() => setFocus(null)}
-        />
+        {globeActive ? (
+          <GlobePulse
+            rows={rows}
+            focus={focus}
+            onUserRotate={() => setFocus(null)}
+          />
+        ) : (
+          <div className="relative z-10 aspect-square w-5/6" aria-hidden="true" />
+        )}
         <div className="readout-glass absolute bottom-2 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-1 font-mono text-2xs tracking-wide text-label">
           <span className="readout-dot size-1.5 rounded-full bg-green motion-safe:animate-pulse-dot" />
           <span className="text-green">{rows.length}</span>{" "}
@@ -309,9 +336,10 @@ function GlobePulse({
     if (!canvas) return;
 
     let frame = 0;
-    let revealFrame = 0;
     let phi = -0.52;
     let activeSize = 0;
+    let painted = 0;
+    let revealed = false;
 
     const create = (size: number) => {
       if (size < 120) return;
@@ -342,13 +370,12 @@ function GlobePulse({
         arcs: [],
       });
 
-      // Reveal a frame past cobe's first paint (it has no onRender hook), so the
-      // canvas never flashes its blank backing buffer on load.
-      revealFrame = requestAnimationFrame(() => {
-        revealFrame = requestAnimationFrame(() => {
-          canvas.style.opacity = "1";
-        });
-      });
+      // Reveal only after the globe has actually painted a few frames (cobe has
+      // no onRender hook here). The animate loop flips the opacity once `painted`
+      // crosses the threshold, so the fade-in never shows a blank/mid-render
+      // globe. Reset both so a resize-driven recreate re-reveals the same way.
+      revealed = false;
+      painted = 0;
     };
 
     const prefersReducedMotion =
@@ -383,6 +410,12 @@ function GlobePulse({
           phi: phi + phiOffsetRef.current + dragOffset.current.phi,
           theta: 0.22 + thetaOffsetRef.current + dragOffset.current.theta,
         });
+        // Fade the canvas in once the globe has drawn a few real frames, not on a
+        // guessed RAF count, so no blank/bright flash shows through on load.
+        if (!revealed && ++painted >= 4) {
+          revealed = true;
+          canvas.style.opacity = "1";
+        }
       }
       frame = requestAnimationFrame(animate);
     };
@@ -412,7 +445,6 @@ function GlobePulse({
       observer.disconnect();
       visibility.disconnect();
       cancelAnimationFrame(frame);
-      cancelAnimationFrame(revealFrame);
       globeRef.current?.destroy();
       globeRef.current = null;
     };
@@ -464,6 +496,9 @@ function buildRows(stats: ImpactStats): CountryRow[] {
       const meta = countryMeta[code];
       if (!meta) return null;
       const saved = Number(country.bytes_saved || 0);
+      // Skip countries with nothing saved: this panel is "by context saved", so a
+      // country reporting 0 B is noise even if it ran a few commands.
+      if (saved <= 0) return null;
       return {
         rank: index + 1,
         code,
