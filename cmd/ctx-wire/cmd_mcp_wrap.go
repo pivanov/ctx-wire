@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -127,10 +128,28 @@ func cmdMCPWrap(args []string) int {
 		_ = os.Stdin.Close()
 	}()
 	wg.Wait()
-	_ = cmd.Wait()
+	werr := cmd.Wait()
 
 	m.report()
-	return 0
+	// Propagate the wrapped server's exit status so the host sees a failed server
+	// as a failure, not a successful wrapper.
+	return mcpChildExitCode(werr)
+}
+
+// mcpChildExitCode maps a cmd.Wait() error to an exit code: 0 on success, the
+// child's own code when it exited non-zero, and 1 for any other failure (signal,
+// could-not-run).
+func mcpChildExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		if code := ee.ExitCode(); code >= 0 {
+			return code
+		}
+	}
+	return 1
 }
 
 // relayMCP copies newline-delimited JSON-RPC messages from src to dst byte for

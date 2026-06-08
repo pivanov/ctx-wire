@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,22 @@ func TestMCPMeasurePairsAndCounts(t *testing.T) {
 	m.onAgentMsg([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`))
 	if _, ok := m.pending["2"]; ok {
 		t.Error("non-tools/call request must not be tracked")
+	}
+}
+
+func TestMCPChildExitCode(t *testing.T) {
+	if got := mcpChildExitCode(nil); got != 0 {
+		t.Errorf("nil error -> %d, want 0", got)
+	}
+	// A real child that exits non-zero must have its code propagated.
+	err := exec.Command("sh", "-c", "exit 3").Run()
+	if got := mcpChildExitCode(err); got != 3 {
+		t.Errorf("exit 3 -> %d, want 3", got)
+	}
+	// A non-exit error (could not start) maps to 1.
+	err = exec.Command("/ctx-wire/definitely/not/a/real/binary").Run()
+	if got := mcpChildExitCode(err); got != 1 {
+		t.Errorf("could-not-run -> %d, want 1", got)
 	}
 }
 

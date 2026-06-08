@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,71 @@ func TestMCPWrapInstallRoundTrip(t *testing.T) {
 	}
 	if _, err := os.Stat(cfg + ".ctxw-bak"); err != nil {
 		t.Error("expected a backup file")
+	}
+}
+
+func TestMCPWrapUninstallIgnoresForeignServer(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "claude.json")
+	// A server the user configured themselves that happens to pass `mcp-wrap --`
+	// to some other program. Its command is not ctx-wire, so uninstall must leave
+	// it untouched rather than corrupting it.
+	const orig = `{
+  "mcpServers": {
+    "mine": {"command":"node","args":["mcp-wrap","--","srv.js"]}
+  }
+}`
+	if err := os.WriteFile(cfg, []byte(orig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := mcpWrapUninstall(cfg, "mine"); code != 0 {
+		t.Fatalf("uninstall exit %d", code)
+	}
+	data, _ := os.ReadFile(cfg)
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	sc := m["mcpServers"].(map[string]any)["mine"].(map[string]any)
+	if sc["command"] != "node" {
+		t.Errorf("foreign server command was rewritten to %v, want node", sc["command"])
+	}
+	if args := sc["args"].([]any); len(args) != 3 || args[0] != "mcp-wrap" || args[2] != "srv.js" {
+		t.Errorf("foreign server args were modified: %v", args)
+	}
+}
+
+func TestMCPWrapInstallPreservesKeyOrder(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "claude.json")
+	// Keys are deliberately out of alphabetical order. A whole-file re-serialize
+	// would sort them (alpha, mcpServers, zeta); the surgical splice must not.
+	const orig = `{
+  "zeta": 1,
+  "mcpServers": {
+    "cdt": {"type":"stdio","command":"npx","args":["chrome-devtools-mcp@latest"]}
+  },
+  "alpha": 2
+}`
+	if err := os.WriteFile(cfg, []byte(orig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := mcpWrapInstall(cfg, "cdt"); code != 0 {
+		t.Fatalf("install exit %d", code)
+	}
+	s, _ := os.ReadFile(cfg)
+	zi := strings.Index(string(s), `"zeta"`)
+	mi := strings.Index(string(s), `"mcpServers"`)
+	ai := strings.Index(string(s), `"alpha"`)
+	if !(zi >= 0 && zi < mi && mi < ai) {
+		t.Errorf("key order not preserved: zeta=%d mcpServers=%d alpha=%d\n%s", zi, mi, ai, s)
+	}
+	if !strings.Contains(string(s), `"zeta": 1`) || !strings.Contains(string(s), `"alpha": 2`) {
+		t.Errorf("unrelated keys were altered:\n%s", s)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(s, &m); err != nil {
+		t.Fatalf("config no longer parses: %v", err)
+	}
+	if args := m["mcpServers"].(map[string]any)["cdt"].(map[string]any)["args"].([]any); len(args) != 4 || args[0] != "mcp-wrap" {
+		t.Errorf("entry was not wrapped: %v", args)
 	}
 }
