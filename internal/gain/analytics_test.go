@@ -76,6 +76,29 @@ func TestFormatHistoryLimitNewestFirst(t *testing.T) {
 	}
 }
 
+func TestFormatHistoryShowsAgentAndCommand(t *testing.T) {
+	entries := []Entry{
+		{TS: "2026-06-04T03:00:00Z", Command: "git status --porcelain", Agent: "cursor", SavedBytes: 42},
+	}
+	out := FormatHistoryThemed(entries, 10, ui.Plain())
+	if !strings.Contains(out, "cursor") {
+		t.Errorf("history should show the invoking agent:\n%s", out)
+	}
+	if !strings.Contains(out, "git status --porcelain") {
+		t.Errorf("history should show the full command:\n%s", out)
+	}
+}
+
+func TestClipHistoryCommand(t *testing.T) {
+	if got := clipHistoryCommand("a\nb\tc"); got != "a b c" {
+		t.Errorf("newlines/tabs should collapse to spaces, got %q", got)
+	}
+	got := clipHistoryCommand(strings.Repeat("x", 200))
+	if r := []rune(got); len(r) != 100 || !strings.HasSuffix(got, "…") {
+		t.Errorf("a long command should clip to 100 runes with an ellipsis, got len=%d", len(r))
+	}
+}
+
 func TestFormatJSONShape(t *testing.T) {
 	s := &Summary{
 		Commands: 3, RawBytes: 1700, EmittedBytes: 450, SavedBytes: 1250,

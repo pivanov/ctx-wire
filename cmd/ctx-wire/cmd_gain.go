@@ -148,6 +148,14 @@ func parseGainOptions(args []string) (view string, opts gain.Options, limit int,
 				return fail(fmt.Errorf("invalid --top value (want a positive integer)"))
 			}
 			limit = n
+		case arg == "--agent":
+			if i+1 >= len(args) {
+				return fail(fmt.Errorf("--agent requires a name"))
+			}
+			i++
+			opts.Agent = strings.ToLower(args[i])
+		case strings.HasPrefix(arg, "--agent="):
+			opts.Agent = strings.ToLower(strings.TrimPrefix(arg, "--agent="))
 		case arg == "--budget", strings.HasPrefix(arg, "--budget="):
 			val := strings.TrimPrefix(arg, "--budget=")
 			if arg == "--budget" {
@@ -267,8 +275,8 @@ func parseSince(value string) (time.Time, error) {
 func usageGain(out *os.File) {
 	printHelp(out, helpDoc{
 		usage: []string{
-			"ctx-wire gain [--since <duration|RFC3339>]",
-			"ctx-wire gain --history [--top N]",
+			"ctx-wire gain [--since <duration|RFC3339>] [--agent <name>]",
+			"ctx-wire gain --history [--top N] [--agent <name>]",
 			"ctx-wire gain --daily | --weekly | --monthly | --graph",
 			"ctx-wire gain --json | --csv",
 			"ctx-wire gain --quota [--budget <tokens>] [--window <tokens>]",
@@ -277,7 +285,8 @@ func usageGain(out *os.File) {
 		summary: "Show recorded token savings: totals, per-program impact, trends, and per-agent quota.",
 		flags: [][2]string{
 			{"--since <dur|ts>", "only savings since a duration (1h) or RFC3339 time"},
-			{"--history", "recent commands, newest last (cap with --top N)"},
+			{"--agent <name>", "only one invoking agent's commands (claude, cursor, codex, gemini, ...)"},
+			{"--history", "recent commands, newest last (with agent and command; cap with --top N)"},
 			{"--daily|--weekly|--monthly", "savings grouped by period"},
 			{"--graph", "ASCII bar graph of daily saved bytes"},
 			{"--json|--csv", "export the summary / daily breakdown"},
@@ -289,6 +298,7 @@ func usageGain(out *os.File) {
 		examples: []string{
 			"ctx-wire gain",
 			"ctx-wire gain --daily",
+			"ctx-wire gain --history --agent cursor",
 			"ctx-wire gain --quota --budget 2m",
 		},
 	})

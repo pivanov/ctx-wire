@@ -46,6 +46,9 @@ func Entries(opts Options) ([]Entry, error) {
 					return
 				}
 			}
+			if opts.Agent != "" && e.Agent != opts.Agent {
+				return
+			}
 			if programName(e.Command) == "ctx-wire" {
 				return
 			}
@@ -253,6 +256,20 @@ func FormatGraphThemed(daily []DailyStat, theme ui.Theme) string {
 
 // FormatHistoryThemed renders the most recent entries (newest first), capped at
 // limit (<=0 means 20).
+// clipHistoryCommand collapses a command to a single readable line for the
+// history table: newlines become spaces and the result is clipped so one long
+// command cannot blow up the row (use `gain --json` or the raw log for the full
+// text).
+func clipHistoryCommand(s string) string {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\t", " ")
+	const max = 100
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
+}
+
 func FormatHistoryThemed(entries []Entry, limit int, theme ui.Theme) string {
 	if limit <= 0 {
 		limit = 20
@@ -273,15 +290,15 @@ func FormatHistoryThemed(entries []Entry, limit int, theme ui.Theme) string {
 		if ts, err := time.Parse(time.RFC3339, e.TS); err == nil {
 			when = ts.Local().Format("Jan 02 15:04")
 		}
-		mode := e.Mode
-		if mode == "" {
-			mode = "-"
+		agent := e.Agent
+		if agent == "" {
+			agent = "-"
 		}
-		fmt.Fprintf(&b, "%-13s %-10s %9s  %s\n",
+		fmt.Fprintf(&b, "%-13s %-9s %9s  %s\n",
 			theme.Dim.Render(when),
-			theme.Command.Render(programName(e.Command)),
+			theme.Dim.Render(agent),
 			theme.Number.Render(ui.HumanBytes(int64(e.SavedBytes))),
-			theme.Dim.Render(mode))
+			theme.Command.Render(clipHistoryCommand(e.Command)))
 	}
 	return b.String()
 }

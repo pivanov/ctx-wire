@@ -252,6 +252,7 @@ type Summary struct {
 type Options struct {
 	Since               time.Time
 	MinOpportunityBytes int64
+	Agent               string // when set, keep only this invoking agent's entries
 }
 
 // SavingsPct returns the percentage of raw bytes saved (0 when no raw bytes).
@@ -341,6 +342,9 @@ func summarizePath(path string, opts Options, sum *Summary, byProg map[string]*C
 			if err != nil || ts.Before(opts.Since) {
 				return
 			}
+		}
+		if opts.Agent != "" && e.Agent != opts.Agent {
+			return
 		}
 		prog := programName(e.Command)
 		if prog == "ctx-wire" {

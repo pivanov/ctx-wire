@@ -81,3 +81,19 @@ func TestParseGainOptionsTopRequiresHistory(t *testing.T) {
 		t.Error("expected error for --daily --top 1")
 	}
 }
+
+func TestParseGainOptionsAgent(t *testing.T) {
+	// --agent <name> sets the filter (lowercased) and composes with --history.
+	view, opts, _, _, err := parseGainOptions([]string{"--history", "--agent", "Cursor"})
+	if err != nil || view != "history" || opts.Agent != "cursor" {
+		t.Fatalf("--history --agent Cursor => view=%q agent=%q err=%v", view, opts.Agent, err)
+	}
+	// --agent=NAME works without a view (filters the default summary too).
+	if _, o, _, _, err := parseGainOptions([]string{"--agent=gemini"}); err != nil || o.Agent != "gemini" {
+		t.Fatalf("--agent=gemini => agent=%q err=%v", o.Agent, err)
+	}
+	// missing value is an error.
+	if _, _, _, _, err := parseGainOptions([]string{"--agent"}); err == nil {
+		t.Error("expected error for --agent with no name")
+	}
+}
