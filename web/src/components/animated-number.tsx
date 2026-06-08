@@ -2,15 +2,14 @@ import {
   animate,
   motion,
   useMotionValue,
-  useMotionValueEvent,
   useReducedMotion,
+  useTransform,
 } from "motion/react";
 import { useEffect, useState } from "react";
 
-// AnimatedNumber counts up to `value` the first time it scrolls into view,
-// formatting every frame so fine digits (cents, thousandths) visibly move. It
-// re-animates when `value` changes later (e.g. refreshed stats), and respects
-// reduced-motion by snapping straight to the final value with no animation.
+// Counts up to `value` when it first scrolls into view. The formatted text is a
+// derived motion value rendered as a child, so motion updates the DOM directly
+// each frame, no per-frame React re-render. Reduced-motion snaps to the value.
 export function AnimatedNumber({
   className,
   format,
@@ -22,10 +21,8 @@ export function AnimatedNumber({
 }) {
   const reduce = useReducedMotion();
   const mv = useMotionValue(reduce ? value : 0);
-  const [display, setDisplay] = useState(() => format(reduce ? value : 0));
+  const text = useTransform(mv, format);
   const [inView, setInView] = useState(false);
-
-  useMotionValueEvent(mv, "change", (v) => setDisplay(format(v)));
 
   useEffect(() => {
     if (!inView) return;
@@ -46,7 +43,7 @@ export function AnimatedNumber({
       onViewportEnter={() => setInView(true)}
       viewport={{ once: true, amount: 0.6 }}
     >
-      {display}
+      {text}
     </motion.span>
   );
 }
