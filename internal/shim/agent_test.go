@@ -17,41 +17,41 @@ func TestShimScriptDetectsAndExportsAgent(t *testing.T) {
 		t.Skip("Unix shim script")
 	}
 	script := shimScript("git", "/usr/local/bin/ctx-wire")
+
+	// Steering-only / opt-in MCP agents still wire and attribute: the shim is
+	// their only coverage.
 	for _, want := range []string{
-		"*claude*) should_wire=1; detected_agent=claude;",
-		"*codex*) should_wire=1; detected_agent=codex;",
-		"*cursor*) should_wire=1; detected_agent=cursor;",
-		"*gemini*) should_wire=1; detected_agent=gemini;",
-		"*copilot*) should_wire=1; detected_agent=copilot;",
 		"*windsurf*) should_wire=1; detected_agent=windsurf;",
 		"*cline*) should_wire=1; detected_agent=cline;",
 		"*kilocode*) should_wire=1; detected_agent=kilocode;",
 		"*antigravity*) should_wire=1; detected_agent=antigravity;",
-		"*opencode*) should_wire=1; detected_agent=opencode;",
-		`*pi-coding-agent*|*"pi coding agent"*|*/.pi/agent*) should_wire=1; detected_agent=pi;`,
-		"*hermes*) should_wire=1; detected_agent=hermes;",
 		`*vscode*|*"Visual Studio Code"*|*"visual studio code"*) should_wire=1; detected_agent=vscode;`,
 		`*visualstudio*|*"Visual Studio"*|*"visual studio"*) should_wire=1; detected_agent=visualstudio;`,
 		`if [ -z "${CTX_WIRE_AGENT:-}" ] && [ -n "${detected_agent:-}" ]; then`,
 		"export CTX_WIRE_AGENT",
+		// Hook-capable agents pass through, both as a detected ancestor and as an
+		// inherited CTX_WIRE_AGENT.
+		`*claude*|*codex*|*cursor*|*gemini*|*copilot*|*opencode*|*pi-coding-agent*|*"pi coding agent"*|*/.pi/agent*|*hermes*)`,
+		"claude|codex|cursor|gemini|copilot|opencode|pi|hermes)",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("shim script missing %q:\n%s", want, script)
 		}
 	}
+
+	// Hook/plugin-capable agents must NOT be wired (no attribution line): they are
+	// covered by their own rewrite, so wiring would re-introduce $() corruption.
+	for _, a := range []string{"claude", "codex", "cursor", "gemini", "copilot", "opencode", "pi", "hermes"} {
+		if strings.Contains(script, "detected_agent="+a) {
+			t.Fatalf("hook-capable agent %q must pass through, not wire (found detected_agent=%s):\n%s", a, a, script)
+		}
+	}
+
 	assertInOrder(t, script, []string{
-		"*claude*) should_wire=1; detected_agent=claude;",
-		"*codex*) should_wire=1; detected_agent=codex;",
-		"*cursor*) should_wire=1; detected_agent=cursor;",
-		"*gemini*) should_wire=1; detected_agent=gemini;",
-		"*copilot*) should_wire=1; detected_agent=copilot;",
 		"*windsurf*) should_wire=1; detected_agent=windsurf;",
 		"*cline*) should_wire=1; detected_agent=cline;",
 		"*kilocode*) should_wire=1; detected_agent=kilocode;",
 		"*antigravity*) should_wire=1; detected_agent=antigravity;",
-		"*opencode*) should_wire=1; detected_agent=opencode;",
-		`*pi-coding-agent*|*"pi coding agent"*|*/.pi/agent*) should_wire=1; detected_agent=pi;`,
-		"*hermes*) should_wire=1; detected_agent=hermes;",
 		`*vscode*|*"Visual Studio Code"*|*"visual studio code"*) should_wire=1; detected_agent=vscode;`,
 		`*visualstudio*|*"Visual Studio"*|*"visual studio"*) should_wire=1; detected_agent=visualstudio;`,
 	})

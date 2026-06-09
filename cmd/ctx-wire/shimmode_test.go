@@ -7,8 +7,9 @@ import (
 )
 
 func TestShimDecide(t *testing.T) {
-	walkAgent := func() (bool, string) { return true, "claude" }
-	walkBrowser := func() (bool, string) { return true, "" } // wire-only, e.g. agent-browser
+	walkClaude := func() (bool, string) { return true, "claude" } // hook-capable
+	walkCline := func() (bool, string) { return true, "cline" }   // steering-only
+	walkBrowser := func() (bool, string) { return true, "" }      // wire-only, e.g. agent-browser
 	walkNone := func() (bool, string) { return false, "" }
 
 	cases := []struct {
@@ -18,14 +19,21 @@ func TestShimDecide(t *testing.T) {
 		action shimAction
 		agent  string
 	}{
-		{"disabled", shimEnv{disable: true}, walkAgent, shimPassthrough, ""},
-		{"shims0", shimEnv{shims0: true}, walkAgent, shimPassthrough, ""},
-		{"depth cap wins over force", shimEnv{depth: shim.DepthCap, shims1: true}, walkAgent, shimPassthrough, ""},
-		{"depth cap wins over agent env", shimEnv{depth: shim.DepthCap, agentEnv: "claude"}, walkAgent, shimPassthrough, ""},
-		{"agent env wires", shimEnv{agentEnv: "codex"}, walkNone, shimWire, "codex"},
+		{"disabled", shimEnv{disable: true}, walkClaude, shimPassthrough, ""},
+		{"shims0", shimEnv{shims0: true}, walkClaude, shimPassthrough, ""},
+		{"depth cap wins over force", shimEnv{depth: shim.DepthCap, shims1: true}, walkClaude, shimPassthrough, ""},
+		{"depth cap wins over agent env", shimEnv{depth: shim.DepthCap, agentEnv: "claude"}, walkClaude, shimPassthrough, ""},
+		// A hook/plugin-capable agent (inherited env or detected) passes through:
+		// its own rewrite covers model-visible commands, so the shim must not wrap.
+		{"hook-capable agent env passes through", shimEnv{agentEnv: "codex"}, walkNone, shimPassthrough, ""},
+		{"walk hook-capable passes through", shimEnv{}, walkClaude, shimPassthrough, ""},
+		// Steering-only agents have no auto-rewrite, so the shim is their coverage.
+		{"steering agent env wires", shimEnv{agentEnv: "cline"}, walkNone, shimWire, "cline"},
+		{"walk steering wires", shimEnv{}, walkCline, shimWire, "cline"},
+		// Force-on still wires even under a hook-capable agent (debug / broad opt-in).
+		{"force wins over hook-capable agent env", shimEnv{agentEnv: "claude", shims1: true}, walkNone, shimWire, ""},
 		{"force shims1", shimEnv{shims1: true}, walkNone, shimWire, ""},
 		{"force agentShims", shimEnv{agentShims: true}, walkNone, shimWire, ""},
-		{"walk agent", shimEnv{}, walkAgent, shimWire, "claude"},
 		{"walk wire-only no attribution", shimEnv{}, walkBrowser, shimWire, ""},
 		{"walk none passthrough", shimEnv{}, walkNone, shimPassthrough, ""},
 	}

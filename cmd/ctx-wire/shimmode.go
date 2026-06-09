@@ -45,13 +45,27 @@ func shimDecide(e shimEnv, walk func() (wire bool, agent string)) (shimAction, s
 	if e.depth >= shim.DepthCap {
 		return shimPassthrough, ""
 	}
-	if e.agentEnv != "" {
-		return shimWire, e.agentEnv
-	}
+	// Force-on wins over the hook-capable passthrough below (debugging / opting
+	// into broad coverage).
 	if e.shims1 || e.agentShims {
 		return shimWire, ""
 	}
+	// A hook/plugin-capable agent already rewrites model-visible commands, so the
+	// shim must NOT also wire under it: that double-covers shell plumbing and
+	// corrupts command substitutions (result=$(cat file)). This applies both to an
+	// inherited CTX_WIRE_AGENT (a hook-wrapped command's subprocess) and to a
+	// detected ancestor. Steering-only / opt-in agents have no auto-rewrite, so
+	// the shim is their coverage and still wires.
+	if e.agentEnv != "" {
+		if agent.IsHookCapable(e.agentEnv) {
+			return shimPassthrough, ""
+		}
+		return shimWire, e.agentEnv
+	}
 	if wire, ag := walk(); wire {
+		if agent.IsHookCapable(ag) {
+			return shimPassthrough, ""
+		}
 		return shimWire, ag
 	}
 	return shimPassthrough, ""

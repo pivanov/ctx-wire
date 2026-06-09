@@ -32,6 +32,31 @@ var Known = []string{
 	"kilocode", "antigravity", "opencode", "pi", "hermes", "vscode", "visualstudio",
 }
 
+// HookCapable lists agents that have an automatic command-rewrite path: a
+// PreToolUse hook (claude, codex, cursor, gemini, copilot) or a plugin that
+// calls `ctx-wire rewrite` (opencode, pi, hermes). For these the shim must NOT
+// auto-wire: the hook/plugin already covers model-visible commands, so a shim
+// would only double-cover shell plumbing and silently corrupt command
+// substitutions like result=$(cat file). Steering-only agents (cline, windsurf,
+// kilocode, antigravity) and opt-in MCP hosts (vscode, visualstudio) have no
+// automatic rewrite, so the shim is their coverage and still wires under them.
+// Keep this in sync with the shell shim template's ps-walk in internal/shim.
+var HookCapable = []string{
+	"claude", "codex", "cursor", "gemini", "copilot", "opencode", "pi", "hermes",
+}
+
+// IsHookCapable reports whether name has an automatic rewrite hook/plugin, so a
+// shim should pass through rather than auto-wire under it.
+func IsHookCapable(name string) bool {
+	name = Normalize(name)
+	for _, a := range HookCapable {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Normalize lowercases and validates an agent name. It returns "" for an empty,
 // over-long, or otherwise malformed value (anything outside [a-z0-9-]). The
 // restricted charset keeps the name safe to pass through hooks, config files,

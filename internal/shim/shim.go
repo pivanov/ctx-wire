@@ -534,24 +534,30 @@ case "${CTX_WIRE_SHIMS:-}" in
   1|true|TRUE|yes|YES|on|ON) should_wire=1 ;;
 esac
 if [ "$should_wire" != 1 ]; then
+  # A hook/plugin-capable agent already rewrites model-visible commands, and its
+  # subprocesses inherit CTX_WIRE_AGENT. The shim must NOT also wire under it:
+  # that double-covers shell plumbing and corrupts command substitutions like
+  # result=$(cat file). Pass through. (Keep this set in sync with agent.HookCapable.)
+  case "${CTX_WIRE_AGENT:-}" in
+    claude|codex|cursor|gemini|copilot|opencode|pi|hermes)
+      exec "$real" "$@" ;;
+  esac
   ppid=${PPID:-}
   depth=0
   while [ -n "$ppid" ] && [ "$ppid" -gt 1 ] 2>/dev/null && [ "$depth" -lt 12 ]; do
     comm=$(ps -o comm= -p "$ppid" 2>/dev/null || true)
     args=$(ps -o args= -p "$ppid" 2>/dev/null || true)
     case "$comm $args" in
-      *claude*) should_wire=1; detected_agent=claude; break ;;
-      *codex*) should_wire=1; detected_agent=codex; break ;;
-      *cursor*) should_wire=1; detected_agent=cursor; break ;;
-      *gemini*) should_wire=1; detected_agent=gemini; break ;;
-      *copilot*) should_wire=1; detected_agent=copilot; break ;;
+      # Hook/plugin-capable ancestor: covered by its own rewrite, so pass through
+      # rather than double-wrap (keep in sync with agent.HookCapable).
+      *claude*|*codex*|*cursor*|*gemini*|*copilot*|*opencode*|*pi-coding-agent*|*"pi coding agent"*|*/.pi/agent*|*hermes*)
+        exec "$real" "$@" ;;
+      # Steering-only / opt-in MCP agents have no auto-rewrite: the shim is their
+      # only coverage, so wire under them.
       *windsurf*) should_wire=1; detected_agent=windsurf; break ;;
       *cline*) should_wire=1; detected_agent=cline; break ;;
       *kilocode*) should_wire=1; detected_agent=kilocode; break ;;
       *antigravity*) should_wire=1; detected_agent=antigravity; break ;;
-      *opencode*) should_wire=1; detected_agent=opencode; break ;;
-      *pi-coding-agent*|*"pi coding agent"*|*/.pi/agent*) should_wire=1; detected_agent=pi; break ;;
-      *hermes*) should_wire=1; detected_agent=hermes; break ;;
       *vscode*|*"Visual Studio Code"*|*"visual studio code"*) should_wire=1; detected_agent=vscode; break ;;
       *visualstudio*|*"Visual Studio"*|*"visual studio"*) should_wire=1; detected_agent=visualstudio; break ;;
       *agent-browser*) should_wire=1; break ;;
