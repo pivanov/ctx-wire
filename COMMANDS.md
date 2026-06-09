@@ -11,8 +11,8 @@ commands. For the config file and environment variables see
 |---|---|
 | `ctx-wire run <cmd> [args]` | Execute a command and filter/scrub its output |
 | `ctx-wire mcp` | Serve `run_command` and `read_file` filtering tools over MCP (stdio) |
-| `ctx-wire mcp-wrap -- <server>` | Transparently relay a stdio MCP server and measure per-tool token cost (experimental, no compression) |
-| `ctx-wire mcp-wrap install \| uninstall <server>` | Wrap (or revert) a server in your MCP config so its tool output is measured; backs up the config, needs an agent restart |
+| `ctx-wire mcp-wrap [--compress] -- <server>` | Transparently relay a stdio MCP server and measure per-tool token cost; `--compress` also reduces verbose accessibility snapshots (chrome-devtools, Playwright), spooling the raw result locally |
+| `ctx-wire mcp-wrap install [--compress] \| uninstall <server>` | Wrap (or revert) a server in your MCP config so its tool output is measured (and with `--compress`, reduced); backs up the config, needs an agent restart |
 | `ctx-wire hook <agent>` | Run as an agent pre-tool hook (reads JSON on stdin) |
 | `ctx-wire rewrite <line>` | Print the rewritten form of a shell command line |
 | `ctx-wire init <agent>` | Install the binary into `~/.local/bin` and wire an agent (claude, cursor, codex, gemini, cline, windsurf, kilocode, antigravity, opencode, pi, hermes, copilot, vscode, visualstudio). Adds PATH shims only for steering-only agents; hook/plugin-capable agents are covered by their hook/plugin |

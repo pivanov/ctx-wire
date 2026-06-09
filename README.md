@@ -23,6 +23,9 @@ fails. Wire it into your agent once; from then on it works transparently.
   and valid JSON is never broken mid-structure.
 - **Measurable.** `ctx-wire gain` reports exactly how many bytes and tokens were
   saved, broken down by program and by agent.
+- **MCP output too.** `ctx-wire mcp-wrap --compress` relays any MCP server,
+  measures what each tool costs in tokens, and reduces verbose browser
+  snapshots (chrome-devtools, Playwright) with the raw result spooled locally.
 - **Extensible.** Filters are declarative TOML. Pull community filters, publish
   your own, or scaffold a new one from a real command transcript.
 - **Works with your stack.** Claude Code, Cursor, Codex, Gemini, GitHub Copilot,
