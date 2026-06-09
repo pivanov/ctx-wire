@@ -545,9 +545,12 @@ if [ "$should_wire" != 1 ]; then
   ppid=${PPID:-}
   depth=0
   while [ -n "$ppid" ] && [ "$ppid" -gt 1 ] 2>/dev/null && [ "$depth" -lt 12 ]; do
-    comm=$(ps -o comm= -p "$ppid" 2>/dev/null || true)
-    args=$(ps -o args= -p "$ppid" 2>/dev/null || true)
-    case "$comm $args" in
+    # comm+args in ONE ps call, matched directly as a string (no parsing), then the
+    # parent ppid in a second call. Two ps calls per ancestor instead of the old
+    # three. Never word-split or use "set --" here: it would clobber the original
+    # "$@" this shim must still exec, and would glob a star in a process's args.
+    info=$(ps -o comm= -o args= -p "$ppid" 2>/dev/null || true)
+    case "$info" in
       # Hook/plugin-capable ancestor: covered by its own rewrite, so pass through
       # rather than double-wrap (keep in sync with agent.HookCapable).
       *claude*|*codex*|*cursor*|*gemini*|*copilot*|*opencode*|*pi-coding-agent*|*"pi coding agent"*|*/.pi/agent*|*hermes*)
@@ -752,6 +755,72 @@ func ManagedShimDirsOnPATH() []string {
 		}
 	}
 	return dirs
+}
+
+// ManagedDirsWith returns every directory on PATH that holds ctx-wire-managed
+// shims, plus installDir (deduplicated) when non-empty. Callers that report or
+// remove shims should operate across ALL of these, not just the install dir, so a
+// stale earlier shim dir that is first on PATH (the real source of prompt latency)
+// is not missed.
+func ManagedDirsWith(installDir string) []string {
+	dirs := ManagedShimDirsOnPATH()
+	if installDir == "" {
+		return dirs
+	}
+	want := cleanPath(installDir)
+	for _, d := range dirs {
+		if cleanPath(d) == want {
+			return dirs
+		}
+	}
+	return append(dirs, installDir)
+}
+
+// AggregateStatus merges Inspect across dirs: a command counts as installed/active
+// if it is installed/active in ANY dir, so a shim shadowed in one dir but first on
+// PATH from another is reported as active. Uses is the global capture count (the
+// same for every dir). total is the number of default commands.
+func AggregateStatus(dirs []string) (installed, active, uses, total int) {
+	inst := map[string]bool{}
+	act := map[string]bool{}
+	for _, d := range dirs {
+		st := Inspect(d, DefaultCommands)
+		for _, c := range st.Installed {
+			inst[c] = true
+		}
+		for _, c := range st.Active {
+			act[c] = true
+		}
+		if st.Uses > uses {
+			uses = st.Uses
+		}
+	}
+	return len(inst), len(act), uses, len(DefaultCommands)
+}
+
+// keepMarkerName marks a shim dir whose shims were installed DELIBERATELY (a
+// steering agent's init or an explicit `shims install`). Advisory code consults it
+// so it never nags the user to remove shims they want, and the auto-migration
+// never touches an explicitly-requested set. A plain filename, not a shim.
+const keepMarkerName = ".ctx-wire-shims-keep"
+
+// MarkKeep records explicit intent to keep shims in dir. Best-effort.
+func MarkKeep(dir string) {
+	_ = os.WriteFile(filepath.Join(dir, keepMarkerName),
+		[]byte("shims installed explicitly; ctx-wire will not advise removing them\n"), 0o644)
+}
+
+// ClearKeep drops the keep-marker (on uninstall). Best-effort.
+func ClearKeep(dir string) { _ = os.Remove(filepath.Join(dir, keepMarkerName)) }
+
+// WantsKeep reports whether any dir carries the keep-marker.
+func WantsKeep(dirs []string) bool {
+	for _, d := range dirs {
+		if _, err := os.Stat(filepath.Join(d, keepMarkerName)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // RefreshManaged regenerates every ctx-wire-managed shim in the managed shim

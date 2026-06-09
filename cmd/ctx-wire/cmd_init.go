@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"ctx-wire/internal/agent"
 	"ctx-wire/internal/install"
 	"ctx-wire/internal/shim"
 	"ctx-wire/internal/telemetry"
@@ -18,13 +19,14 @@ func cmdInit(args []string) int {
 	if isHelpArg(args) {
 		printHelp(os.Stdout, helpDoc{
 			usage:   []string{"ctx-wire init <agent>"},
-			summary: "Wire an agent: install the binary into ~/.local/bin, add managed shims, and configure that agent's hooks/rules.",
+			summary: "Wire an agent: install the binary into ~/.local/bin and configure that agent's hooks/rules.",
 			examples: []string{
 				"ctx-wire init claude    # wire Claude Code",
 				"ctx-wire init codex     # wire Codex",
 			},
 			notes: []string{
 				"a target agent is required:\n    claude · codex · cursor · gemini · copilot · cline · windsurf · kilocode · antigravity · opencode · pi · hermes · vscode · visualstudio",
+				"hook/plugin-capable agents (claude, codex, cursor, gemini, copilot, opencode, pi, hermes) are covered by their hook/plugin, so `init` no longer installs PATH shims for them. Steering-only agents (cline, windsurf, kilocode, antigravity, vscode, visualstudio) still get shims. Manage shims explicitly with `ctx-wire shims install|uninstall|status`.",
 			},
 		})
 		return 0
@@ -146,7 +148,7 @@ func canonicalInitAgent(target string) string {
 func initMissingTarget() int {
 	theme := themeForFile(os.Stderr)
 	fmt.Fprintf(os.Stderr, "%s `ctx-wire init` needs an agent.\n\n", theme.Warn.Render("missing agent"))
-	fmt.Fprintln(os.Stderr, "Wire an agent (installs the binary, shims, and that agent's hooks):")
+	fmt.Fprintln(os.Stderr, "Wire an agent (installs the binary and that agent's hooks; steering-only agents also get PATH shims):")
 	fmt.Fprintf(os.Stderr, "  %s\n", theme.Command.Render("ctx-wire init claude"))
 	fmt.Fprintln(os.Stderr, theme.Dim.Render("  claude · codex · cursor · gemini · copilot · cline · windsurf · kilocode · antigravity · opencode · pi · hermes · vscode · visualstudio"))
 	return 2
@@ -223,7 +225,16 @@ func installSelfAndShims(theme ui.Theme, agentName string) int {
 	} else if !sameExecutablePath(found, dest) {
 		fmt.Printf("%s PATH resolves ctx-wire to %s, not %s\n", theme.Warn.Render("PATH"), theme.Path.Render(found), theme.Path.Render(dest))
 	}
-	if code := installShims(dest, theme); code != 0 {
+	// Default PATH shims are installed only for steering-only agents. Hook- and
+	// plugin-capable agents already rewrite model-visible commands through their
+	// hook/plugin, so default shims add no coverage there; and when the shim dir is
+	// early on PATH they cost ~15ms per shimmed command on every shell prompt
+	// render. Such agents can still opt in explicitly with `ctx-wire shims install`.
+	if agent.IsHookCapable(agentName) {
+		fmt.Printf("%s\n", theme.Dim.Render(fmt.Sprintf(
+			"note: %s rewrites commands through its hook/plugin, so PATH shims were not installed (they add no coverage here and can slow shell startup). Add them anytime with `ctx-wire shims install`.",
+			agentName)))
+	} else if code := installShims(dest, theme); code != 0 {
 		return code
 	}
 	reportInstallTelemetry(theme, agentName)
@@ -250,6 +261,11 @@ func installShims(ctxWirePath string, theme ui.Theme) int {
 		fmt.Fprintf(os.Stderr, "ctx-wire init: %v\n", err)
 		return 1
 	}
+	// Installing shims here is always deliberate (a steering agent's init or an
+	// explicit `ctx-wire shims install`), so record that intent: advisory code must
+	// never nudge the user to remove shims they asked for.
+	shim.MarkKeep(report.Dir)
+	clearNudgeMarker(report.Dir) // shim set changed: reset the once-only advisory state
 	total := len(report.Commands)
 	installed := len(report.Changed) + len(report.Unchanged)
 	if len(report.Changed) > 0 {

@@ -15,7 +15,8 @@ commands. For the config file and environment variables see
 | `ctx-wire mcp-wrap install \| uninstall <server>` | Wrap (or revert) a server in your MCP config so its tool output is measured; backs up the config, needs an agent restart |
 | `ctx-wire hook <agent>` | Run as an agent pre-tool hook (reads JSON on stdin) |
 | `ctx-wire rewrite <line>` | Print the rewritten form of a shell command line |
-| `ctx-wire init <agent>` | Install the binary into `~/.local/bin`, add managed shims, and wire an agent (claude, cursor, codex, gemini, cline, windsurf, kilocode, antigravity, opencode, pi, hermes, copilot, vscode, visualstudio) |
+| `ctx-wire init <agent>` | Install the binary into `~/.local/bin` and wire an agent (claude, cursor, codex, gemini, cline, windsurf, kilocode, antigravity, opencode, pi, hermes, copilot, vscode, visualstudio). Adds PATH shims only for steering-only agents; hook/plugin-capable agents are covered by their hook/plugin |
+| `ctx-wire shims [status\|install\|uninstall]` | Manage the optional default PATH shims: inspect them, opt in on a hook/plugin-capable agent, or remove them if they slow shell startup. `uninstall` removes only ctx-wire-managed shim files |
 | `ctx-wire update [--check]` | Upgrade to the latest release (checksum-verified, atomic, with rollback); `--check` only reports |
 | `ctx-wire uninstall` | Remove the ctx-wire binary, managed shims, and only ctx-wire hook/config entries |
 | `ctx-wire trust` | Approve this project's `.ctx-wire/filters.toml` by hash |
@@ -128,12 +129,35 @@ whether the gain and tee directories are writable (with the sandbox fallback),
 and the project filter trust state. It prints counts only by default; pass
 `--recent N` (or `--verbose`) to also list the last N scrubbed commands. Exit
 code is `0` when healthy or only warnings, `1` for a broken install (unwritable
-storage, unloadable filter registry).
+storage, unloadable filter registry). When managed shims actually resolve first
+on `PATH` while a hook/plugin already covers those commands, `doctor` flags the
+startup cost and points at `ctx-wire shims uninstall`.
+
+## `ctx-wire shims`
+
+Manage the optional default PATH shims. `init` installs them only for
+steering-only agents; on a hook/plugin-capable agent the hook/plugin already
+covers model-visible commands, so shims add no coverage and, when the shim dir
+is early on `PATH`, slow every shell prompt.
+
+- `ctx-wire shims status` reports, across **every** managed shim dir on `PATH`
+  (not just the install dir), how many shims are installed and how many actually
+  resolve first on `PATH` (the ground truth for whether they are on the hot path).
+- `ctx-wire shims install` installs the default shim set and records that you
+  want them, so the advisory never nudges you to remove them.
+- `ctx-wire shims uninstall` removes only ctx-wire-managed shim files, across all
+  managed dirs, leaving the binary, hooks, config, filters, and gain/tee data
+  intact.
+
+After an upgrade, an existing hook/plugin-only install is **not** auto-modified:
+`gain`/`doctor` print a one-time advisory that those shims can be removed with
+`ctx-wire shims uninstall`. Set `CTX_WIRE_KEEP_SHIMS=1` to silence it.
 
 ## Integrations (`ctx-wire init <target>`)
 
 - **self**: copies the current binary to `~/.local/bin/ctx-wire` with executable
-  permissions and installs managed command shims next to it. The shims cover
+  permissions. For steering-only agents (or on an explicit `ctx-wire shims
+  install`) it also installs managed command shims next to it. The shims cover
   common agent commands such as `git`, `rg`, `grep`, `cat`, `sed`, `head`,
   `tail`, `sort`, `bun`, `npm`, `go`, and `cargo`. Existing non-ctx-wire files
   are never overwritten, and ctx-wire only creates a shim when the real command
@@ -142,8 +166,13 @@ storage, unloadable filter registry).
   tool directly, preserving native colors/progress behavior.
 - **Claude Code, Cursor, Codex, Gemini CLI, Cline, Windsurf, Kilo Code,
   Antigravity, OpenCode, Pi, Hermes, Copilot, VS Code, Visual Studio**: each
-  agent init also installs the local binary and managed
-  command shims, so there is no separate shim step to remember. Each shim
+  agent init installs the local binary. Managed command shims are added only for
+  **steering-only** agents (Cline, Windsurf, Kilo Code, Antigravity, VS Code,
+  Visual Studio), whose shim is their only coverage; hook/plugin-capable agents
+  (Claude, Codex, Cursor, Gemini, Copilot, OpenCode, Pi, Hermes) are covered by
+  their hook/plugin, so `init` no longer adds shims for them (they would only
+  add shell-prompt latency). Manage shims explicitly with `ctx-wire shims
+  install | uninstall | status`. Each shim
   removes its own directory from `PATH`, resolves the real command, and then
   calls `ctx-wire run` with the real absolute path only when the process is
   agent-marked (`CTX_WIRE_AGENT_SHIMS=1` / `CTX_WIRE_SHIMS=1`) or launched from

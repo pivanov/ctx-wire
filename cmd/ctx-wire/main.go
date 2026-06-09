@@ -80,6 +80,10 @@ func main() {
 		}
 	}
 	maybeRefreshManagedShims(os.Args[1])
+	// Migrate existing installs: nudge hook/plugin users (once) that redundant PATH
+	// shims are slowing their prompt and can be removed with one command. Advisory
+	// only, never auto-deletes (see maybeAdviseRedundantShims).
+	maybeAdviseRedundantShims(os.Args[1])
 	switch os.Args[1] {
 	case "run":
 		os.Exit(cmdRun(os.Args[2:]))
@@ -93,6 +97,8 @@ func main() {
 		os.Exit(cmdRewrite(os.Args[2:]))
 	case "init":
 		os.Exit(cmdInit(os.Args[2:]))
+	case "shims":
+		os.Exit(cmdShims(os.Args[2:]))
 	case "uninstall":
 		os.Exit(cmdUninstall(os.Args[2:]))
 	case "update":
@@ -170,7 +176,7 @@ func stableCurrentBinaryPath() (string, bool) {
 }
 
 var knownCommands = []string{
-	"run", "mcp", "hook", "rewrite", "init", "trust", "untrust", "gain", "explain",
+	"run", "mcp", "hook", "rewrite", "init", "shims", "trust", "untrust", "gain", "explain",
 	"uninstall", "update", "tune", "telemetry", "discover", "learn", "session", "doctor", "verify", "version", "help",
 }
 
@@ -221,7 +227,7 @@ func usage(out *os.File) {
 	theme := themeForFile(out)
 	fmt.Fprintf(out, "%s %s\n\n", theme.Label.Render("usage:"), theme.Command.Render("ctx-wire <command> [args]"))
 	usageSection(out, theme, "daily", []usageRow{
-		{"init <target>", "install ctx-wire, configure agents, and add managed shims"},
+		{"init <target>", "install ctx-wire and wire an agent (shims only for steering-only agents)"},
 		{"doctor", "check binary, hooks, shims, storage, filters, and telemetry"},
 		{"gain", "show saved bytes/tokens and per-program impact"},
 		{"tune", "report filter gaps; preview, bundle, or open a sanitized issue"},
@@ -244,6 +250,7 @@ func usage(out *os.File) {
 		{"run <cmd> [args]", "manual wrapper used by hooks/shims to filter command output"},
 		{"rewrite <line>", "debug the shell rewrite that hooks would apply"},
 		{"update [--check]", "upgrade ctx-wire to the latest release"},
+		{"shims [status|install|uninstall]", "manage the optional default PATH shims"},
 		{"uninstall", "remove ctx-wire binary, shims, and ctx-wire hook entries"},
 		{"version", "print version and build metadata"},
 	})

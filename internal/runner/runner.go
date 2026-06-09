@@ -54,6 +54,13 @@ func Run(ctx context.Context, reg *filter.Registry, name string, args []string) 
 		fmt.Fprintf(os.Stderr, "ctx-wire: %v\n", err)
 		return 127, nil
 	}
+	// Record that a shim wired into us up front, before the bypass/filter branch,
+	// so the usage signal counts EVERY shim invocation. Bypassed commands return
+	// early below and would otherwise never be recorded, which would let a real
+	// steering user read zero recorded shim use (and mislead the auto-prune).
+	if shimName := os.Getenv(shim.EnvName); shimName != "" {
+		_ = shim.RecordUse(shimName, scrub.Command(name, args))
+	}
 	if shouldBypass(name, args) {
 		return runInherited(ctx, execName, args)
 	}
@@ -211,9 +218,8 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 
 // recordGain appends a gain entry, best-effort. Telemetry must never break a run.
 func recordGain(cmdline, filterName, mode string, rawBytes, emittedBytes, exitCode int) {
-	if shimName := os.Getenv(shim.EnvName); shimName != "" {
-		_ = shim.RecordUse(shimName, cmdline)
-	}
+	// Shim-use recording moved to the top of Run so it also counts bypassed
+	// commands; recordGain now only handles gain telemetry.
 	if !gain.Enabled() {
 		return
 	}

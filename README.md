@@ -16,7 +16,8 @@ fails. Wire it into your agent once; from then on it works transparently.
 - **Automatic token savings.** The noisiest commands, package installs, test
   runs, linters, searches, collapse to the signal the agent actually needs.
 - **Transparent.** One `ctx-wire init <agent>` and commands are filtered through
-  the agent's hooks and shims. Nothing changes about how you or the agent work.
+  the agent's hook (or PATH shims for steering-only agents). Nothing changes
+  about how you or the agent work.
 - **Nothing important is lost.** Output is scrubbed of secrets before the model
   sees it, the full scrubbed log is spooled to disk so failures stay debuggable,
   and valid JSON is never broken mid-structure.

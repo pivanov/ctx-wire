@@ -101,7 +101,7 @@ func Run(opts Options) *Report {
 	r := &Report{}
 	r.Sections = append(r.Sections,
 		binarySection(opts),
-		shimsSection(),
+		shimsSection(opts),
 		hooksSection(opts),
 		mcpSection(opts),
 		telemetrySection(),
@@ -177,7 +177,7 @@ func telemetrySection() Section {
 	return sec
 }
 
-func shimsSection() Section {
+func shimsSection(opts Options) Section {
 	sec := Section{Title: "shims"}
 	dest, err := install.SelfInstallPath()
 	if err != nil {
@@ -212,13 +212,10 @@ func shimsSection() Section {
 			fmt.Sprintf("managed shims in %d PATH dirs: %s; an upgrade left a stale set (remove the old dir's shims to avoid recursion)",
 				len(shimDirs), strings.Join(shimDirs, ", "))})
 	}
-	if len(st.Active) > 0 {
-		sec.Checks = append(sec.Checks, Check{"PATH", OK,
-			fmt.Sprintf("%d/%d shims are first on PATH", len(st.Active), total)})
-	} else if installed > 0 {
-		sec.Checks = append(sec.Checks, Check{"PATH", Warn,
-			"shims installed but not first on PATH; put " + display(st.Dir) + " before system tool dirs"})
-	}
+	// Aggregate across every managed shim dir on PATH (not just the install dir):
+	// a stale earlier dir can be the one actually first on PATH and slowing prompts.
+	aggInstalled, aggActive, _, _ := shim.AggregateStatus(shim.ManagedDirsWith(dir))
+	sec.Checks = append(sec.Checks, shimPathChecks(dir, aggInstalled, aggActive, total, hookOrPluginConfigured(opts))...)
 	if missing := missingSystemPathDirs(); len(missing) > 0 {
 		sec.Checks = append(sec.Checks, Check{"system PATH", Warn,
 			fmt.Sprintf("PATH is missing %s; a shim then cannot find the real command (you get \"no real X on PATH\"), and tools like git cannot find ssh. This is an environment issue, not ctx-wire; fix your shell PATH",
@@ -231,6 +228,67 @@ func shimsSection() Section {
 		sec.Checks = append(sec.Checks, Check{"usage", Warn, "no shim captures recorded yet"})
 	}
 	return sec
+}
+
+// shimPathChecks decides the PATH / startup-cost advisory from the resolution
+// ground truth (st.Active = managed commands that actually resolve to a shim,
+// i.e. shims on the shell's hot path) and whether a hook/plugin already covers
+// commands. It is pure so the decision is unit-testable without the filesystem.
+// The key case: shims resolve first AND a hook/plugin already covers them, so
+// they are redundant work that slows every prompt render (the common "slow
+// terminal" report); recommend removing them.
+func shimPathChecks(dir string, installed, active, total int, hookCovered bool) []Check {
+	switch {
+	case active > 0 && hookCovered:
+		return []Check{{"startup cost", Warn, fmt.Sprintf(
+			"%d managed command(s) resolve to ctx-wire shims, but a hook/plugin already covers them, so each adds ~15ms at every shell prompt. Unless you also rely on a steering-only agent (cline/windsurf/kilocode/antigravity/vscode/visualstudio), remove them with `ctx-wire shims uninstall`",
+			active)}}
+	case active > 0:
+		return []Check{{"PATH", OK, fmt.Sprintf("%d/%d shims are first on PATH", active, total)}}
+	case installed > 0 && hookCovered:
+		return []Check{{"shims", Off,
+			"installed but a hook/plugin already covers commands and the real tools resolve first, so they cost nothing; remove with `ctx-wire shims uninstall` if unused"}}
+	case installed > 0:
+		return []Check{{"PATH", Warn,
+			"shims installed but not first on PATH; put " + display(dir) + " before system tool dirs"}}
+	}
+	return nil
+}
+
+// hookOrPluginConfigured reports whether any hook- or plugin-capable agent
+// integration is actually present. doctor uses it to tell that installed PATH
+// shims are redundant coverage (hence pure shell-startup overhead) rather than a
+// steering-only agent's sole path. Needles match hooksSection's own checks.
+func hookOrPluginConfigured(opts Options) bool {
+	has := func(p, needle string) bool {
+		c, e := fileContains(p, needle)
+		return e == nil && c
+	}
+	if p, err := install.ClaudeSettingsPath(); err == nil && has(p, "ctx-wire hook claude") {
+		return true
+	}
+	if p, err := install.CursorHooksPath(); err == nil && has(p, "ctx-wire hook cursor") {
+		return true
+	}
+	if p, err := install.CodexHooksPath(); err == nil && has(p, "ctx-wire hook codex") {
+		return true
+	}
+	if p, err := install.GeminiSettingsPath(); err == nil && has(p, "ctx-wire-hook-gemini.sh") {
+		return true
+	}
+	if has(install.CopilotHookPath(opts.Workdir), "ctx-wire hook copilot") {
+		return true
+	}
+	if p, err := install.OpenCodePluginPath(); err == nil && has(p, "ctx-wire") {
+		return true
+	}
+	if p, err := install.PiPluginPath(); err == nil && has(p, "ctx-wire") {
+		return true
+	}
+	if dir, err := install.HermesPluginDir(); err == nil && has(filepath.Join(dir, "__init__.py"), "ctx-wire") {
+		return true
+	}
+	return false
 }
 
 // missingSystemPathDirs returns the standard system tool dirs absent from PATH.

@@ -111,7 +111,11 @@ if [ "$after" = "ok (project filter applied)" ]; then ok "project filter applied
 step "init agents into temp HOME/config"
 cw init claude >/dev/null
 if [ -x "$HOMEDIR/.local/bin/ctx-wire" ]; then ok "init claude installs binary"; else bad "init claude installs binary"; fi
-if [ -x "$HOMEDIR/.local/bin/git" ] && grep -q "ctx-wire shim v1" "$HOMEDIR/.local/bin/git"; then ok "init shims"; else bad "init shims"; fi
+# Hook/plugin-capable agents (claude) are covered by their hook, so `init` no
+# longer installs PATH shims for them; shims are opt-in via `ctx-wire shims install`.
+if [ ! -e "$HOMEDIR/.local/bin/git" ]; then ok "init claude skips shims (hook-capable)"; else bad "init claude skips shims (hook-capable)"; fi
+cw shims install >/dev/null
+if [ -x "$HOMEDIR/.local/bin/git" ] && grep -q "ctx-wire shim v1" "$HOMEDIR/.local/bin/git"; then ok "shims install"; else bad "shims install"; fi
 if HOME="$HOMEDIR" \
 	XDG_CONFIG_HOME="$HOMEDIR/.config" \
 	XDG_DATA_HOME="$HOMEDIR/.local/share" \
@@ -136,10 +140,11 @@ if HOME="$HOMEDIR" \
 	PATH="$HOMEDIR/.local/bin:$PATH" \
 	"$HOMEDIR/.local/bin/git" --version >/dev/null; then ok "shim routes agent git"; else bad "shim routes agent git"; fi
 if cw doctor --recent 0 | grep -q "shim capture"; then ok "doctor reports shim usage"; else bad "doctor reports shim usage"; fi
-rm -f "$HOMEDIR/.local/bin/git"
 cw init claude >/dev/null
 file_has "$HOMEDIR/.claude/settings.json" "ctx-wire hook claude" "init claude"
-if [ -x "$HOMEDIR/.local/bin/git" ] && grep -q "ctx-wire shim v1" "$HOMEDIR/.local/bin/git"; then ok "init claude reinstalls shims"; else bad "init claude reinstalls shims"; fi
+# Re-running init keeps the explicitly-installed shims and never re-adds them for
+# a hook-capable agent on its own.
+if [ -x "$HOMEDIR/.local/bin/git" ] && grep -q "ctx-wire shim v1" "$HOMEDIR/.local/bin/git"; then ok "init claude keeps existing shims"; else bad "init claude keeps existing shims"; fi
 cw init cursor >/dev/null
 file_has "$HOMEDIR/.cursor/hooks.json" "ctx-wire hook cursor" "init cursor"
 cw init codex >/dev/null
