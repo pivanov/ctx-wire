@@ -2,6 +2,15 @@
 description = "Compact Biome lint/format output: strip blank lines, keep diagnostics. Matches direct biome plus npx/bunx/pnpm dlx/yarn dlx runners."
 match_command = "^(?:(npx|bunx)\\s+|(pnpm|yarn)\\s+dlx\\s+)?biome\\b"
 strip_ansi = true
+# Biome writes its diagnostics (the ━ headers, code context, "Found N errors") to
+# STDERR, not stdout, so without this the filter only ever saw a near-empty stdout
+# and could not reduce a real lint run.
+filter_stderr = true
+replace = [
+  # Trim the long ━━━ run biome appends to each diagnostic header line
+  # ("file:line:col rule  FIXABLE  ━━━…"); the header before it is the signal.
+  { pattern = "\\s*━+\\s*$", replacement = "" },
+]
 strip_lines_matching = [
   "^\\s*$",
   "^Checked \\d+ file",
@@ -30,7 +39,16 @@ src/utils.ts:12:1 lint/complexity/noForEach ━━━━━━━━━━━━
 
 Found 2 errors.
 """
-expected = "src/app.tsx:5:3 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━\n  × Unexpected any. Specify a different type.\n  3 │ interface Props {\n  4 │   data: any;\n  5 │         ^^^\nsrc/utils.ts:12:1 lint/complexity/noForEach ━━━━━━━━━━━━━━━━━━━━\n  × Prefer for...of instead of forEach.\n 12 │ items.forEach(item => process(item));\n    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFound 2 errors."
+expected = "src/app.tsx:5:3 lint/suspicious/noExplicitAny\n  × Unexpected any. Specify a different type.\n  3 │ interface Props {\n  4 │   data: any;\n  5 │         ^^^\nsrc/utils.ts:12:1 lint/complexity/noForEach\n  × Prefer for...of instead of forEach.\n 12 │ items.forEach(item => process(item));\n    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFound 2 errors."
+
+[[tests.biome]]
+name = "real biome header: FIXABLE decoration trimmed, signal kept"
+input = """
+bad.ts:2:3 lint/style/useConst  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! This let declares a variable that is only assigned once.
+"""
+expected = "bad.ts:2:3 lint/style/useConst  FIXABLE\n  ! This let declares a variable that is only assigned once."
 
 [[tests.biome]]
 name = "clean check"
@@ -65,4 +83,4 @@ src/app.tsx:1:1 format ━━━━━━━━━━━━━━━━━━━
 
 Found 1 error.
 """
-expected = "src/app.tsx:1:1 format ━━━━━━━━━━━━━━━━━━━━\n  × Formatter would have printed the following content:\n  - import {foo} from 'bar';\n  + import { foo } from 'bar';\nFound 1 error."
+expected = "src/app.tsx:1:1 format\n  × Formatter would have printed the following content:\n  - import {foo} from 'bar';\n  + import { foo } from 'bar';\nFound 1 error."
