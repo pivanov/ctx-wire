@@ -102,12 +102,30 @@ func runTests(content, filterName string) (*VerifyResults, error) {
 			return nil, fmt.Errorf("[[tests.%s]] references unknown filter", name)
 		}
 		for _, t := range file.Tests[name] {
-			actual := strings.TrimRight(applyTestCase(cf, t), "\n")
+			out, rawLen := applyTestCase(cf, t)
+			actual := strings.TrimRight(out, "\n")
 			expected := strings.TrimRight(t.Expected, "\n")
+			passed := actual == expected
+			// A savings floor (used by split-stream tests) catches a filter that
+			// runs on the wrong stream and reduces ~nothing. When Expected is set,
+			// both must hold; with Expected empty, the author opted into a
+			// savings-only assertion.
+			if t.MinSavedPercent > 0 {
+				saved := 0
+				if rawLen > 0 {
+					saved = 100 * (rawLen - len(actual)) / rawLen
+				}
+				meets := saved >= t.MinSavedPercent
+				if t.Expected == "" {
+					passed = meets
+				} else {
+					passed = passed && meets
+				}
+			}
 			res.Outcomes = append(res.Outcomes, TestOutcome{
 				FilterName: name,
 				TestName:   t.Name,
-				Passed:     actual == expected,
+				Passed:     passed,
 				Draft:      t.Draft,
 				Actual:     actual,
 				Expected:   expected,
@@ -127,18 +145,27 @@ func runTests(content, filterName string) (*VerifyResults, error) {
 	return res, nil
 }
 
-// applyTestCase runs one inline test through the filter. A `failed = true` case
-// is applied the way the runner applies output from a non-zero exit (suppress
-// synthetic-success messages, keep the tail on truncation), so a filter's
-// failure-path behavior can be regression-tested.
-func applyTestCase(cf *CompiledFilter, t tomlTest) string {
+// applyTestCase runs one inline test through the filter and returns the observed
+// output plus the raw input length (for the savings assertion). A `failed = true`
+// case is applied the way the runner applies output from a non-zero exit (suppress
+// synthetic-success messages, keep the tail on truncation). When stdout/stderr are
+// set, it emulates the runner's stream selection so a filter aimed at the wrong
+// stream is caught: with filter_stderr the filter sees stdout+stderr; without it,
+// the filter sees stdout only and the raw stderr follows (as the runner prints it).
+func applyTestCase(cf *CompiledFilter, t tomlTest) (string, int) {
+	opts := ApplyOptions{}
 	if t.Failed {
-		return ApplyWithMetaOptions(cf, t.Input, ApplyOptions{
-			SuppressSyntheticSuccess: true,
-			KeepTailOnTruncate:       true,
-		}).Output
+		opts.SuppressSyntheticSuccess = true
+		opts.KeepTailOnTruncate = true
 	}
-	return Apply(cf, t.Input)
+	if t.Stdout != "" || t.Stderr != "" {
+		raw := t.Stdout + t.Stderr
+		if cf.FilterStderr {
+			return ApplyWithMetaOptions(cf, raw, opts).Output, len(raw)
+		}
+		return ApplyWithMetaOptions(cf, t.Stdout, opts).Output + t.Stderr, len(raw)
+	}
+	return ApplyWithMetaOptions(cf, t.Input, opts).Output, len(t.Input)
 }
 
 // builtinFilterNames returns the sorted list of embedded filter names. Used for

@@ -51,6 +51,22 @@ bad.ts:2:3 lint/style/useConst  FIXABLE  ━━━━━━━━━━━━━
 expected = "bad.ts:2:3 lint/style/useConst  FIXABLE\n  ! This let declares a variable that is only assigned once."
 
 [[tests.biome]]
+name = "diagnostics on stderr are actually filtered (regression guard for filter_stderr)"
+# Biome writes diagnostics to STDERR with an empty stdout. This split-stream
+# fixture fails the moment filter_stderr is dropped: the filter would then see an
+# empty stdout, the raw diagnostics would pass through, and savings -> ~0%.
+stderr = """
+bad.ts:2:3 lint/style/useConst  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! This let declares a variable that is only assigned once.
+
+    1 │ export function f(x: number) {
+  > 2 │   let y = x + 1;
+      │   ^^^
+"""
+min_saved_percent = 20
+
+[[tests.biome]]
 name = "clean check"
 input = """
 Checked 42 files in 0.3s

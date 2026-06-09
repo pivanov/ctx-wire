@@ -96,6 +96,19 @@ type tomlTest struct {
 	// the tail on truncation. Use it to assert a filter never hides a failure
 	// (e.g. a location-less `fatal error: ...`) behind a "no issues" summary.
 	Failed bool `toml:"failed"`
+	// Stdout/Stderr model a real command's TWO streams, so a filter that targets
+	// the wrong one is caught. The observed output is built the way the runner
+	// presents it: with filter_stderr the filter sees stdout+stderr; without it the
+	// filter sees stdout only and raw stderr follows. When either is set, Input is
+	// ignored. This is the fixture that exposes the "diagnostics on stderr but no
+	// filter_stderr" class (a biome test written this way goes red without it).
+	Stdout string `toml:"stdout"`
+	Stderr string `toml:"stderr"`
+	// MinSavedPercent asserts the observed output is at least this much smaller (by
+	// bytes) than the combined raw input. It is the regression guard a single
+	// exact-match cannot be: a filter running on the wrong stream saves ~0% and
+	// fails it. Combine with stdout/stderr; pairs with or replaces Expected.
+	MinSavedPercent int `toml:"min_saved_percent"`
 }
 
 // ---------------------------------------------------------------------------

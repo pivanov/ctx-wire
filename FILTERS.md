@@ -137,6 +137,8 @@ expected = "go: ok"
 | `expected` | string | The output the filter must produce. Compared after trimming trailing newlines. |
 | `draft` | bool | Marks a scaffolded, not-yet-finished case. A draft test fails `verify` until you finish it and remove the marker (`tune draft` writes these). Built-in filters may never ship one; a local file can keep one with `verify --allow-draft`. |
 | `failed` | bool | Runs the case the way the runner treats a non-zero exit: suppress `match_output`/`on_empty` summaries, keep the tail on truncation. Use it to assert that a failing run still shows its error instead of collapsing to "ok". |
+| `stdout` / `stderr` | string | Model a command's TWO streams. When either is set, `input` is ignored and the observed output is built the way the runner presents it: with `filter_stderr` the filter sees `stdout`+`stderr`; without it, the filter sees `stdout` only and the raw `stderr` follows. Use this when a command writes its signal to stderr (most linters/compilers), so a missing `filter_stderr` is caught. |
+| `min_saved_percent` | int | Asserts the observed output is at least this much smaller (by bytes) than the combined raw input. The regression guard an exact-match cannot be: a filter running on the wrong stream saves ~0% and fails it. Pairs with or replaces `expected`. |
 
 Run them:
 
@@ -145,6 +147,26 @@ ctx-wire verify --file ./my-filters.toml        # a standalone file
 ctx-wire verify --project                       # this project's .ctx-wire/filters.toml
 ctx-wire verify <name>                           # one built-in filter by name
 ```
+
+### The split-stream guard (`stdout`/`stderr` + `min_saved_percent`)
+
+A subtler trap: a command writes its real output to **stderr** (biome, and most
+linters/compilers do), but the filter has no `filter_stderr`, so it reduces an
+empty stdout and saves ~0% on every real run, while its single-stream `input`
+tests stay green because they feed everything through one stream. Model both
+streams and assert a savings floor; the test then goes red the moment
+`filter_stderr` is missing.
+
+```toml
+[[tests.biome]]
+name   = "diagnostics on stderr are actually filtered"
+stderr = "bad.ts:2:3 lint/style/useConst  FIXABLE  ━━━━━━━━━━\n\n  ! This let ..."
+min_saved_percent = 20
+```
+
+Capture the real stdout/stderr split with `cmd >out.txt 2>err.txt` before writing
+the fixture; do not assume which stream a tool uses (eslint and golangci-lint go
+to stdout; cargo and biome go to stderr).
 
 A `failed = true` regression is the cheapest insurance against the worst filter
 bug, silently faking success on a failed run. The flag only changes the result
