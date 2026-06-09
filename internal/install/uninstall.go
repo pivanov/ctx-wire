@@ -46,6 +46,20 @@ func UninstallIntegrations(workdir string) (IntegrationUninstallReport, error) {
 			report.Removed = append(report.Removed, "codex")
 		}
 	}
+	if path, err := CodexConfigPath(); err == nil {
+		// Remove only ctx-wire's own CTX_WIRE_AGENT = "codex"; a user-modified
+		// value is preserved, and an uneditable shape is surfaced, not forced.
+		res, err := UninstallCodexAgentEnv(path)
+		if err != nil {
+			return report, err
+		}
+		switch res {
+		case CodexEnvUpdated:
+			report.Removed = append(report.Removed, "codex agent env")
+		case CodexEnvManual:
+			report.Skipped = append(report.Skipped, path)
+		}
+	}
 	if hookPath, err := GeminiHookPath(); err == nil {
 		if settingsPath, err := GeminiSettingsPath(); err == nil {
 			if changed, err := UninstallGeminiSettings(settingsPath, hookPath); err != nil {

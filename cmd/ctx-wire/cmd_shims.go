@@ -96,8 +96,9 @@ func shimsUninstall(installDir string, theme ui.Theme) int {
 func shimsStatus(installDir string, theme ui.Theme) int {
 	dirs := shim.ManagedDirsWith(installDir)
 	installed, active, uses, total := shim.AggregateStatus(dirs)
-	fmt.Printf("%s %d/%d managed shims installed across %d dir(s)\n",
-		theme.OK.Render("Shims"), installed, total, len(dirs))
+	fmt.Println(theme.Heading("ctx-wire shims: status"))
+	fmt.Println()
+	fmt.Printf("%d/%d managed shims installed across %d dir(s)\n", installed, total, len(dirs))
 	for _, d := range dirs {
 		st := shim.Inspect(d, shim.DefaultCommands)
 		line := fmt.Sprintf("  %s: %d installed, %d first on PATH", theme.Path.Render(d), len(st.Installed), len(st.Active))

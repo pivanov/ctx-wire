@@ -249,8 +249,30 @@ func (t Theme) PercentBare(v float64, parens bool) string {
 	}
 }
 
-// Bar renders a percent bar. Colored bars use green filled cells and gray empty
-// cells; plain bars use # and . for stable logs/tests.
+// Meter renders the filled/empty cells of a bar (no brackets) and is the single
+// source of truth for bar fills across the CLI. Colored meters use green filled
+// cells and gray empty cells; plain meters use # and . for stable logs/tests.
+func (t Theme) Meter(filled, empty int) string {
+	if filled < 0 {
+		filled = 0
+	}
+	if empty < 0 {
+		empty = 0
+	}
+	if !t.Color {
+		return strings.Repeat("#", filled) + strings.Repeat(".", empty)
+	}
+	var s string
+	if filled > 0 {
+		s += t.Good.Render(strings.Repeat("░", filled))
+	}
+	if empty > 0 {
+		s += t.Dim.Render(strings.Repeat("░", empty))
+	}
+	return s
+}
+
+// Bar renders a bracketed percent bar built from Meter cells.
 func (t Theme) Bar(pct float64, width int) string {
 	if pct < 0 {
 		pct = 0
@@ -262,11 +284,7 @@ func (t Theme) Bar(pct float64, width int) string {
 	if filled > width {
 		filled = width
 	}
-	empty := width - filled
-	if !t.Color {
-		return "[" + strings.Repeat("#", filled) + strings.Repeat(".", empty) + "]"
-	}
-	return "[" + t.Good.Render(strings.Repeat("░", filled)) + t.Dim.Render(strings.Repeat("░", empty)) + "]"
+	return t.Meter(filled, width-filled)
 }
 
 type palette struct {

@@ -1,7 +1,6 @@
 package discover
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -119,30 +118,11 @@ func wrappable(cmd string) bool {
 // FormatSessionsThemed renders the adoption table, newest first.
 func FormatSessionsThemed(stats []SessionStat, theme ui.Theme) string {
 	var b strings.Builder
-	b.WriteString(theme.Heading("ctx-wire session: adoption") + "\n")
+	b.WriteString(theme.Heading("ctx-wire session: adoption") + "\n\n")
 	if len(stats) == 0 {
 		b.WriteString("no agent sessions with routable commands found\n")
 		return b.String()
 	}
-	fmt.Fprintf(&b, "%-7s %-30s %5s %5s  %s\n", "Agent", "Session", "Cmds", "Used", "Adoption")
-	for _, s := range stats {
-		file := s.File
-		if len(file) > 30 {
-			file = file[:29] + "…"
-		}
-		const width = 10
-		filled := int(float64(width) * s.AdoptionPct() / 100)
-		if filled < 0 {
-			filled = 0
-		}
-		if filled > width {
-			filled = width
-		}
-		bar := theme.OK.Render(strings.Repeat("█", filled)) + theme.Dim.Render(strings.Repeat("░", width-filled))
-		// Aligned columns stay plain (ANSI codes would break %-Ns padding); color
-		// only the trailing bar and percentage where alignment no longer matters.
-		fmt.Fprintf(&b, "%-7s %-30s %5d %5d  %s %s\n",
-			s.Agent, file, s.Coverable, s.Covered, bar, theme.Number.Render(fmt.Sprintf("%.1f%%", s.AdoptionPct())))
-	}
+	b.WriteString(sessionTable(stats, theme))
 	return b.String()
 }

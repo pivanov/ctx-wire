@@ -46,7 +46,7 @@ func cmdUpdate(args []string) int {
 	case res.UpToDate:
 		fmt.Printf("%s already on the latest release (%s)\n", theme.Success(), res.Current)
 	case check:
-		fmt.Printf("%s update available: %s -> %s\n", theme.Warn.Render("update"), res.Current, theme.Number.Render(res.Latest))
+		fmt.Printf("%s %s → %s available\n", theme.Title.Render("ctx-wire update:"), res.Current, theme.Number.Render(res.Latest))
 		fmt.Printf("  %s\n", theme.Dim.Render("run `ctx-wire update` to upgrade"))
 	case res.Updated:
 		fmt.Printf("%s updated %s -> %s\n", theme.Success(), res.Current, theme.Number.Render(res.Latest))

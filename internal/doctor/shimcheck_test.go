@@ -50,3 +50,45 @@ func TestShimPathChecks(t *testing.T) {
 		t.Errorf("no installed shims -> no advisory, got %+v", got)
 	}
 }
+
+// TestShimInstalledCheck pins the "installed" check, whose 0-shims branch used to
+// Warn unconditionally and tell every user to run `ctx-wire init <agent>`. For a
+// hook/plugin-covered agent, zero shims is the correct, intended state (the agent
+// is wired through its hook), so that branch must report Off, not Warn.
+func TestShimInstalledCheck(t *testing.T) {
+	const dir, total = "/home/u/.local/bin", 3
+
+	cases := []struct {
+		name        string
+		installed   int
+		skipped     int
+		hookCovered bool
+		wantStatus  Status
+	}{
+		{"all installed", 3, 0, false, OK},
+		{"all installed, hook-covered too", 3, 0, true, OK},
+		{"partial install", 2, 0, false, OK},
+		{"zero shims, hook-covered -> not a problem (the false-positive we fixed)", 0, 0, true, Off},
+		{"zero shims, nothing wired -> actionable", 0, 0, false, Warn},
+	}
+	for _, tc := range cases {
+		got := shimInstalledCheck(tc.installed, total, tc.skipped, dir, tc.hookCovered)
+		if got.Name != "installed" || got.Status != tc.wantStatus {
+			t.Errorf("%s: got {%q, %s}, want {installed, %s} (%q)", tc.name, got.Name, got.Status, tc.wantStatus, got.Detail)
+		}
+	}
+
+	// The load-bearing guarantee: a hook-covered user with zero shims must never be
+	// told to run init (it would install nothing for them) and must not be a Warn.
+	got := shimInstalledCheck(0, total, 0, dir, true)
+	if got.Status == Warn {
+		t.Error("zero shims + hook-covered must not Warn")
+	}
+	if strings.Contains(got.Detail, "ctx-wire init") {
+		t.Errorf("hook-covered user must not be told to run init, got %q", got.Detail)
+	}
+	// But when nothing covers the agent, the actionable advice stays.
+	if got := shimInstalledCheck(0, total, 0, dir, false); !strings.Contains(got.Detail, "ctx-wire init") {
+		t.Errorf("unwired user should be pointed at init, got %q", got.Detail)
+	}
+}

@@ -86,6 +86,31 @@ func FormatThemed(s *Summary, theme ui.Theme) string {
 		b.WriteByte('\n')
 		fmt.Fprintf(&b, "%s\n", gt.Dim.Render("hook = agent rewrite/plugin, shim = PATH shim, run = manual ctx-wire run"))
 	}
+	if len(s.ByAgent) > 0 {
+		fmt.Fprintf(&b, "\n%s\n", gt.Section.Render("Per Agent"))
+		var maxSaved int64
+		for _, st := range s.ByAgent {
+			if st.SavedBytes > maxSaved {
+				maxSaved = st.SavedBytes
+			}
+		}
+		rows := make([][]string, 0, len(s.ByAgent))
+		for _, st := range s.ByAgent {
+			label := st.Agent
+			if label == "" {
+				label = "(untagged)"
+			}
+			rows = append(rows, []string{
+				label,
+				fmt.Sprintf("%d", st.Commands),
+				ui.HumanBytes(st.SavedBytes),
+				gt.percentBare(st.SavingsPct()),
+				gt.impact(st.SavedBytes, maxSaved, 18),
+			})
+		}
+		b.WriteString(gt.agentTable(rows))
+		b.WriteByte('\n')
+	}
 	actionable := actionableOpportunities(s.Opportunities)
 	if len(actionable) > 0 {
 		fmt.Fprintf(&b, "\n%s\n", gt.Section.Render("Token Opportunities"))
@@ -178,54 +203,36 @@ func (t gainTheme) percentBare(v float64) string {
 	}
 }
 
-func (t gainTheme) bar(pct float64, width int) string {
-	if pct < 0 {
-		pct = 0
-	}
-	if pct > 100 {
-		pct = 100
-	}
-	filled := int(pct/100*float64(width) + 0.5)
-	if filled > width {
-		filled = width
-	}
-	empty := width - filled
-	if !t.Color {
-		return "[" + strings.Repeat("#", filled) + strings.Repeat(".", empty) + "]"
-	}
-	return "[" + t.filledBar(filled) + t.emptyBar(empty) + "]"
-}
+// bar/filledBar/emptyBar delegate to the embedded ui.Theme so every CLI bar
+// shares one fill implementation (ui.Theme.Meter).
+func (t gainTheme) bar(pct float64, width int) string { return t.Bar(pct, width) }
 
-func (t gainTheme) filledBar(width int) string {
-	if !t.Color {
-		return strings.Repeat("#", width)
-	}
-	return t.Good.Render(strings.Repeat("░", width))
-}
+func (t gainTheme) filledBar(width int) string { return t.Meter(width, 0) }
 
-func (t gainTheme) emptyBar(width int) string {
-	if !t.Color {
-		return strings.Repeat(".", width)
-	}
-	return t.Dim.Render(strings.Repeat("░", width))
-}
+func (t gainTheme) emptyBar(width int) string { return t.Meter(0, width) }
 
+// impact renders the relative-impact bar for a table's last column, using the
+// same unbracketed fill as the efficiency and session-adoption bars.
 func (t gainTheme) impact(saved, maxSaved int64, width int) string {
-	if saved < 0 {
+	var inner string
+	switch {
+	case saved < 0:
 		negative := min(width, 3)
-		return t.Bad.Render(strings.Repeat("░", negative)) + t.emptyBar(max(width-negative, 0))
+		inner = t.Bad.Render(strings.Repeat("░", negative)) + t.emptyBar(max(width-negative, 0))
+	case maxSaved <= 0:
+		inner = t.emptyBar(width)
+	default:
+		filled := int(float64(saved)/float64(maxSaved)*float64(width) + 0.5)
+		if filled > width {
+			filled = width
+		}
+		if !t.Color {
+			inner = strings.Repeat("#", filled) + strings.Repeat(".", width-filled)
+		} else {
+			inner = t.filledBar(filled) + t.emptyBar(width-filled)
+		}
 	}
-	if maxSaved <= 0 {
-		return t.emptyBar(width)
-	}
-	filled := int(float64(saved)/float64(maxSaved)*float64(width) + 0.5)
-	if filled > width {
-		filled = width
-	}
-	if !t.Color {
-		return strings.Repeat("#", filled) + strings.Repeat(".", width-filled)
-	}
-	return t.filledBar(filled) + t.emptyBar(width-filled)
+	return inner
 }
 
 func (t gainTheme) table(rows [][]string) string {
@@ -237,6 +244,13 @@ func (t gainTheme) table(rows [][]string) string {
 // right-aligning the numeric columns (count, saved, avg%).
 func (t gainTheme) sourceTable(rows [][]string) string {
 	return t.tableWith([]string{"Source", "Count", "Saved", "Avg%", "Impact"},
+		map[int]bool{1: true, 2: true, 3: true}, rows)
+}
+
+// agentTable renders the per-agent breakdown (Agent/Commands/Saved/Avg%/Impact),
+// right-aligning the numeric columns.
+func (t gainTheme) agentTable(rows [][]string) string {
+	return t.tableWith([]string{"Agent", "Commands", "Saved", "Avg%", "Impact"},
 		map[int]bool{1: true, 2: true, 3: true}, rows)
 }
 

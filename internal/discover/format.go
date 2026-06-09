@@ -27,7 +27,7 @@ func Format(r *Report, opts Options) string {
 // ctx-wire, ranked. Escaped commands are the actionable blind spot.
 func FormatThemed(r *Report, opts Options, theme ui.Theme) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", theme.Heading("ctx-wire discover: escaped commands"))
+	fmt.Fprintf(&b, "%s\n\n", theme.Heading("ctx-wire discover: escaped commands"))
 	fmt.Fprintf(&b, "%s\n", theme.Dim.Render("agent commands ctx-wire never filtered"))
 
 	scope := "all projects"

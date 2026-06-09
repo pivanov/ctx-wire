@@ -21,7 +21,7 @@ commands. For the config file and environment variables see
 | `ctx-wire uninstall` | Remove the ctx-wire binary, managed shims, and only ctx-wire hook/config entries |
 | `ctx-wire trust` | Approve this project's `.ctx-wire/filters.toml` by hash |
 | `ctx-wire untrust` | Revoke trust for this project's `.ctx-wire/filters.toml` |
-| `ctx-wire gain` | Report token savings recorded so far |
+| `ctx-wire gain` | Report token savings recorded so far, with per-program, per-source, and per-agent breakdowns |
 | `ctx-wire gain --since 1h` | Report only recent savings |
 | `ctx-wire gain --history [--top N] [--agent <name>]` | Recent commands (time, invoking agent, savings, full command), newest last |
 | `ctx-wire gain --agent <name>` | Keep only one invoking agent's commands; composes with any view (e.g. `--history`, `--daily`) |
@@ -194,6 +194,12 @@ After an upgrade, an existing hook/plugin-only install is **not** auto-modified:
 - **Claude Code, Cursor, Codex, Gemini CLI**: transparent command rewrite via a
   pre-tool hook. Codex additionally requires you to enable its hooks feature and
   trust the hook (the command prints the exact steps; it never bypasses trust).
+  For Codex, `init` also sets `CTX_WIRE_AGENT = "codex"` in
+  `shell_environment_policy.set` in `~/.codex/config.toml`, so `gain` attributes
+  direct `ctx-wire run` commands even when the Codex sandbox blocks the
+  `ps`-based agent detection. That key only labels ctx-wire telemetry (it is not
+  a hooks or trust change), a user-modified value is never overwritten, and
+  `ctx-wire uninstall` removes exactly that key.
   The Claude hook also respects your Bash permission rules: if a command matches
   a `permissions.deny` or `permissions.ask` rule in your `settings.json`,
   ctx-wire does **not** auto-approve the rewritten form. It steps aside so Claude
@@ -215,7 +221,8 @@ After an upgrade, an existing hook/plugin-only install is **not** auto-modified:
   `ctx-wire mcp`.
 - **Uninstall**: `ctx-wire uninstall` removes managed shims, the local
   `~/.local/bin/ctx-wire` binary, and only ctx-wire-owned hook entries, MCP
-  server keys, and instruction blocks. It then purges ctx-wire's own config and
+  server keys, instruction blocks, and the Codex agent-attribution env key
+  (skipped if you changed its value). It then purges ctx-wire's own config and
   data directories wholesale, so filters, trust records, gain logs, tee
   captures, and telemetry config/state are all removed too. Unrelated hooks, MCP
   servers, and rule-file content are left intact.

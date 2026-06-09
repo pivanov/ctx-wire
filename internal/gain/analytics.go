@@ -270,7 +270,7 @@ func FormatGraphThemed(daily []DailyStat, theme ui.Theme) string {
 		if filled > width {
 			filled = width
 		}
-		bar := theme.OK.Render(strings.Repeat("█", filled)) + theme.Dim.Render(strings.Repeat("░", width-filled))
+		bar := theme.Meter(filled, width-filled)
 		fmt.Fprintf(&b, "%-12s %s %s\n", theme.Dim.Render(d.Date), bar, theme.Number.Render(ui.HumanBytes(d.SavedBytes)))
 	}
 	return b.String()

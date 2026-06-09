@@ -83,7 +83,6 @@ func FormatCommand(r Report) string {
 // FormatCommandThemed renders a Report with terminal styling.
 func FormatCommandThemed(r Report, theme ui.Theme) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\n", theme.Label.Render("command:"), theme.Command.Render(r.Original))
 	multi := len(r.Segments) > 1
 	for i, s := range r.Segments {
 		indent := "  "
@@ -92,7 +91,7 @@ func FormatCommandThemed(r Report, theme ui.Theme) string {
 			indent = "    "
 		}
 		if s.Wrapped {
-			fmt.Fprintf(&b, "%s%s %s -> %s\n", indent, theme.Label.Render("hook:  "), theme.OK.Render("wrapped"), theme.Command.Render(s.Rewritten))
+			fmt.Fprintf(&b, "%s%s %s → %s\n", indent, theme.Label.Render("hook:  "), theme.OK.Render("wrapped"), theme.Command.Render(s.Rewritten))
 			switch s.RunnerMode {
 			case ModeFiltered:
 				note := ""

@@ -152,6 +152,7 @@ func cmdVerify(args []string) int {
 
 	var passed, failed, drafts int
 	theme := themeForStdout()
+	fmt.Println(theme.Heading("ctx-wire verify: conformance"))
 	for _, o := range res.Outcomes {
 		if o.Draft {
 			drafts++

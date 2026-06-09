@@ -188,17 +188,11 @@ func shimsSection(opts Options) Section {
 	st := shim.Inspect(dir, shim.DefaultCommands)
 	total := len(st.Commands)
 	installed := len(st.Installed)
-	switch {
-	case installed == total && len(st.Skipped) == 0:
-		sec.Checks = append(sec.Checks, Check{"installed", OK,
-			fmt.Sprintf("%d/%d managed command shims in %s", installed, total, display(st.Dir))})
-	case installed > 0:
-		sec.Checks = append(sec.Checks, Check{"installed", OK,
-			fmt.Sprintf("%d/%d managed command shims in %s; missing commands are not shimmed", installed, total, display(st.Dir))})
-	default:
-		sec.Checks = append(sec.Checks, Check{"installed", Warn,
-			fmt.Sprintf("no managed command shims in %s; run `ctx-wire init <agent>`", display(st.Dir))})
-	}
+	// A hook/plugin-capable agent (claude, codex, cursor, ...) is wired through its
+	// hook, not PATH shims, so for it zero shims is the correct state, not a problem.
+	// Compute coverage once and reuse it for the install, PATH, and usage checks.
+	hookCovered := hookOrPluginConfigured(opts)
+	sec.Checks = append(sec.Checks, shimInstalledCheck(installed, total, len(st.Skipped), display(st.Dir), hookCovered))
 	if len(st.Missing) > 0 {
 		sec.Checks = append(sec.Checks, Check{"missing tools", OK,
 			fmt.Sprintf("%d candidate command(s) not installed; no shims created", len(st.Missing))})
@@ -215,19 +209,45 @@ func shimsSection(opts Options) Section {
 	// Aggregate across every managed shim dir on PATH (not just the install dir):
 	// a stale earlier dir can be the one actually first on PATH and slowing prompts.
 	aggInstalled, aggActive, _, _ := shim.AggregateStatus(shim.ManagedDirsWith(dir))
-	sec.Checks = append(sec.Checks, shimPathChecks(dir, aggInstalled, aggActive, total, hookOrPluginConfigured(opts))...)
+	sec.Checks = append(sec.Checks, shimPathChecks(dir, aggInstalled, aggActive, total, hookCovered)...)
 	if missing := missingSystemPathDirs(); len(missing) > 0 {
 		sec.Checks = append(sec.Checks, Check{"system PATH", Warn,
 			fmt.Sprintf("PATH is missing %s; a shim then cannot find the real command (you get \"no real X on PATH\"), and tools like git cannot find ssh. This is an environment issue, not ctx-wire; fix your shell PATH",
 				strings.Join(missing, " and "))})
 	}
-	if st.Uses > 0 {
+	switch {
+	case st.Uses > 0:
 		sec.Checks = append(sec.Checks, Check{"usage", OK,
 			fmt.Sprintf("%d shim capture(s) recorded; last %s", st.Uses, st.LastUse)})
-	} else {
+	case hookCovered && installed == 0:
+		// No shims by design for a hook-covered agent, so no captures is expected;
+		// staying silent avoids a false "nothing is working" alarm.
+	default:
 		sec.Checks = append(sec.Checks, Check{"usage", Warn, "no shim captures recorded yet"})
 	}
 	return sec
+}
+
+// shimInstalledCheck reports the "installed" check for the shims section. Zero
+// shims is only actionable when nothing already covers the agent: a hook/plugin-
+// capable agent (claude, codex, cursor, ...) is wired through its hook, so for it
+// zero shims is the correct state, not a problem. Pure so the decision is
+// unit-testable without the filesystem; dir is already display-formatted.
+func shimInstalledCheck(installed, total, skipped int, dir string, hookCovered bool) Check {
+	switch {
+	case installed == total && skipped == 0:
+		return Check{"installed", OK,
+			fmt.Sprintf("%d/%d managed command shims in %s", installed, total, dir)}
+	case installed > 0:
+		return Check{"installed", OK,
+			fmt.Sprintf("%d/%d managed command shims in %s; missing commands are not shimmed", installed, total, dir)}
+	case hookCovered:
+		return Check{"installed", Off,
+			fmt.Sprintf("no managed command shims in %s; not needed, a hook/plugin covers this agent", dir)}
+	default:
+		return Check{"installed", Warn,
+			fmt.Sprintf("no managed command shims in %s and no hook/plugin configured; run `ctx-wire init <agent>`", dir)}
+	}
 }
 
 // shimPathChecks decides the PATH / startup-cost advisory from the resolution
@@ -335,6 +355,17 @@ func hooksSection(opts Options) Section {
 					sec.Checks = append(sec.Checks, Check{"codex hooks feature", Warn,
 						"disabled; set [features] hooks = true and trust the hook via `/hooks`"})
 				}
+			}
+			// Agent attribution proves config-present only: Codex profiles can
+			// override the top-level policy, so end-to-end confirmation is a
+			// later gain entry with agent=codex. Only reported when config.toml
+			// exists (a codex user), to avoid noise for everyone else.
+			if install.CodexAgentEnvConfigured(cp) {
+				sec.Checks = append(sec.Checks, Check{"codex agent attribution", OK,
+					"CTX_WIRE_AGENT=codex in shell_environment_policy.set (config-present; runtime proof is a gain entry with agent=codex)"})
+			} else if _, serr := os.Stat(cp); serr == nil {
+				sec.Checks = append(sec.Checks, Check{"codex agent attribution", Warn,
+					"not set; run `ctx-wire init codex` so gain attributes direct runs when the sandbox blocks ps"})
 			}
 		}
 	}
@@ -529,9 +560,15 @@ func Format(r *Report) string {
 // FormatThemed renders a report as concise terminal status lines.
 func FormatThemed(r *Report, theme ui.Theme) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", theme.Heading("ctx-wire doctor"))
+	fmt.Fprintf(&b, "%s\n", theme.Heading("ctx-wire doctor: health check"))
 	for _, sec := range r.Sections {
-		fmt.Fprintf(&b, "\n%s\n", theme.Section.Render(sec.Title))
+		title := sec.Title
+		if title == "mcp" {
+			title = "MCP"
+		} else if title != "" {
+			title = strings.ToUpper(title[:1]) + title[1:]
+		}
+		fmt.Fprintf(&b, "\n%s\n", theme.Section.Render(title))
 		for _, c := range sec.Checks {
 			fmt.Fprintf(&b, "  %s %-22s %s\n",
 				theme.Status(c.Status.String()),

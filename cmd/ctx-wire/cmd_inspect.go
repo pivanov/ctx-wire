@@ -53,6 +53,8 @@ func cmdInspect(args []string) int {
 	}
 
 	theme := themeForStdout()
+	fmt.Println(theme.Heading("ctx-wire inspect: audit"))
+	fmt.Println()
 	entries := recent.List()
 	if len(entries) == 0 {
 		return inspectEmpty(theme)
@@ -118,11 +120,11 @@ func inspectList(theme ui.Theme, entries []recent.Entry) {
 func inspectEmpty(theme ui.Theme) int {
 	cfg, _ := config.Load()
 	if !cfg.Retention.Enabled {
-		fmt.Printf("%s the recent-outputs store is off, so there is nothing to inspect yet.\n", theme.Warn.Render("inspect:"))
+		fmt.Printf("%s\n", theme.Warn.Render("The recent-outputs store is off, so there is nothing to inspect yet."))
 		fmt.Print("  Enable it to audit what ctx-wire removes from successful commands:\n\n")
 		fmt.Print("    [retention]\n    enabled = true\n    raw_bodies = true   # for the full raw-vs-filtered audit\n\n")
 	} else {
-		fmt.Printf("%s no commands retained yet; run a filtered command and try again.\n\n", theme.Warn.Render("inspect:"))
+		fmt.Printf("%s\n\n", theme.Warn.Render("No commands retained yet; run a filtered command and try again."))
 	}
 
 	if entries, err := gain.RecentEntries(8); err == nil && len(entries) > 0 {

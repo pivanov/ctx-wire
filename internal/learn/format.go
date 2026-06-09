@@ -17,7 +17,7 @@ const RulesFileRelPath = ".claude/rules/cli-corrections.md"
 // their occurrence counts and the token change to make.
 func FormatThemed(rep *Report, theme ui.Theme) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", theme.Heading("ctx-wire learn: CLI corrections"))
+	fmt.Fprintf(&b, "%s\n\n", theme.Heading("ctx-wire learn: CLI corrections"))
 	fmt.Fprintf(&b, "%s\n", theme.Dim.Render(fmt.Sprintf(
 		"%d rule(s) from %d correction(s) across %d session(s)",
 		len(rep.Rules), rep.Pairs, rep.Sessions)))

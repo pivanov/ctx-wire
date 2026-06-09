@@ -26,6 +26,14 @@ config and environment variables see [CONFIGURATION.md](CONFIGURATION.md).
   enabled and the hook trusted. `ctx-wire doctor` reports the feature flag;
   enable `[features] hooks = true` in `~/.codex/config.toml`, then run codex and
   trust the hook via `/hooks`. ctx-wire never bypasses Codex trust.
+- **`gain` shows `(untagged)` commands in the Per Agent breakdown.** Direct
+  `ctx-wire run` commands are attributed by walking the process tree with `ps`,
+  and some sandboxes (Codex's, for example) block `ps`, so the agent comes back
+  empty. For Codex, `ctx-wire init codex` fixes this by setting
+  `CTX_WIRE_AGENT = "codex"` in `shell_environment_policy.set`
+  (`ctx-wire doctor` reports the state as "codex agent attribution"). For other
+  wrappers, export `CTX_WIRE_AGENT=<agent>` in the environment the agent uses
+  for shell commands.
 - **A rules-based agent still runs raw commands.** Cline, Windsurf, Kilo Code,
   and Antigravity use rules files, not terminal hooks. They improve default
   agent behavior, but the agent can still ignore the guidance. Use

@@ -32,6 +32,9 @@ func cmdExplain(args []string) int {
 		return 1
 	}
 	line := strings.Join(args, " ")
-	fmt.Print(explain.FormatCommandThemed(explain.Command(reg, line), themeForStdout()))
+	theme := themeForStdout()
+	fmt.Println(theme.Heading("ctx-wire explain: " + line))
+	fmt.Println()
+	fmt.Print(explain.FormatCommandThemed(explain.Command(reg, line), theme))
 	return 0
 }

@@ -76,7 +76,7 @@ func cmdTelemetryStatus(verbose bool) int {
 	if status.ForcedByEnv {
 		state += " (from CTX_WIRE_TELEMETRY)"
 	}
-	fmt.Println(theme.Heading("ctx-wire telemetry"))
+	fmt.Println(theme.Heading("ctx-wire telemetry: status"))
 	fmt.Println()
 	fmt.Println(theme.Field("Telemetry", theme.Number.Render(state)))
 

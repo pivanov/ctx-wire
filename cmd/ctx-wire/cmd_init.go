@@ -335,6 +335,30 @@ func cmdInitCodex() int {
 		return 1
 	}
 
+	// Agent attribution: Codex's sandbox can block the `ps` process-tree walk,
+	// which leaves direct `ctx-wire run` commands unattributed in gain. Setting
+	// CTX_WIRE_AGENT via Codex's shell env policy fixes that. This is the one
+	// deliberate write ctx-wire makes to config.toml: it only labels ctx-wire
+	// telemetry, it is not a hooks or trust change (those stay user-owned).
+	// Best-effort: a failure here never fails init.
+	switch res, aerr := install.InstallCodexAgentEnv(configPath); {
+	case aerr != nil:
+		fmt.Fprintf(os.Stderr, "ctx-wire init: codex agent attribution: %v\n", aerr)
+	case res == install.CodexEnvUpdated:
+		fmt.Printf("%s CTX_WIRE_AGENT=codex in %s (shell_environment_policy.set)\n", theme.OK.Render("Configured"), theme.Path.Render(configPath))
+		fmt.Println("   Labels ctx-wire telemetry when the sandbox blocks ps; not a hooks or trust change.")
+		fmt.Println("   Applies on the next Codex session; `ctx-wire uninstall` reverts this key.")
+	case res == install.CodexEnvNoChange:
+		fmt.Printf("%s agent attribution already configured in %s\n", theme.OK.Render("OK"), theme.Path.Render(configPath))
+	case res == install.CodexEnvUserManaged:
+		fmt.Printf("%s %s already set to a custom value in %s; leaving it as is\n", theme.OK.Render("OK"), install.CodexAgentEnvKey, theme.Path.Render(configPath))
+	case res == install.CodexEnvManual:
+		fmt.Printf("%s could not confidently edit %s; for agent attribution add manually:\n", theme.Warn.Render("Note"), theme.Path.Render(configPath))
+		for _, line := range strings.Split(install.CodexAgentEnvSnippet, "\n") {
+			fmt.Printf("       %s\n", line)
+		}
+	}
+
 	fmt.Printf("\n%s\n", theme.Section.Render("Two user steps remain (ctx-wire does not perform them for you):"))
 	if !enabled {
 		fmt.Printf("  1. Enable hooks: add to %s\n", theme.Path.Render(configPath))
