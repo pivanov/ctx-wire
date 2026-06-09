@@ -44,7 +44,7 @@ func cmdMCPWrap(args []string) int {
 			summary: "Transparently relay a stdio MCP server, measure per-tool token cost, and optionally compress verbose results.",
 			notes: []string{
 				"It forwards every JSON-RPC message unchanged and records the result size of each tools/call, so you can see where MCP tokens go. A per-tool summary is written under the data dir and printed to stderr when the session ends.",
-				"`--compress` reduces verbose accessibility snapshots (today: chrome-devtools take_snapshot) before they reach the agent. The reduction is subtractive (drops page-chrome subtrees and redundant text; never renumbers a ref), the raw result is spooled locally for recovery, and any reduction error falls back to the untouched result.",
+				"`--compress` reduces verbose accessibility snapshots (chrome-devtools take_snapshot and Playwright browser_snapshot) before they reach the agent. The reduction is subtractive (drops page-chrome subtrees and redundant text; never renumbers a ref), the raw result is spooled locally for recovery, and any reduction error falls back to the untouched result.",
 				"`install <server>` rewrites that server's entry in your MCP config (default ~/.claude.json) to launch through mcp-wrap; `uninstall` reverts it. Both back up the config and need an agent restart to take effect.",
 			},
 			examples: []string{
@@ -354,7 +354,7 @@ func (m *mcpMeasure) reduceLine(line []byte) (out []byte, rawN, outN int, ok boo
 			continue
 		}
 		rawN += len(txt)
-		red, dropped := mcpcompress.ReduceSnapshotText(txt)
+		red, dropped := mcpcompress.ReduceSnapshot(txt)
 		if dropped > 0 {
 			red += "\n[ctx-wire: snapshot compressed; " + strconv.Itoa(dropped) + " elements omitted, raw (scrubbed) spooled to " + m.spoolPath + "]"
 			item["text"] = red
