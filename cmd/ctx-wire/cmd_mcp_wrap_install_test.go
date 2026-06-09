@@ -4,9 +4,44 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+// TestMCPWrapCompressWrapUnwrap covers the --compress wrap shape and that both the
+// new (`mcp-wrap --compress --`) and old (`mcp-wrap --`) shapes unwrap cleanly, so
+// turning on compression stays reversible and an upgrade does not strand a server.
+func TestMCPWrapCompressWrapUnwrap(t *testing.T) {
+	const exe = "/path/to/ctx-wire"
+
+	sc := map[string]any{"command": "npx", "args": []any{"chrome-devtools-mcp@latest"}}
+	if !wrapServerEntry(sc, exe, true) {
+		t.Fatal("expected --compress wrap to apply")
+	}
+	want := []any{"mcp-wrap", "--compress", "--", "npx", "chrome-devtools-mcp@latest"}
+	if got := sc["args"].([]any); !reflect.DeepEqual(got, want) {
+		t.Fatalf("compress wrap args = %v, want %v", got, want)
+	}
+	if sc["command"] != exe || !isWrapped(sc, exe) {
+		t.Error("isWrapped must recognize the --compress shape")
+	}
+	if !unwrapServerEntry(sc, exe) {
+		t.Fatal("expected unwrap to apply")
+	}
+	if sc["command"] != "npx" || !reflect.DeepEqual(sc["args"].([]any), []any{"chrome-devtools-mcp@latest"}) {
+		t.Errorf("unwrap of --compress shape did not restore original: cmd=%v args=%v", sc["command"], sc["args"])
+	}
+
+	// Back-compat: a server wrapped the old measurement-only way must still unwrap.
+	old := map[string]any{"command": exe, "args": []any{"mcp-wrap", "--", "node", "x.js"}}
+	if !isWrapped(old, exe) {
+		t.Error("isWrapped must still recognize the old `mcp-wrap --` shape")
+	}
+	if !unwrapServerEntry(old, exe) || old["command"] != "node" {
+		t.Errorf("old shape did not unwrap to node: cmd=%v", old["command"])
+	}
+}
 
 func TestMCPWrapInstallRoundTrip(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "claude.json")
@@ -38,7 +73,7 @@ func TestMCPWrapInstallRoundTrip(t *testing.T) {
 		return m["projects"].(map[string]any)["/p"].(map[string]any)["mcpServers"].(map[string]any)["cdt"].(map[string]any)["args"].([]any)
 	}
 
-	if code := mcpWrapInstall(cfg, "cdt"); code != 0 {
+	if code := mcpWrapInstall(cfg, "cdt", false); code != 0 {
 		t.Fatalf("install exit %d", code)
 	}
 	args := cdtArgs()
@@ -47,7 +82,7 @@ func TestMCPWrapInstallRoundTrip(t *testing.T) {
 	}
 
 	// Idempotent: a second install does not double-wrap.
-	if code := mcpWrapInstall(cfg, "cdt"); code != 0 {
+	if code := mcpWrapInstall(cfg, "cdt", false); code != 0 {
 		t.Fatalf("second install exit %d", code)
 	}
 	if a := cdtArgs(); len(a) != 4 {
@@ -117,7 +152,7 @@ func TestMCPWrapInstallPreservesKeyOrder(t *testing.T) {
 	if err := os.WriteFile(cfg, []byte(orig), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := mcpWrapInstall(cfg, "cdt"); code != 0 {
+	if code := mcpWrapInstall(cfg, "cdt", false); code != 0 {
 		t.Fatalf("install exit %d", code)
 	}
 	s, _ := os.ReadFile(cfg)

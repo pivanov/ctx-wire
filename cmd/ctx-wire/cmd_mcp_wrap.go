@@ -38,14 +38,14 @@ func cmdMCPWrap(args []string) int {
 		printHelp(os.Stdout, helpDoc{
 			usage: []string{
 				"ctx-wire mcp-wrap [--compress] -- <server> [args]",
-				"ctx-wire mcp-wrap install <server> [--config PATH]",
+				"ctx-wire mcp-wrap install [--compress] <server> [--config PATH]",
 				"ctx-wire mcp-wrap uninstall <server> [--config PATH]",
 			},
 			summary: "Transparently relay a stdio MCP server, measure per-tool token cost, and optionally compress verbose results.",
 			notes: []string{
 				"It forwards every JSON-RPC message unchanged and records the result size of each tools/call, so you can see where MCP tokens go. A per-tool summary is written under the data dir and printed to stderr when the session ends.",
 				"`--compress` reduces verbose accessibility snapshots (chrome-devtools take_snapshot and Playwright browser_snapshot) before they reach the agent. The reduction is subtractive (drops page-chrome subtrees and redundant text; never renumbers a ref), the raw result is spooled locally for recovery, and any reduction error falls back to the untouched result.",
-				"`install <server>` rewrites that server's entry in your MCP config (default ~/.claude.json) to launch through mcp-wrap; `uninstall` reverts it. Both back up the config and need an agent restart to take effect.",
+				"`install <server>` rewrites that server's entry in your MCP config (default ~/.claude.json) to launch through mcp-wrap; add `--compress` to turn on snapshot compression for it; `uninstall` reverts either form. Both back up the config and need an agent restart to take effect.",
 			},
 			examples: []string{
 				"ctx-wire mcp-wrap -- npx @playwright/mcp@latest",
@@ -59,8 +59,11 @@ func cmdMCPWrap(args []string) int {
 	// install/uninstall rewrite the MCP config rather than relaying.
 	if len(args) > 0 && (args[0] == "install" || args[0] == "uninstall") {
 		name, configPath := "", ""
+		compress := false
 		for i, rest := 1, args; i < len(rest); i++ {
 			switch a := rest[i]; {
+			case a == "--compress":
+				compress = true
 			case a == "--config":
 				if i+1 < len(rest) {
 					i++
@@ -76,11 +79,11 @@ func cmdMCPWrap(args []string) int {
 			}
 		}
 		if name == "" {
-			usageLine(os.Stderr, "ctx-wire mcp-wrap "+args[0]+" <server> [--config PATH]")
+			usageLine(os.Stderr, "ctx-wire mcp-wrap "+args[0]+" [--compress] <server> [--config PATH]")
 			return 2
 		}
 		if args[0] == "install" {
-			return mcpWrapInstall(configPath, name)
+			return mcpWrapInstall(configPath, name, compress)
 		}
 		return mcpWrapUninstall(configPath, name)
 	}

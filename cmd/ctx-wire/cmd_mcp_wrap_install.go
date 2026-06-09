@@ -23,15 +23,15 @@ func defaultMCPConfigPath() string {
 // measures its tools/call token cost. Idempotent (an already-wrapped entry is
 // left alone) and reversible (mcpWrapUninstall restores it). The config is
 // backed up and written atomically; all other data is preserved.
-func mcpWrapInstall(configPath, name string) int {
-	return mcpWrapEdit(configPath, name, true)
+func mcpWrapInstall(configPath, name string, compress bool) int {
+	return mcpWrapEdit(configPath, name, true, compress)
 }
 
 func mcpWrapUninstall(configPath, name string) int {
-	return mcpWrapEdit(configPath, name, false)
+	return mcpWrapEdit(configPath, name, false, false)
 }
 
-func mcpWrapEdit(configPath, name string, install bool) int {
+func mcpWrapEdit(configPath, name string, install, compress bool) int {
 	if configPath == "" {
 		configPath = defaultMCPConfigPath()
 	}
@@ -69,7 +69,7 @@ func mcpWrapEdit(configPath, name string, install bool) int {
 		}
 		var done bool
 		if install {
-			done = wrapServerEntry(sc, exe)
+			done = wrapServerEntry(sc, exe, compress)
 		} else {
 			done = unwrapServerEntry(sc, exe)
 		}
@@ -148,7 +148,7 @@ func mcpWrapEdit(configPath, name string, install bool) int {
 // mcp-wrap. It returns false when there is nothing to do (already wrapped, or no
 // command). The original command and args are recoverable from the wrapped form,
 // so unwrap needs no separate record.
-func wrapServerEntry(sc map[string]any, exe string) bool {
+func wrapServerEntry(sc map[string]any, exe string, compress bool) bool {
 	cmd, ok := sc["command"].(string)
 	if !ok || cmd == "" {
 		return false
@@ -157,7 +157,11 @@ func wrapServerEntry(sc map[string]any, exe string) bool {
 		return false
 	}
 	origArgs := toStringList(sc["args"])
-	newArgs := []any{"mcp-wrap", "--", cmd}
+	newArgs := []any{"mcp-wrap"}
+	if compress {
+		newArgs = append(newArgs, "--compress")
+	}
+	newArgs = append(newArgs, "--", cmd)
 	for _, a := range origArgs {
 		newArgs = append(newArgs, a)
 	}
@@ -170,10 +174,20 @@ func unwrapServerEntry(sc map[string]any, exe string) bool {
 	if !isWrapped(sc, exe) {
 		return false
 	}
-	args := toStringList(sc["args"]) // ["mcp-wrap","--",origCmd, origArgs...]
-	sc["command"] = args[2]
+	args := toStringList(sc["args"]) // ["mcp-wrap"(,"--compress"),"--",origCmd,origArgs...]
+	sep := -1
+	for i, a := range args {
+		if a == "--" {
+			sep = i
+			break
+		}
+	}
+	if sep < 0 || sep+1 >= len(args) {
+		return false
+	}
+	sc["command"] = args[sep+1]
 	rest := []any{}
-	for _, a := range args[3:] {
+	for _, a := range args[sep+2:] {
 		rest = append(rest, a)
 	}
 	sc["args"] = rest
@@ -181,13 +195,18 @@ func unwrapServerEntry(sc map[string]any, exe string) bool {
 }
 
 // isWrapped reports whether sc is an entry THIS tool wrapped: it launches the
-// current ctx-wire executable AND carries the `mcp-wrap --` arg shape. Requiring
-// the command to match (not just the args) means uninstall never rewrites a
-// user's own server that happens to pass `mcp-wrap --` to some other program.
+// current ctx-wire executable AND carries the `mcp-wrap [--compress] --` arg
+// shape. Requiring the command to match (not just the args) means uninstall never
+// rewrites a user's own server that happens to pass `mcp-wrap --` to some other
+// program. Both the measurement (`mcp-wrap --`) and compression
+// (`mcp-wrap --compress --`) shapes are recognized, so an upgrade unwraps cleanly.
 func isWrapped(sc map[string]any, exe string) bool {
 	cmd, _ := sc["command"].(string)
 	args := toStringList(sc["args"])
-	return cmd == exe && len(args) >= 3 && args[0] == "mcp-wrap" && args[1] == "--"
+	if cmd != exe || len(args) < 3 || args[0] != "mcp-wrap" {
+		return false
+	}
+	return args[1] == "--" || (args[1] == "--compress" && len(args) >= 4 && args[2] == "--")
 }
 
 func toStringList(v any) []string {
