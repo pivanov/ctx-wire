@@ -258,7 +258,7 @@ function CountryPills({
                 {flagEmoji(row.code)}
               </span>
               <span className={active ? "text-head" : "text-fg"}>
-                {row.name}
+                {row.code.toUpperCase()}
               </span>
               <span className="tabular-nums text-cyan">
                 {formatTokens(row.tokens)}

@@ -668,6 +668,10 @@
   border-top-color: rgba(4, 9, 10, 0.92);
 }
 
+.globe-marker:hover,
+.globe-marker.is-focused {
+  z-index: 20;
+}
 .globe-marker:hover .globe-tooltip,
 .globe-marker.is-focused .globe-tooltip {
   opacity: 1;
