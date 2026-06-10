@@ -11,6 +11,7 @@ import (
 	"ctx-wire/internal/commandpolicy"
 	"ctx-wire/internal/config"
 	"ctx-wire/internal/filter"
+	"ctx-wire/internal/hook"
 	"ctx-wire/internal/install"
 	"ctx-wire/internal/recent"
 	"ctx-wire/internal/runner"
@@ -59,6 +60,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "ctx-wire: unknown [output] truncate level %q; using default\n", cfg.Output.Truncate)
 			}
 		}
+		hook.SetCaptureFileTools(cfg.Hooks.CaptureFileTools)
 		ret := recent.Options{
 			Enabled:    cfg.Retention.Enabled,
 			RawBodies:  cfg.Retention.RawBodies,

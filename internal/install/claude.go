@@ -49,10 +49,35 @@ func InstallClaudeMemory(path string) (bool, error) {
 	return upsertInstructionBlock(path, ctxWireRulesBlock)
 }
 
-// InstallClaude merges the ctx-wire PreToolUse hook into the settings file at
-// path. It returns changed=false when the hook is already present. Existing
-// settings and other hooks are preserved.
+// claudeFileToolsMatcher is the PreToolUse matcher for the file-tools capture
+// experiment (the Bash matcher stays a separate entry, always installed).
+const claudeFileToolsMatcher = "Read|Grep"
+
+// InstallClaude merges the ctx-wire PreToolUse hook (Bash matcher) into the
+// settings file at path. It returns changed=false when the hook is already
+// present. Existing settings and other hooks are preserved.
 func InstallClaude(path string) (changed bool, err error) {
+	return ensureClaudeMatcherEntry(path, "Bash", true)
+}
+
+// InstallClaudeFileTools adds the Read|Grep matcher entry for the file-tools
+// capture experiment. Matcher-aware: an existing Bash-only install gains the
+// second entry (the command string alone is not presence).
+func InstallClaudeFileTools(path string) (bool, error) {
+	return ensureClaudeMatcherEntry(path, claudeFileToolsMatcher, true)
+}
+
+// UninstallClaudeFileTools removes exactly ctx-wire's Read|Grep matcher entry,
+// leaving the Bash entry and all foreign hooks untouched.
+func UninstallClaudeFileTools(path string) (bool, error) {
+	return ensureClaudeMatcherEntry(path, claudeFileToolsMatcher, false)
+}
+
+// ensureClaudeMatcherEntry adds (want=true) or removes (want=false) ctx-wire's
+// PreToolUse entry for one specific matcher. Presence is (matcher, command)
+// aware so multiple ctx-wire entries with different matchers coexist; foreign
+// entries are never touched. Atomic write with .bak.
+func ensureClaudeMatcherEntry(path, matcher string, want bool) (changed bool, err error) {
 	root := map[string]any{}
 	data, readErr := os.ReadFile(path)
 	switch {
@@ -63,6 +88,9 @@ func InstallClaude(path string) (changed bool, err error) {
 			}
 		}
 	case errors.Is(readErr, fs.ErrNotExist):
+		if !want {
+			return false, nil // nothing to remove
+		}
 		// new file
 	default:
 		return false, readErr
@@ -80,16 +108,29 @@ func InstallClaude(path string) (changed bool, err error) {
 		return false, err
 	}
 
-	if hasClaudeHook(pre) {
+	has := hasClaudeMatcherEntry(pre, matcher)
+	switch {
+	case want && has:
 		return false, nil
+	case want:
+		pre = append(pre, map[string]any{
+			"matcher": matcher,
+			"hooks": []any{
+				map[string]any{"type": "command", "command": claudeHookCommand},
+			},
+		})
+	case !want && !has:
+		return false, nil
+	default: // remove ours for this matcher only
+		kept := make([]any, 0, len(pre))
+		for _, e := range pre {
+			if claudeEntryMatches(e, matcher) {
+				continue
+			}
+			kept = append(kept, e)
+		}
+		pre = kept
 	}
-
-	pre = append(pre, map[string]any{
-		"matcher": "Bash",
-		"hooks": []any{
-			map[string]any{"type": "command", "command": claudeHookCommand},
-		},
-	})
 	hooks["PreToolUse"] = pre
 
 	out, err := json.MarshalIndent(root, "", "  ")
@@ -102,6 +143,35 @@ func InstallClaude(path string) (changed bool, err error) {
 	return true, nil
 }
 
+// claudeEntryMatches reports whether e is ctx-wire's hook entry for matcher
+// (both the matcher string and the hook command must match: foreign entries
+// with the same matcher are not ours).
+func claudeEntryMatches(e any, matcher string) bool {
+	m, _ := e.(map[string]any)
+	if got, _ := m["matcher"].(string); got != matcher {
+		return false
+	}
+	hs, _ := m["hooks"].([]any)
+	for _, h := range hs {
+		hm, _ := h.(map[string]any)
+		if cmd, _ := hm["command"].(string); cmd == claudeHookCommand {
+			return true
+		}
+	}
+	return false
+}
+
+func hasClaudeMatcherEntry(pre []any, matcher string) bool {
+	for _, e := range pre {
+		if claudeEntryMatches(e, matcher) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasClaudeHook reports whether ANY ctx-wire hook entry is present (used by
+// coverage checks that only need to know the hook is wired at all).
 func hasClaudeHook(pre []any) bool {
 	for _, e := range pre {
 		m, _ := e.(map[string]any)

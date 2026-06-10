@@ -19,6 +19,11 @@ type SessionStat struct {
 	Coverable int
 	Covered   int
 	ModTime   time.Time
+
+	// FileTools counts built-in Read/Grep tool uses and read-before-edit
+	// refusals (Claude transcripts only). Coverable/Covered stay shell-only:
+	// this is a separate axis, not a change to adoption semantics.
+	FileTools FileToolStat
 }
 
 // AdoptionPct is the share of coverable commands that actually used ctx-wire.
@@ -44,6 +49,10 @@ func Sessions(opts Options) ([]SessionStat, error) {
 				return nil
 			}
 			if st, ok := sessionStat("claude", path, parseClaudeFile(path, opts.Since), d); ok {
+				// Counted only for sessions that already qualify (coverable
+				// shell commands exist), so adoption semantics and row set stay
+				// unchanged; file-tool-only sessions remain skipped for now.
+				st.FileTools = parseClaudeFileTools(path, opts.Since)
 				stats = append(stats, st)
 			}
 			return nil
@@ -124,5 +133,6 @@ func FormatSessionsThemed(stats []SessionStat, theme ui.Theme) string {
 		return b.String()
 	}
 	b.WriteString(sessionTable(stats, theme))
+	b.WriteString("\n" + theme.Dim.Render("Reads/Greps = built-in file-tool uses (these bypass ctx-wire) · EditRef = Edit refused, file not Read first") + "\n")
 	return b.String()
 }

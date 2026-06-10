@@ -349,6 +349,86 @@ func appendClaudeLine(out []exec, line string, since time.Time) []exec {
 	return out
 }
 
+// FileToolStat counts one transcript's built-in file-tool activity: Read and
+// Grep tool uses (which bypass ctx-wire entirely) and Edit refusals caused by
+// the harness's read-before-edit gate. It is the measurement side of the
+// file-tools capture experiment: redirected traffic shows up as these counts
+// falling while shell adoption rises.
+type FileToolStat struct {
+	Reads        int
+	Greps        int
+	EditRefusals int
+}
+
+// claudeToolLine is the lean decode for file-tool counting. tool_result
+// content stays raw because Claude emits it as either a string or an array of
+// text blocks; a substring probe works for both shapes.
+type claudeToolLine struct {
+	Type      string `json:"type"`
+	Timestamp string `json:"timestamp"`
+	Message   struct {
+		Content []struct {
+			Type    string          `json:"type"`
+			Name    string          `json:"name"`
+			Content json.RawMessage `json:"content"`
+		} `json:"content"`
+	} `json:"message"`
+}
+
+// editRefusalMarker is the harness's read-before-edit refusal. Substring, not
+// equality: the surrounding wording varies across Claude Code versions.
+const editRefusalMarker = "has not been read yet"
+
+// parseClaudeFileTools counts Read/Grep tool uses (assistant lines) and
+// read-before-edit refusals (user-line tool results) in one transcript. It is
+// a separate pass from parseClaudeFile because tool results live on user
+// lines, which the command parser deliberately skips.
+func parseClaudeFileTools(path string, since time.Time) FileToolStat {
+	f, err := os.Open(path)
+	if err != nil {
+		return FileToolStat{}
+	}
+	defer f.Close()
+	var st FileToolStat
+	r := bufio.NewReader(f)
+	for {
+		line, rerr := r.ReadString('\n')
+		countClaudeToolLine(&st, line, since)
+		if rerr != nil {
+			break
+		}
+	}
+	return st
+}
+
+func countClaudeToolLine(st *FileToolStat, line string, since time.Time) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	var l claudeToolLine
+	if json.Unmarshal([]byte(line), &l) != nil {
+		return
+	}
+	if l.Type != "assistant" && l.Type != "user" {
+		return
+	}
+	ts := parseTS(l.Timestamp)
+	if !since.IsZero() && !ts.IsZero() && ts.Before(since) {
+		return
+	}
+	for _, c := range l.Message.Content {
+		switch {
+		case l.Type == "assistant" && c.Type == "tool_use" && c.Name == "Read":
+			st.Reads++
+		case l.Type == "assistant" && c.Type == "tool_use" && c.Name == "Grep":
+			st.Greps++
+		case l.Type == "user" && c.Type == "tool_result" && strings.Contains(string(c.Content), editRefusalMarker):
+			st.EditRefusals++
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Codex transcripts
 // ---------------------------------------------------------------------------

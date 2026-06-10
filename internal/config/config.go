@@ -134,6 +134,12 @@ type Hooks struct {
 	// re-prepended, so `docker exec web git status` becomes
 	// `docker exec web ctx-wire run git status`.
 	TransparentPrefixes []string `toml:"transparent_prefixes"`
+
+	// CaptureFileTools is the file-tools capture experiment (Claude only,
+	// default off): the PreToolUse hook denies built-in Read/Grep calls it can
+	// translate exactly, suggesting the equivalent filtered shell command.
+	// Toggle with `ctx-wire init claude --capture-files|--no-capture-files`.
+	CaptureFileTools bool `toml:"capture_file_tools"`
 }
 
 // Path returns the config file location: CTX_WIRE_CONFIG, else

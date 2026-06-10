@@ -21,6 +21,15 @@ exclude_commands = ["curl", "playwright"]
 # `docker exec web ctx-wire run git status`.
 transparent_prefixes = ["docker exec web", "direnv exec ."]
 
+# File-tools capture experiment (Claude only, default off): the PreToolUse
+# hook denies built-in Read/Grep calls that map EXACTLY to a shell command,
+# suggesting the filtered equivalent (large unranged reads -> `nl -ba`, Grep ->
+# the matching `rg` form). Anything uncertain passes through untouched, a
+# denied request retried within 60s is allowed (loop-breaker), and a deny is
+# only ever issued after it is recorded. Toggle with
+# `ctx-wire init claude --capture-files | --no-capture-files`.
+capture_file_tools = false
+
 [output]
 # Extra compaction of filtered output (trim trailing whitespace, collapse
 # blank-line runs) for a few more tokens.
@@ -32,6 +41,13 @@ ultra_compact = true
 # removes them, "default" applies them as written. Filters still only act on
 # output they positively recognize; the dial changes how much of it is kept,
 # never what gets filtered. Override per invocation with CTX_WIRE_TRUNCATE.
+#
+# The dial also scales the passthrough ceiling: output with no matching filter
+# streams unmodified up to a generous size cap (~64 KB at "default"); beyond
+# it the head and the tail of each stream are kept, the omitted middle is
+# marked explicitly, and the full scrubbed output is spooled to disk (the
+# `[full output: ...]` hint names the file). Deterministic head+tail only,
+# never a generated summary. "none" disables the ceiling entirely.
 truncate = "default"
 
 # Optional token budget framing for `ctx-wire gain --quota`.

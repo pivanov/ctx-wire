@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 
+	"ctx-wire/internal/config"
 	"ctx-wire/internal/filter"
 	"ctx-wire/internal/gain"
 	"ctx-wire/internal/install"
@@ -339,6 +340,17 @@ func hooksSection(opts Options) Section {
 
 	if p, err := install.ClaudeSettingsPath(); err == nil {
 		sec.Checks = append(sec.Checks, hookCheck("claude", p, "ctx-wire hook claude"))
+		// The file-tools capture experiment (config-present only; runtime proof
+		// is Read/Grep counts falling in `ctx-wire session`).
+		if cfg, cerr := config.Load(); cerr == nil {
+			if cfg.Hooks.CaptureFileTools {
+				sec.Checks = append(sec.Checks, Check{"claude file-tools capture", OK,
+					"experiment on: exact-mappable Read/Grep calls redirect to filtered shell commands"})
+			} else {
+				sec.Checks = append(sec.Checks, Check{"claude file-tools capture", Off,
+					"off; opt in with `ctx-wire init claude --capture-files`"})
+			}
+		}
 	}
 	if p, err := install.CursorHooksPath(); err == nil {
 		sec.Checks = append(sec.Checks, hookCheck("cursor", p, "ctx-wire hook cursor"))

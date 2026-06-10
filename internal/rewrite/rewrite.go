@@ -482,6 +482,10 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
+// ShellSingleQuote single-quotes s for POSIX shells (embedded single quotes
+// become '\”). Exported for the hook adapters that build suggested commands.
+func ShellSingleQuote(s string) string { return shellSingleQuote(s) }
+
 func shellDoubleQuote(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')

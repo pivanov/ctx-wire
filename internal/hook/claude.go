@@ -14,10 +14,9 @@ import (
 )
 
 type claudeInput struct {
-	ToolName  string `json:"tool_name"`
-	ToolInput struct {
-		Command string `json:"command"`
-	} `json:"tool_input"`
+	SessionID string          `json:"session_id"`
+	ToolName  string          `json:"tool_name"`
+	ToolInput json.RawMessage `json:"tool_input"`
 }
 
 type claudeOutput struct {
@@ -25,19 +24,22 @@ type claudeOutput struct {
 }
 
 type claudeHookOutput struct {
-	HookEventName      string             `json:"hookEventName"`
-	PermissionDecision string             `json:"permissionDecision"`
-	UpdatedInput       claudeUpdatedInput `json:"updatedInput"`
+	HookEventName            string              `json:"hookEventName"`
+	PermissionDecision       string              `json:"permissionDecision"`
+	PermissionDecisionReason string              `json:"permissionDecisionReason,omitempty"`
+	UpdatedInput             *claudeUpdatedInput `json:"updatedInput,omitempty"`
 }
 
 type claudeUpdatedInput struct {
 	Command string `json:"command"`
 }
 
-// Claude handles a Claude Code PreToolUse payload. If the Bash command is
-// rewritable, it writes an allow decision with the updatedInput rewrite JSON to
-// w; otherwise it writes nothing (no-op passthrough). It never returns a
-// blocking error.
+// Claude handles a Claude Code PreToolUse payload. For Bash: if the command is
+// rewritable, it writes an allow decision with the updatedInput rewrite JSON
+// to w; otherwise it writes nothing (no-op passthrough). For Read/Grep, when
+// the file-tools capture experiment is on, it may deny with the exact
+// equivalent shell command as the suggestion (see claude_filetools.go). It
+// never returns a blocking error.
 func Claude(r io.Reader, w io.Writer) error {
 	data, err := readHookInput(r)
 	if err != nil {
@@ -47,25 +49,39 @@ func Claude(r io.Reader, w io.Writer) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return nil
 	}
-	if in.ToolName != "Bash" || in.ToolInput.Command == "" {
+	switch in.ToolName {
+	case "Bash":
+		return claudeBash(in, w)
+	case "Read", "Grep":
+		return claudeFileTool(in, w)
+	default:
 		return nil
 	}
-	rewritten := rewrite.LineForAgent(in.ToolInput.Command, "claude")
-	if rewritten == in.ToolInput.Command {
+}
+
+func claudeBash(in claudeInput, w io.Writer) error {
+	var ti struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(in.ToolInput, &ti) != nil || ti.Command == "" {
+		return nil
+	}
+	rewritten := rewrite.LineForAgent(ti.Command, "claude")
+	if rewritten == ti.Command {
 		return nil // nothing to change
 	}
 	// Respect the user's Bash deny/ask rules. An "allow" decision here would
 	// auto-approve the rewritten (wrapped) command, bypassing rules that can no
 	// longer see the inner command. If a deny/ask rule matches, step aside (emit
 	// nothing) so Claude applies its own decision to the original command.
-	if permission.LoadClaude().Decide(in.ToolInput.Command) != permission.Allow {
+	if permission.LoadClaude().Decide(ti.Command) != permission.Allow {
 		return nil
 	}
 	return json.NewEncoder(w).Encode(claudeOutput{
 		HookSpecificOutput: claudeHookOutput{
 			HookEventName:      "PreToolUse",
 			PermissionDecision: "allow",
-			UpdatedInput:       claudeUpdatedInput{Command: rewritten},
+			UpdatedInput:       &claudeUpdatedInput{Command: rewritten},
 		},
 	})
 }

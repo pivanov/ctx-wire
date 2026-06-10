@@ -16,11 +16,18 @@ const (
 // shell (which ctx-wire filters) instead of the built-in Read/Grep/Glob tools,
 // which bypass ctx-wire entirely. Shared by every instruction surface.
 const readGrepSteering = `For reading or searching files whose contents will enter your context, prefer
-shell commands over the built-in tools: use ` + "`cat`/`head`/`tail`" + ` instead of the
-Read tool, ` + "`rg`/`grep`" + ` instead of the Grep tool, and ` + "`find`" + ` instead of the
-Glob tool. Shell commands are filtered and secret-scrubbed by ctx-wire; the
-built-in Read, Grep, and Glob tools bypass it. Use the built-in tools only for
-small, exact lookups.`
+shell commands over the built-in tools, because shell output is filtered,
+capped, and secret-scrubbed by ctx-wire while the built-in Read, Grep, and
+Glob tools bypass it entirely:
+
+- ` + "`nl -ba <file>`" + ` (numbered) or ` + "`cat`/`head`/`tail`" + ` instead of the Read tool:
+  large files arrive capped instead of flooding your context.
+- ` + "`rg -n <pattern> <path>`" + ` instead of the Grep tool: matches arrive grouped
+  and deduplicated.
+- ` + "`find`" + ` instead of the Glob tool.
+
+Use the built-in tools only for small, exact lookups, or when you are about to
+Edit a file (Edit requires a prior Read).`
 
 const ctxWireRulesBlock = ctxWireBlockStart + `
 # ctx-wire

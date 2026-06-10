@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ctx-wire/internal/agent"
+	"ctx-wire/internal/config"
 	"ctx-wire/internal/install"
 	"ctx-wire/internal/shim"
 	"ctx-wire/internal/telemetry"
@@ -22,6 +23,8 @@ func cmdInit(args []string) int {
 			summary: "Wire an agent: install the binary into ~/.local/bin and configure that agent's hooks/rules.",
 			flags: [][2]string{
 				{"--no-mcp", "skip MCP auto-wrap (init claude otherwise relays known snapshot-heavy servers through mcp-wrap --compress)"},
+				{"--capture-files", "claude only: enable the file-tools capture experiment (deny built-in Read/Grep when an exact filtered shell equivalent exists)"},
+				{"--no-capture-files", "claude only: disable the file-tools capture experiment"},
 			},
 			examples: []string{
 				"ctx-wire init claude    # wire Claude Code",
@@ -38,13 +41,19 @@ func cmdInit(args []string) int {
 		return initMissingTarget()
 	}
 	noMCP := false
+	captureFiles, noCaptureFiles := false, false
 	kept := args[:0:0]
 	for _, a := range args {
-		if a == "--no-mcp" {
+		switch a {
+		case "--no-mcp":
 			noMCP = true
-			continue
+		case "--capture-files":
+			captureFiles = true
+		case "--no-capture-files":
+			noCaptureFiles = true
+		default:
+			kept = append(kept, a)
 		}
-		kept = append(kept, a)
 	}
 	args = kept
 	if len(args) == 0 {
@@ -145,7 +154,46 @@ func cmdInit(args []string) int {
 	if agent == "claude" && !noMCP {
 		initAutoWrapMCP(theme)
 	}
+	if agent == "claude" && (captureFiles || noCaptureFiles) {
+		initCaptureFileTools(theme, path, captureFiles && !noCaptureFiles)
+	}
 	return 0
+}
+
+// initCaptureFileTools toggles the file-tools capture experiment: the
+// [hooks] capture_file_tools config key plus the Read|Grep PreToolUse matcher
+// in Claude's settings. Non-silent and best-effort: failures warn, never fail
+// init. Default state (no flag) is untouched; the experiment is opt-in.
+func initCaptureFileTools(theme ui.Theme, settingsPath string, enable bool) {
+	cfgPath, err := config.SetCaptureFileTools(enable)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ctx-wire init: capture-files config: %v\n", err)
+		return
+	}
+	var changed bool
+	if enable {
+		changed, err = install.InstallClaudeFileTools(settingsPath)
+	} else {
+		changed, err = install.UninstallClaudeFileTools(settingsPath)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ctx-wire init: capture-files hook matcher: %v\n", err)
+		return
+	}
+	state := "off"
+	if enable {
+		state = "on"
+	}
+	verb := theme.OK.Render("OK")
+	if changed {
+		verb = theme.OK.Render("Configured")
+	}
+	fmt.Printf("%s file-tools capture %s (config: %s; matcher in %s)\n", verb, state, theme.Path.Render(cfgPath), theme.Path.Render(settingsPath))
+	if enable {
+		fmt.Println("   Experiment: built-in Read/Grep calls that map exactly to a shell command are denied")
+		fmt.Println("   with the filtered equivalent suggested; everything uncertain passes through untouched.")
+		fmt.Println("   Restart Claude to apply. Disable anytime: ctx-wire init claude --no-capture-files")
+	}
 }
 
 // initAutoWrapMCP turns on snapshot compression for known snapshot-heavy MCP

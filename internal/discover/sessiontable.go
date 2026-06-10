@@ -35,16 +35,19 @@ func sessionTable(stats []SessionStat, theme ui.Theme) string {
 			s.Agent, file,
 			fmt.Sprintf("%d", s.Coverable),
 			fmt.Sprintf("%d", s.Covered),
+			fmt.Sprintf("%d", s.FileTools.Reads),
+			fmt.Sprintf("%d", s.FileTools.Greps),
+			fmt.Sprintf("%d", s.FileTools.EditRefusals),
 			adoption,
 		})
 	}
-	rightAlign := map[int]bool{2: true, 3: true}
+	rightAlign := map[int]bool{2: true, 3: true, 4: true, 5: true, 6: true}
 	return table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderLeft(false).
 		BorderRight(false).
 		BorderStyle(theme.Border).
-		Headers("Agent", "Session", "Cmds", "Used", "Adoption").
+		Headers("Agent", "Session", "Cmds", "Used", "Reads", "Greps", "EditRef", "Adoption").
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			style := theme.Cell

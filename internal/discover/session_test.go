@@ -39,6 +39,55 @@ func jsonString(s string) string {
 	return string(append(out, '"'))
 }
 
+// TestSessionsCountsFileTools proves the file-tool axis: Read/Grep tool uses
+// and read-before-edit refusals are counted per session, in both tool_result
+// content shapes (plain string and text-block array), without touching the
+// shell-only Coverable/Covered semantics.
+func TestSessionsCountsFileTools(t *testing.T) {
+	base := t.TempDir()
+	project := "/work/proj"
+	dir := filepath.Join(base, "projects", encodeClaudeProjectSlug(project))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lines := []string{
+		// One coverable shell command so the session qualifies.
+		`{"type":"assistant","timestamp":"2026-06-04T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"git status"}}]}}`,
+		// Two Reads and one Grep (built-in tools, no command field).
+		`{"type":"assistant","timestamp":"2026-06-04T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Read","input":{}},{"type":"tool_use","name":"Read","input":{}}]}}`,
+		`{"type":"assistant","timestamp":"2026-06-04T10:02:00Z","message":{"content":[{"type":"tool_use","name":"Grep","input":{}}]}}`,
+		// Edit refusal as a plain-string tool_result (user line).
+		`{"type":"user","timestamp":"2026-06-04T10:03:00Z","message":{"content":[{"type":"tool_result","content":"File has not been read yet. Read it first before writing to it."}]}}`,
+		// Edit refusal as a text-block array tool_result.
+		`{"type":"user","timestamp":"2026-06-04T10:04:00Z","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"Error: file has not been read yet."}]}]}}`,
+		// A normal tool_result must NOT count.
+		`{"type":"user","timestamp":"2026-06-04T10:05:00Z","message":{"content":[{"type":"tool_result","content":"ok"}]}}`,
+	}
+	var b []byte
+	for _, l := range lines {
+		b = append(b, l...)
+		b = append(b, '\n')
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ft.jsonl"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err := Sessions(Options{ClaudeDirs: []string{base}, Project: project})
+	if err != nil {
+		t.Fatalf("Sessions: %v", err)
+	}
+	if len(stats) != 1 {
+		t.Fatalf("want 1 session, got %d", len(stats))
+	}
+	ft := stats[0].FileTools
+	if ft.Reads != 2 || ft.Greps != 1 || ft.EditRefusals != 2 {
+		t.Errorf("FileTools = %+v, want Reads=2 Greps=1 EditRefusals=2", ft)
+	}
+	if stats[0].Coverable != 1 || stats[0].Covered != 0 {
+		t.Errorf("shell adoption semantics moved: %+v", stats[0])
+	}
+}
+
 func TestSessionsAdoption(t *testing.T) {
 	base := t.TempDir()
 	project := "/work/proj"
