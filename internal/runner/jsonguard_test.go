@@ -60,8 +60,8 @@ func TestJSONGuard(t *testing.T) {
 	}
 
 	// Over the ceiling: replaced with a notice, never a mid-structure cut.
-	defer func(old int) { maxJSONPassthrough = old }(maxJSONPassthrough)
-	maxJSONPassthrough = 16
+	defer func(old int) { filter.MaxJSONPassthrough = old }(filter.MaxJSONPassthrough)
+	filter.MaxJSONPassthrough = 16
 	text, mode, ok = jsonGuard(doc, true, false, false)
 	if !ok || mode != jsonModeCapped {
 		t.Fatalf("guard capped: ok=%v mode=%q", ok, mode)

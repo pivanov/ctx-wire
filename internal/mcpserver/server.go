@@ -128,6 +128,18 @@ func readFile(reg *filter.Registry, path string, maxLines int) (string, bool, er
 	}
 	content := scrub.Scrub(string(data))
 
+	// Complete JSON is never reduced: the cat filter's line/length caps or the
+	// maxLines split would cut it mid-structure and hand the agent invalid JSON
+	// (the runner's command path already guards this via jsonGuard; read_file
+	// did not). Check on the SCRUBBED content so a secret inside a JSON value is
+	// already redacted before the whole-document passthrough, and pass it whole
+	// (or a size marker) BEFORE the filter and maxLines can touch it. maxLines is
+	// deliberately ignored here: honoring it would re-break the JSON.
+	if filter.IsCompleteJSON(content) {
+		text, whole := filter.JSONPassthrough(content)
+		return text, truncated || !whole, nil
+	}
+
 	if f := reg.Find("cat " + path); f != nil {
 		res := filter.ApplyWithMeta(f, content)
 		content = res.Output

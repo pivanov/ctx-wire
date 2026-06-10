@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -174,4 +175,92 @@ func contentText(res *mcp.CallToolResult) string {
 		}
 	}
 	return b.String()
+}
+
+// TestReadFileJSONIntegrity is the S3 fix: complete JSON read through the MCP
+// read_file tool must never be cut by the cat filter's line caps or the
+// maxLines split, which would hand the agent invalid JSON (rtk #2295). Four
+// shapes pin it: minified JSON over the cat filter's 500-char line cap survives
+// whole; pretty JSON survives even with a tiny maxLines; non-JSON still caps;
+// oversize JSON gets a marker, never a mid-structure cut.
+func TestReadFileJSONIntegrity(t *testing.T) {
+	reg, err := filter.LoadBuiltin()
+	if err != nil {
+		t.Fatalf("LoadBuiltin: %v", err)
+	}
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	mustParse := func(label, s string) {
+		t.Helper()
+		var v any
+		if json.Unmarshal([]byte(s), &v) != nil {
+			t.Fatalf("%s: output is not valid JSON:\n%q", label, s)
+		}
+	}
+
+	// 1. Minified one-line JSON well over the cat filter's truncate_lines_at=500.
+	keys := make([]string, 0, 80)
+	for i := 0; i < 80; i++ {
+		keys = append(keys, fmt.Sprintf("%q:%q", fmt.Sprintf("key_%02d", i), fmt.Sprintf("value-%02d-padding", i)))
+	}
+	minified := "{" + strings.Join(keys, ",") + "}"
+	if len(minified) <= 500 {
+		t.Fatalf("test setup: minified JSON must exceed 500 chars, got %d", len(minified))
+	}
+	out, truncated, err := readFile(reg, write("min.json", minified), 0)
+	if err != nil {
+		t.Fatalf("readFile: %v", err)
+	}
+	mustParse("minified", out)
+	if truncated {
+		t.Error("minified JSON under the cap must not report truncated")
+	}
+
+	// 2. Pretty JSON with a tiny maxLines: maxLines is deliberately ignored for
+	// complete JSON (honoring it would re-break the document).
+	pretty := "{\n  \"a\": 1,\n  \"b\": 2,\n  \"c\": [1, 2, 3],\n  \"d\": {\"e\": true}\n}"
+	out, _, err = readFile(reg, write("pretty.json", pretty), 2)
+	if err != nil {
+		t.Fatalf("readFile: %v", err)
+	}
+	mustParse("pretty+maxLines", out)
+	if strings.Contains(out, "more lines)") {
+		t.Errorf("maxLines must not split complete JSON:\n%s", out)
+	}
+
+	// 3. Non-JSON still respects maxLines (no behavior change off the JSON path).
+	var lines strings.Builder
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&lines, "log line %d\n", i)
+	}
+	out, truncated, err = readFile(reg, write("log.txt", lines.String()), 5)
+	if err != nil {
+		t.Fatalf("readFile: %v", err)
+	}
+	if !truncated || !strings.Contains(out, "more lines)") {
+		t.Errorf("non-JSON must still cap with maxLines:\n%s", out)
+	}
+
+	// 4. Oversize JSON -> size marker, never a mid-structure cut.
+	defer func(old int) { filter.MaxJSONPassthrough = old }(filter.MaxJSONPassthrough)
+	filter.MaxJSONPassthrough = 64
+	out, truncated, err = readFile(reg, write("big.json", minified), 0)
+	if err != nil {
+		t.Fatalf("readFile: %v", err)
+	}
+	if !truncated {
+		t.Error("oversize JSON must report truncated")
+	}
+	if !strings.Contains(out, "JSON document omitted") {
+		t.Errorf("oversize JSON must be replaced with a marker, got:\n%s", out)
+	}
+	if strings.HasPrefix(strings.TrimSpace(out), "{") {
+		t.Errorf("oversize JSON must not emit a mid-structure cut:\n%s", out)
+	}
 }

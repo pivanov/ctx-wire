@@ -410,12 +410,6 @@ func withTrailingNewline(s string) string {
 	return s + "\n"
 }
 
-// maxJSONPassthrough bounds how much complete JSON the content-based guarantee
-// emits verbatim. A valid JSON document up to this size is passed through whole;
-// a larger one is replaced (never cut mid-structure) so savings are preserved.
-// A var (not const) so tests can shrink it to exercise the oversize path.
-var maxJSONPassthrough = 1 << 20 // 1 MiB
-
 const (
 	jsonModeWhole  = "json"
 	jsonModeCapped = "json-capped"
@@ -433,14 +427,14 @@ func jsonGuard(out string, truncated, filterStderr, reducesJSON bool) (text, mod
 	if !truncated || filterStderr || reducesJSON || !filter.IsCompleteJSON(out) {
 		return "", "", false
 	}
-	if len(out) <= maxJSONPassthrough {
+	if len(out) <= filter.MaxJSONPassthrough {
 		return withTrailingNewline(scrub.Scrub(out)), jsonModeWhole, true
 	}
 	return withTrailingNewline(jsonOversizeMarker(len(out))), jsonModeCapped, true
 }
 
 func jsonOversizeMarker(n int) string {
-	return fmt.Sprintf("[ctx-wire: %d-byte JSON document omitted (over the %d-byte passthrough ceiling); full log spooled]", n, maxJSONPassthrough)
+	return fmt.Sprintf("[ctx-wire: %d-byte JSON document omitted (over the %d-byte passthrough ceiling); full log spooled]", n, filter.MaxJSONPassthrough)
 }
 
 func runAndExitCode(cmd *exec.Cmd) (int, error) {
