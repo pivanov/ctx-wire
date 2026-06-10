@@ -33,3 +33,19 @@ input = """
 failed to solve: process exited with code 1
 """
 expected = "#4 1.234 ERROR: failed to solve: process exited with code 1\nfailed to solve: process exited with code 1"
+
+[[tests.docker]]
+name = "push layers done then unauthorized registry rejection"
+failed = true
+input = """
+#1 [internal] load metadata for docker.io/library/node:20-alpine
+#2 CACHED [1/3] FROM docker.io/library/node:20-alpine
+#3 CACHED [2/3] WORKDIR /app
+#4 CACHED [3/3] COPY . .
+#5 exporting to image
+#5 exporting layers DONE 0.1s
+#5 writing image sha256:deadbeef DONE 0.0s
+#5 pushing manifest for registry.example.com/myapp:latest DONE
+unauthorized: authentication required
+"""
+expected = "#5 exporting to image\n#5 exporting layers DONE 0.1s\n#5 writing image sha256:deadbeef DONE 0.0s\n#5 pushing manifest for registry.example.com/myapp:latest DONE\nunauthorized: authentication required"

@@ -33,3 +33,14 @@ error[E0425]: cannot find value `x` in this scope
   --> src/main.rs:2:5
 """
 expected = "error[E0425]: cannot find value `x` in this scope\n  --> src/main.rs:2:5"
+
+[[tests.cargo]]
+name = "failed exit with success-looking output is not collapsed"
+failed = true
+input = """
+   Compiling app v0.1.0 (/repo)
+    Finished test [unoptimized + debuginfo] target(s) in 1.45s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+"""
+expected = "    Finished test [unoptimized + debuginfo] target(s) in 1.45s\nrunning 3 tests\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"

@@ -27,3 +27,13 @@ Failures:
 4 examples, 1 failure
 """
 expected = "Failures:\n  1) User validates email\n     expected false to be true\n4 examples, 1 failure"
+
+[[tests.rspec]]
+name = "failed exit not collapsed despite a 0-failures summary"
+failed = true
+input = """
+Finished in 0.04 seconds (files took 0.1 seconds to load)
+3 examples, 0 failures, 1 pending
+"""
+expected = """Finished in 0.04 seconds (files took 0.1 seconds to load)
+3 examples, 0 failures, 1 pending"""

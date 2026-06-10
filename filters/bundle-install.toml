@@ -59,3 +59,16 @@ expected = "ok bundle: updated"
 name = "empty output"
 input = ""
 expected = ""
+
+[[tests.bundle-install]]
+name = "failed exit with Bundle complete is not collapsed to ok summary"
+failed = true
+input = """
+Fetching gem metadata from https://rubygems.org/.........
+Resolving dependencies...
+Using rake 13.1.0
+Using rspec 3.13.0
+Bundle complete! 12 Gemfile dependencies, 47 gems now installed.
+Use `bundle info [gemname]` to see where a bundled gem is installed.
+"""
+expected = "Bundle complete! 12 Gemfile dependencies, 47 gems now installed.\nUse `bundle info [gemname]` to see where a bundled gem is installed."

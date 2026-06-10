@@ -34,3 +34,13 @@ go: downloading github.com/foo/bar v1.2.3
 go: github.com/foo/bar@v1.2.3: missing go.sum entry; to add it: go mod download
 '''
 expected = "go: github.com/foo/bar@v1.2.3: missing go.sum entry; to add it: go mod download"
+
+[[tests.go-mod-download]]
+name = "failed download where all noise strips must not emit ok summary"
+failed = true
+input = '''
+go: downloading github.com/acme/widgets v2.3.4+incompatible
+go: downloading github.com/acme/core v1.0.0
+go: github.com/acme/widgets@v2.3.4+incompatible: Get "https://proxy.golang.org/github.com/acme/widgets/@v/v2.3.4+incompatible.info": 404 Not Found
+'''
+expected = "go: github.com/acme/widgets@v2.3.4+incompatible: Get \"https://proxy.golang.org/github.com/acme/widgets/@v/v2.3.4+incompatible.info\": 404 Not Found"

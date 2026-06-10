@@ -39,3 +39,11 @@ CompileSwift normal x86_64 MyFile.swift
 Build complete! (with warnings)
 """
 expected = "CompileSwift normal x86_64 MyFile.swift\n/path/to/MyFile.swift:42:10: warning: unused variable 'x'\nBuild complete! (with warnings)"
+
+[[tests.swift-build]]
+name = "failed exit with Build complete is not collapsed to ok summary"
+failed = true
+input = """
+Build complete!
+"""
+expected = "Build complete!"

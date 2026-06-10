@@ -34,3 +34,14 @@ npm ERR! code ERESOLVE
 npm ERR! ERESOLVE unable to resolve dependency tree
 """
 expected = "npm ERR! code ERESOLVE\nnpm ERR! ERESOLVE unable to resolve dependency tree"
+
+[[tests.node-package]]
+name = "failed exit not collapsed when added-packages line present"
+failed = true
+input = """
+Progress: resolved 412, reused 410, downloaded 2, added 142
+Packages: +142
++++
+added 142 packages, and audited 143 packages in 3s
+"""
+expected = "added 142 packages, and audited 143 packages in 3s"

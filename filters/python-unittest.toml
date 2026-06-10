@@ -26,3 +26,14 @@ AssertionError: false is not true
 FAILED (failures=1)
 """
 expected = "FAIL: test_app (tests.AppTest)\nAssertionError: false is not true\nFAILED (failures=1)"
+
+[[tests.python-unittest]]
+name = "failed exit is not collapsed to a 'unittest: ok' summary"
+failed = true
+input = """
+....
+Ran 4 tests in 0.001s
+
+OK
+"""
+expected = "....\nOK"

@@ -35,3 +35,13 @@ input = """
 /opt/homebrew/Cellar/jq/1.7.1: 18 files, 1.2MB
 """
 expected = "==> Summary\n/opt/homebrew/Cellar/jq/1.7.1: 18 files, 1.2MB"
+
+[[tests.brew-install]]
+name = "already installed output not collapsed when exit non-zero"
+failed = true
+input = """
+Warning: jq 1.7.1 is already installed and up-to-date.
+Error: Cannot install jq because conflicting formulae are installed:
+  jq@1.6: because jq 1.6 and jq 1.7 cannot coexist
+"""
+expected = "Warning: jq 1.7.1 is already installed and up-to-date.\nError: Cannot install jq because conflicting formulae are installed:\n  jq@1.6: because jq 1.6 and jq 1.7 cannot coexist"

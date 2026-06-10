@@ -18,3 +18,9 @@ expected = "ruff: ok"
 name = "lint finding preserved"
 input = "src/app.py:10:1 F401 `os` imported but unused"
 expected = "src/app.py:10:1 F401 `os` imported but unused"
+
+[[tests.ruff]]
+name = "failed exit is not collapsed to a 'ruff: ok' summary"
+failed = true
+input = "All checks passed!"
+expected = "All checks passed!"

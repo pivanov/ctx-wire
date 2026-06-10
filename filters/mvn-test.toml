@@ -33,3 +33,15 @@ input = """
 [INFO] BUILD FAILURE
 """
 expected = "[ERROR] Failures:\n[ERROR]   AppTest.shouldWork:42 expected true\n[INFO] BUILD FAILURE"
+
+[[tests.mvn-test]]
+name = "failed exit: passing module counts and BUILD SUCCESS not collapsed"
+failed = true
+input = """
+[INFO] --- maven-surefire-plugin:test (default-test) @ core ---
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.42 s
+[INFO] Building jar: /repo/core/target/core-1.0.jar
+[INFO] BUILD SUCCESS
+[INFO] Total time: 5.2 s
+"""
+expected = "[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.42 s\n[INFO] BUILD SUCCESS\n[INFO] Total time: 5.2 s"

@@ -23,3 +23,14 @@ NAME      READY   STATUS
 web-123   1/1     Running
 """
 expected = "NAME      READY   STATUS\nweb-123   1/1     Running"
+
+[[tests.kubectl]]
+name = "apply configured but rollout timed out waiting for pods"
+failed = true
+input = """
+deployment.apps/api configured
+service/api unchanged
+configmap/api-config configured
+timed out waiting for the condition
+"""
+expected = "deployment.apps/api configured\nservice/api unchanged\nconfigmap/api-config configured\ntimed out waiting for the condition"

@@ -110,3 +110,13 @@ src/Button.stories.ts:12:7: error: No matching export in src/Button.ts
 TypeError: Cannot read properties of undefined
 """
 expected = "src/Button.stories.ts:12:7: error: No matching export in src/Button.ts\nTypeError: Cannot read properties of undefined"
+
+[[tests.bun]]
+name = "failed exit not collapsed when tests-passed line present"
+failed = true
+input = """
+bun test v1.1.34 (1a2b3c4d)
+src/app.test.ts:
+5 tests passed (123ms)
+"""
+expected = "bun test v1.1.34 (1a2b3c4d)\nsrc/app.test.ts:\n5 tests passed (123ms)"

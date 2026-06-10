@@ -35,3 +35,16 @@ input = """
     Expected true to be false
 """
 expected = " FAIL  src/app.test.ts\n  ● renders\n    Expected true to be false"
+
+[[tests.js-test]]
+name = "failed exit not collapsed when all-passed summary present"
+failed = true
+input = """
+ PASS  src/app.test.ts
+
+Test Suites: 1 passed, 1 total
+Tests:       8 passed, 8 total
+Snapshots:   0 total
+Time:        1.23 s
+"""
+expected = "Test Suites: 1 passed, 1 total\nTests:       8 passed, 8 total"

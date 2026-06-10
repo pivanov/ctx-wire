@@ -15,3 +15,9 @@ expected = "ok (valid)"
 name = "error passes through unchanged"
 input = "Error: Invalid resource type\n  on main.tf line 3: resource \"aws_instancee\" \"web\""
 expected = "Error: Invalid resource type\n  on main.tf line 3: resource \"aws_instancee\" \"web\""
+
+[[tests.tofu-validate]]
+name = "failed exit with success-looking output not collapsed"
+failed = true
+input = "Success! The configuration is valid."
+expected = "Success! The configuration is valid."

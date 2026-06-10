@@ -32,3 +32,16 @@ Error Message:
  Expected true but was false
 """
 expected = "Failed TestName [12 ms]\nError Message:\n Expected true but was false"
+
+[[tests.dotnet-test]]
+name = "failed exit: all-passed summaries not collapsed (rtk #2279 shape)"
+failed = true
+input = """
+Test run for /repo/bin/Debug/net8.0/App.Tests.dll (.NETCoreApp,Version=v8.0)
+Starting test execution, please wait...
+Passed!  - Failed: 0, Passed: 42, Skipped: 0, Total: 42, Duration: 1 s
+Test run for /repo/bin/Debug/net8.0/App.Integration.Tests.dll (.NETCoreApp,Version=v8.0)
+Starting test execution, please wait...
+Passed!  - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 3 s
+"""
+expected = "Passed!  - Failed: 0, Passed: 42, Skipped: 0, Total: 42, Duration: 1 s\nPassed!  - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 3 s"

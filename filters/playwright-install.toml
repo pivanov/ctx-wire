@@ -42,3 +42,12 @@ Downloading Chromium 122.0.0 from https://example.test/chromium.zip
 error: download failed
 """
 expected = "error: download failed"
+
+[[tests.playwright-install]]
+name = "failed exit not collapsed when already-installed line present"
+failed = true
+input = """
+Chromium 122.0.0 is already installed.
+Firefox 123.0 is already installed.
+"""
+expected = "Chromium 122.0.0 is already installed.\nFirefox 123.0 is already installed."

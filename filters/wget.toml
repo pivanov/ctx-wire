@@ -32,3 +32,26 @@ expected = "wget: ok"
 name = "http error preserved"
 input = "ERROR 404: Not Found."
 expected = "ERROR 404: Not Found."
+
+[[tests.wget]]
+name = "saved line not collapsed when second url fails with non-zero exit"
+failed = true
+input = """
+--2026-05-29 10:00:01--  https://example.com/good.tar.gz
+Resolving example.com... 93.184.216.34
+Connecting to example.com|93.184.216.34|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 8192 (8.0K)
+Saving to: 'good.tar.gz'
+
+     0K ........                                                100%  512K=0.02s
+
+good.tar.gz saved [8192/8192]
+
+--2026-05-29 10:00:02--  https://example.com/missing.tar.gz
+Resolving example.com... 93.184.216.34
+Connecting to example.com|93.184.216.34|:443... connected.
+HTTP request sent, awaiting response... 404 Not Found
+2026-05-29 10:00:02 ERROR 404: Not Found.
+"""
+expected = "good.tar.gz saved [8192/8192]\n2026-05-29 10:00:02 ERROR 404: Not Found."

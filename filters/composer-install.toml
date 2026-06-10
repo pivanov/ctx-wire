@@ -38,3 +38,15 @@ Writing lock file
 Generating autoload files
 """
 expected = "Writing lock file\nGenerating autoload files"
+
+[[tests.composer-install]]
+name = "failed exit with nothing-to-install output is not collapsed to ok"
+failed = true
+input = """
+Loading composer repositories with package information
+Updating dependencies
+Lock file operations: 0 installs, 0 updates, 0 removals
+Nothing to install, update or remove
+Generating autoload files
+"""
+expected = "Lock file operations: 0 installs, 0 updates, 0 removals\nNothing to install, update or remove\nGenerating autoload files"

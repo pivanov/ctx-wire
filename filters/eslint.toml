@@ -26,3 +26,11 @@ expected = "/src/app.ts\n  4:3  error  Unexpected console statement  no-console"
 name = "npm run lint success collapses"
 input = "✖ 0 problems (0 errors, 0 warnings)"
 expected = "eslint: ok"
+
+[[tests.eslint]]
+name = "failed exit not collapsed when zero-problems line present"
+failed = true
+input = """
+✖ 0 problems (0 errors, 0 warnings)
+"""
+expected = "✖ 0 problems (0 errors, 0 warnings)"

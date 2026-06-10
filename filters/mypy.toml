@@ -17,3 +17,9 @@ expected = "mypy: ok"
 name = "type error preserved"
 input = "app.py:10: error: Incompatible return value type"
 expected = "app.py:10: error: Incompatible return value type"
+
+[[tests.mypy]]
+name = "failed exit is not collapsed to a 'mypy: ok' summary"
+failed = true
+input = "Success: no issues found in 3 source files"
+expected = "Success: no issues found in 3 source files"

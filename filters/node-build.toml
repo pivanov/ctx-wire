@@ -34,3 +34,17 @@ src/app.ts:10:7: error: No matching export in "src/lib.ts"
 ELIFECYCLE Command failed with exit code 1.
 """
 expected = "src/app.ts:10:7: error: No matching export in \"src/lib.ts\"\nELIFECYCLE Command failed with exit code 1."
+
+[[tests.node-build]]
+name = "failed exit not collapsed when built-in success line present"
+failed = true
+input = """
+vite v5.4.0 building for production...
+transforming...
+✓ 123 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/app.js  120.4 kB
+✓ built in 1.23s
+"""
+expected = "✓ 123 modules transformed.\ndist/assets/app.js  120.4 kB\n✓ built in 1.23s"

@@ -22,3 +22,11 @@ Package lodash
 Patched in >=4.17.21
 """
 expected = "high severity vulnerability\nPackage lodash\nPatched in >=4.17.21"
+
+[[tests.node-audit]]
+name = "failed exit not collapsed when zero-vulnerabilities line present"
+failed = true
+input = """
+found 0 vulnerabilities
+"""
+expected = "found 0 vulnerabilities"

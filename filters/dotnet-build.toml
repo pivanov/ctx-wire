@@ -62,3 +62,22 @@ Build FAILED.
     1 Error(s)
 """
 expected = "src/Program.cs(10,5): error CS1002: ; expected [/home/user/MyApp/MyApp.csproj]\nBuild FAILED.\n    0 Warning(s)\n    1 Error(s)"
+
+[[tests.dotnet-build]]
+name = "failed exit: clean-looking summary not collapsed to ok"
+failed = true
+input = """
+Microsoft (R) Build Engine version 17.8.3+195e7f5a3
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  MyApp -> /home/user/MyApp/bin/Debug/net8.0/MyApp.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:02.34
+"""
+expected = "  All projects are up-to-date for restore.\n  MyApp -> /home/user/MyApp/bin/Debug/net8.0/MyApp.dll\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\nTime Elapsed 00:00:02.34"

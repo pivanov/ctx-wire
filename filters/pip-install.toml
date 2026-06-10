@@ -29,3 +29,14 @@ expected = "pip: ok"
 name = "error preserved"
 input = "ERROR: Could not find a version that satisfies the requirement missing-package"
 expected = "ERROR: Could not find a version that satisfies the requirement missing-package"
+
+[[tests.pip-install]]
+name = "failed exit is not collapsed to a 'pip: ok' summary"
+failed = true
+input = """
+Collecting requests
+Downloading requests-2.32.0-py3-none-any.whl
+Installing collected packages: requests
+Successfully installed requests-2.32.0
+"""
+expected = "Successfully installed requests-2.32.0"

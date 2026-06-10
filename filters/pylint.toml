@@ -20,3 +20,12 @@ expected = "pylint: ok"
 name = "lint issue preserved"
 input = "app.py:1:0: C0114: Missing module docstring (missing-module-docstring)"
 expected = "app.py:1:0: C0114: Missing module docstring (missing-module-docstring)"
+
+[[tests.pylint]]
+name = "failed exit is not collapsed to a 'pylint: ok' summary"
+failed = true
+input = """
+--------------------------------------------------------------------
+Your code has been rated at 10.00/10
+"""
+expected = "Your code has been rated at 10.00/10"

@@ -18,3 +18,9 @@ expected = "brew: ok"
 name = "list output preserved"
 input = "git\njq\nripgrep"
 expected = "git\njq\nripgrep"
+
+[[tests.brew-list]]
+name = "doctor ready message not collapsed when exit non-zero"
+failed = true
+input = "Your system is ready to brew."
+expected = "Your system is ready to brew."

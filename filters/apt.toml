@@ -35,3 +35,22 @@ expected = "apt: ok"
 name = "error preserved"
 input = "E: Unable to locate package nope"
 expected = "E: Unable to locate package nope"
+
+[[tests.apt]]
+name = "dpkg configure failure not collapsed to apt: ok"
+failed = true
+input = """
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Selecting previously unselected package curl.
+Preparing to unpack .../curl_7.81.0-1ubuntu1_amd64.deb ...
+Unpacking curl (7.81.0-1ubuntu1) ...
+Setting up curl (7.81.0-1ubuntu1) ...
+dpkg: error processing package curl (--configure):
+ subprocess installed post-installation script returned error exit status 1
+Errors were encountered while processing:
+ curl
+E: Sub-process /usr/bin/dpkg returned an error code (1)
+"""
+expected = "Setting up curl (7.81.0-1ubuntu1) ...\ndpkg: error processing package curl (--configure):\n subprocess installed post-installation script returned error exit status 1\nErrors were encountered while processing:\n curl\nE: Sub-process /usr/bin/dpkg returned an error code (1)"

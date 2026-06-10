@@ -48,3 +48,13 @@ Installing dependencies from lock file
 Writing lock file
 """
 expected = "Installing dependencies from lock file\nWriting lock file"
+
+[[tests.poetry-install]]
+name = "failed exit is not collapsed to ok (up to date)"
+failed = true
+input = """
+Installing dependencies from lock file
+
+No dependencies to install or update
+"""
+expected = "Installing dependencies from lock file\nNo dependencies to install or update"

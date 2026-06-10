@@ -33,3 +33,15 @@ input = """
 BUILD FAILED in 12s
 """
 expected = "> Task :app:test\n3 tests completed, 1 failed\nBUILD FAILED in 12s"
+
+[[tests.gradle-test]]
+name = "failed exit: passing counts and BUILD SUCCESSFUL not collapsed"
+failed = true
+input = """
+> Configuring project :core
+> Task :core:test UP-TO-DATE
+> Task :app:test
+42 tests completed, 0 failed
+BUILD SUCCESSFUL in 9s
+"""
+expected = "> Task :app:test\n42 tests completed, 0 failed\nBUILD SUCCESSFUL in 9s"

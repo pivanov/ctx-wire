@@ -46,3 +46,16 @@ total size is 1000  speedup is 3.33
 expected = """rsync: [sender] error
 error in rsync protocol data stream (code 12)
 total size is 1000  speedup is 3.33"""
+
+[[tests.rsync]]
+name = "success-shaped stdout not collapsed when exit non-zero"
+failed = true
+input = """
+sending incremental file list
+./
+file.txt
+
+sent 890 bytes  received 38 bytes  1,856.00 bytes/sec
+total size is 98,304  speedup is 103.77
+"""
+expected = "./\nfile.txt\ntotal size is 98,304  speedup is 103.77"

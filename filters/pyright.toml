@@ -17,3 +17,9 @@ expected = "pyright: ok"
 name = "type error preserved"
 input = "/repo/app.py:10:5 - error: Type \"str\" is not assignable to \"int\""
 expected = "/repo/app.py:10:5 - error: Type \"str\" is not assignable to \"int\""
+
+[[tests.pyright]]
+name = "failed exit is not collapsed to a 'pyright: ok' summary"
+failed = true
+input = "0 errors, 0 warnings, 0 informations"
+expected = "0 errors, 0 warnings, 0 informations"

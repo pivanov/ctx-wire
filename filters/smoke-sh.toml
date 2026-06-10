@@ -35,3 +35,16 @@ details here
 == summary: 1 passed, 1 failed ==
 """
 expected = "  FAIL  ctx-wire verify\ndetails here"
+
+[[tests.smoke-sh]]
+name = "all-pass output not collapsed to ok when exit non-zero"
+failed = true
+input = """
+== build check ==
+  PASS  go build -o /tmp/app
+  PASS  app --version
+
+== summary: 2 passed, 0 failed ==
+/bin/sh: line 42: cleanup: command not found
+"""
+expected = "/bin/sh: line 42: cleanup: command not found"

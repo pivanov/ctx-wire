@@ -23,3 +23,11 @@ expected = "src/app.ts(10,7): error TS2322: Type 'string' is not assignable to t
 name = "npm run typecheck success collapses"
 input = "Found 0 errors."
 expected = "tsc: ok"
+
+[[tests.tsc]]
+name = "failed exit not collapsed when zero-errors line present"
+failed = true
+input = """
+Found 0 errors. Watching for file changes.
+"""
+expected = "Found 0 errors. Watching for file changes."

@@ -25,3 +25,13 @@ error[no-unused-vars]: `x` is never used
  --> /repo/main.ts:1:7
 """
 expected = "error[no-unused-vars]: `x` is never used\n --> /repo/main.ts:1:7"
+
+[[tests.deno]]
+name = "failed exit not collapsed when passed line present"
+failed = true
+input = """
+Check file:///repo/mod_test.ts
+running 3 tests from ./mod_test.ts
+ok | 3 passed | 0 failed (120ms)
+"""
+expected = "running 3 tests from ./mod_test.ts\nok | 3 passed | 0 failed (120ms)"

@@ -27,3 +27,15 @@ There was 1 failure:
 Failed asserting that false is true.
 """
 expected = "There was 1 failure:\n1) AppTest::testThing\nFailed asserting that false is true."
+
+[[tests.phpunit]]
+name = "failed exit with OK summary is not collapsed to phpunit: ok"
+failed = true
+input = """
+PHPUnit 11.0.0 by Sebastian Bergmann.
+
+....                                                                4 / 4 (100%)
+
+OK (4 tests, 8 assertions)
+"""
+expected = "PHPUnit 11.0.0 by Sebastian Bergmann.\n....                                                                4 / 4 (100%)\nOK (4 tests, 8 assertions)"

@@ -52,3 +52,17 @@ custom preflight output
 artifact: /tmp/build/result.json
 """
 expected = "custom preflight output\nartifact: /tmp/build/result.json"
+
+[[tests.package-script]]
+name = "failed exit not collapsed when built-success line present"
+failed = true
+input = """
+vite v5.4.0 building for production...
+transforming...
+✓ 123 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/app.js  120.4 kB
+✓ built in 1.23s
+"""
+expected = "dist/assets/app.js  120.4 kB\n✓ built in 1.23s"

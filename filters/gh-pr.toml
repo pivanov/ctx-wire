@@ -22,3 +22,15 @@ expected = "gh: ok"
 name = "failed check preserved"
 input = "test  X failing  2m  https://github.com/org/repo/actions/runs/1"
 expected = "test  X failing  2m  https://github.com/org/repo/actions/runs/1"
+
+[[tests.gh-pr]]
+name = "checks pass but pr has merge conflict blocking merge"
+failed = true
+input = """
+build   ✓ passing  45s
+lint    ✓ passing  30s
+test    ✓ passing  2m18s
+All checks were successful
+GraphQL: Could not resolve to a PullRequest with the number of 42. (NotFound)
+"""
+expected = "build   ✓ passing  45s\nlint    ✓ passing  30s\ntest    ✓ passing  2m18s\nAll checks were successful\nGraphQL: Could not resolve to a PullRequest with the number of 42. (NotFound)"

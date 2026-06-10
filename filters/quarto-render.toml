@@ -39,3 +39,21 @@ caused by:
   syntax error at line 10
 """
 expected = "ERROR: Render failed\ncaused by:\n  syntax error at line 10"
+
+[[tests.quarto-render]]
+name = "partial book render: first chapter ok then second chapter fails"
+failed = true
+input = """
+processing file: chapter1.qmd
+  Validating schema
+  Resolving resources
+pandoc to html5
+Output created: _site/chapter1.html
+processing file: chapter2.qmd
+  Validating schema
+ERROR: Execution halted
+
+caused by:
+  object 'missing_var' not found (line 42)
+"""
+expected = "Output created: _site/chapter1.html\nERROR: Execution halted\ncaused by:\n  object 'missing_var' not found (line 42)"
