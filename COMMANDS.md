@@ -15,7 +15,7 @@ commands. For the config file and environment variables see
 | `ctx-wire mcp-wrap install [--compress] \| uninstall <server>` | Wrap (or revert) a server in your MCP config so its tool output is measured (and with `--compress`, reduced); backs up the config, needs an agent restart |
 | `ctx-wire hook <agent>` | Run as an agent pre-tool hook (reads JSON on stdin) |
 | `ctx-wire rewrite <line>` | Print the rewritten form of a shell command line |
-| `ctx-wire init <agent> [--no-mcp]` | Install the binary into `~/.local/bin` and wire an agent (claude, cursor, codex, gemini, cline, windsurf, kilocode, antigravity, opencode, pi, hermes, copilot, vscode, visualstudio). Adds PATH shims only for steering-only agents; hook/plugin-capable agents are covered by their hook/plugin. `init claude` also relays known snapshot-heavy MCP servers (chrome-devtools, Playwright) through `mcp-wrap --compress`, printing each change; skip with `--no-mcp`, revert per server with `mcp-wrap uninstall`, and `ctx-wire uninstall` reverts all wraps |
+| `ctx-wire init <agent> [--no-mcp]` | Install the binary into `~/.local/bin` and wire an agent (claude, cursor, codex, gemini, cline, windsurf, kilocode, antigravity, opencode, pi, hermes, copilot, vscode, visualstudio). Adds PATH shims only for steering-only agents; hook/plugin-capable agents are covered by their hook/plugin. `init claude` also relays known snapshot-heavy MCP servers (chrome-devtools, Playwright) through `mcp-wrap --compress`, printing each change; skip with `--no-mcp`, revert per server with `mcp-wrap uninstall`, and `ctx-wire uninstall` reverts all wraps. `--capture-files` / `--no-capture-files` toggle the opt-in file-tools capture experiment (see CONFIGURATION.md) |
 | `ctx-wire shims [status\|install\|uninstall]` | Manage the optional default PATH shims: inspect them, opt in on a hook/plugin-capable agent, or remove them if they slow shell startup. `uninstall` removes only ctx-wire-managed shim files |
 | `ctx-wire update [--check]` | Upgrade to the latest release (checksum-verified, atomic, with rollback); `--check` only reports |
 | `ctx-wire uninstall` | Remove the ctx-wire binary, managed shims, and only ctx-wire hook/config entries |
@@ -42,7 +42,7 @@ commands. For the config file and environment variables see
 | `ctx-wire tune draft <program>` | Scaffold a starter filter for a program from a real captured transcript sample (`--preview`/`--write`) |
 | `ctx-wire filters pull <name> \| publish <name>` | Share filters: pull a community filter (parsed and inline-tested, installed untrusted) or package a local one |
 | `ctx-wire telemetry [status\|enable\|disable\|forget]` | Show or change anonymous aggregate telemetry status; `forget` withdraws consent and erases local data |
-| `ctx-wire doctor [--recent N]` | Check install/hooks/MCP/storage/trust health (read-only) |
+| `ctx-wire doctor [--all] [--recent N]` | Check install/hooks/MCP/storage/trust health (read-only). Optional `[off]` checks (integrations not set up) are hidden behind a one-line count; `--all` shows them |
 | `ctx-wire verify [filter]` | Run the built-in filter conformance tests |
 | `ctx-wire version` | Print version and build metadata |
 
@@ -119,7 +119,9 @@ long, it prints the issue body instead of opening a browser.
 
 ## `ctx-wire doctor`
 
-`doctor` is read-only. It reports the running binary and whether `ctx-wire` on
+`doctor` is read-only. By default it shows only actionable state (`ok`, `warn`,
+`fail`); optional integrations that simply are not set up (`off`) are collapsed
+into a one-line count, and `--all` shows them. It reports the running binary and whether `ctx-wire` on
 your `PATH` is that same binary, whether managed command shims are installed and
 first on `PATH`, whether any shim captures have been recorded, which agent
 hooks/rules are installed (Claude, Cursor, Codex, Gemini, Cline, Windsurf,

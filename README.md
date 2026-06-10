@@ -23,9 +23,11 @@ fails. Wire it into your agent once; from then on it works transparently.
   and valid JSON is never broken mid-structure.
 - **Measurable.** `ctx-wire gain` reports exactly how many bytes and tokens were
   saved, broken down by program and by agent.
-- **MCP output too.** `ctx-wire mcp-wrap --compress` relays any MCP server,
-  measures what each tool costs in tokens, and reduces verbose browser
-  snapshots (chrome-devtools, Playwright) with the raw result spooled locally.
+- **MCP output too.** `ctx-wire init claude` automatically relays known
+  snapshot-heavy MCP servers (chrome-devtools, Playwright) through
+  `mcp-wrap --compress`, which measures what each tool costs in tokens and
+  reduces verbose browser snapshots with the raw result spooled locally.
+  Any other server can be wrapped with `ctx-wire mcp-wrap install <server>`.
 - **Extensible.** Filters are declarative TOML. Pull community filters, publish
   your own, or scaffold a new one from a real command transcript.
 - **Works with your stack.** Claude Code, Cursor, Codex, Gemini, GitHub Copilot,

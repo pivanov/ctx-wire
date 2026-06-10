@@ -99,6 +99,14 @@ config and environment variables see [CONFIGURATION.md](CONFIGURATION.md).
   `reduce_json = true` and keep capping. Known JSON commands (`go list -json`,
   `terraform show -json`, the `tofu` equivalents) also have explicit passthrough
   filters; their non-JSON variants are still compacted.
+- **Unfiltered output is bounded by a passthrough ceiling.** A command with no
+  matching filter streams unmodified up to a generous cap (~64 KB at the
+  default truncate level); beyond it the head and the tail of each stream are
+  kept, the omitted middle is replaced by an explicit
+  `[ctx-wire: N bytes omitted ...]` marker, and the full scrubbed output is
+  spooled to disk (the `[full output: ...]` hint names the file). Deterministic
+  head+tail only, never a summary. Disable with `CTX_WIRE_TRUNCATE=none` or
+  `[output] truncate = "none"`; `light`/`aggressive` scale it.
 - **Project filters require trust.** A project-local `.ctx-wire/filters.toml` is
   ignored until you approve it with `ctx-wire trust` (recorded by SHA-256). If
   the file changes after approval, it reverts to untrusted until re-approved.
