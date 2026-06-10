@@ -554,14 +554,33 @@ func captureSection(opts Options) Section {
 
 // Format renders a report as concise plain-text status lines.
 func Format(r *Report) string {
-	return FormatThemed(r, ui.Plain())
+	return FormatThemed(r, ui.Plain(), true)
 }
 
-// FormatThemed renders a report as concise terminal status lines.
-func FormatThemed(r *Report, theme ui.Theme) string {
+// FormatThemed renders a report as concise terminal status lines. By default
+// Off rows (optional integrations that simply are not set up) are hidden behind
+// a one-line count so the screen shows only actionable state; showAll restores
+// them (`doctor --all`). Hiding never affects health: Off is informational.
+func FormatThemed(r *Report, theme ui.Theme, showAll bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n", theme.Heading("ctx-wire doctor: health check"))
+	hidden := 0
 	for _, sec := range r.Sections {
+		checks := sec.Checks
+		if !showAll {
+			visible := make([]Check, 0, len(checks))
+			for _, c := range checks {
+				if c.Status == Off {
+					hidden++
+					continue
+				}
+				visible = append(visible, c)
+			}
+			checks = visible
+			if len(checks) == 0 {
+				continue // a section of nothing-but-off says nothing actionable
+			}
+		}
 		title := sec.Title
 		if title == "mcp" {
 			title = "MCP"
@@ -569,12 +588,16 @@ func FormatThemed(r *Report, theme ui.Theme) string {
 			title = strings.ToUpper(title[:1]) + title[1:]
 		}
 		fmt.Fprintf(&b, "\n%s\n", theme.Section.Render(title))
-		for _, c := range sec.Checks {
+		for _, c := range checks {
 			fmt.Fprintf(&b, "  %s %-22s %s\n",
 				theme.Status(c.Status.String()),
 				theme.Label.Render(c.Name),
 				colorDetail(theme, c.Detail))
 		}
+	}
+	if hidden > 0 {
+		fmt.Fprintf(&b, "\n%s\n", theme.Dim.Render(fmt.Sprintf(
+			"%d optional check(s) hidden (not configured / not needed) · ctx-wire doctor --all", hidden)))
 	}
 	if r.Healthy() {
 		fmt.Fprintf(&b, "\n%s\n", theme.OK.Render("healthy"))

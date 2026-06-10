@@ -3,6 +3,8 @@ package doctor
 import (
 	"strings"
 	"testing"
+
+	"ctx-wire/internal/ui"
 )
 
 // TestShimPathChecks pins the resolution-based advisory: the decision keys off the
@@ -90,5 +92,47 @@ func TestShimInstalledCheck(t *testing.T) {
 	// But when nothing covers the agent, the actionable advice stays.
 	if got := shimInstalledCheck(0, total, 0, dir, false); !strings.Contains(got.Detail, "ctx-wire init") {
 		t.Errorf("unwired user should be pointed at init, got %q", got.Detail)
+	}
+}
+
+// TestFormatThemedHidesOffByDefault pins the doctor collapse: Off rows are
+// hidden by default behind a one-line count (only actionable state renders),
+// sections that are nothing-but-off vanish entirely, and showAll restores the
+// full report. Hiding must never change health.
+func TestFormatThemedHidesOffByDefault(t *testing.T) {
+	r := &Report{Sections: []Section{
+		{Title: "binary", Checks: []Check{{"version", OK, "dev"}}},
+		{Title: "hooks", Checks: []Check{
+			{"claude", OK, "hook present"},
+			{"cline", Off, "not configured (run `ctx-wire init cline` to enable)"},
+		}},
+		{Title: "mcp", Checks: []Check{
+			{"vscode (workspace)", Off, "not configured"},
+			{"visualstudio (user)", Off, "not configured"},
+		}},
+	}}
+	theme := ui.Plain()
+
+	def := FormatThemed(r, theme, false)
+	for _, gone := range []string{"cline", "vscode (workspace)", "visualstudio (user)", "MCP"} {
+		if strings.Contains(def, gone) {
+			t.Errorf("default view must hide %q:\n%s", gone, def)
+		}
+	}
+	if !strings.Contains(def, "3 optional check(s) hidden") || !strings.Contains(def, "doctor --all") {
+		t.Errorf("default view must summarize hidden checks and point at --all:\n%s", def)
+	}
+	if !strings.Contains(def, "claude") || !strings.Contains(def, "healthy") {
+		t.Errorf("default view lost actionable rows or health:\n%s", def)
+	}
+
+	all := FormatThemed(r, theme, true)
+	for _, want := range []string{"cline", "vscode (workspace)", "MCP", "claude"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("--all view must show %q:\n%s", want, all)
+		}
+	}
+	if strings.Contains(all, "hidden") {
+		t.Errorf("--all view must not print the hidden-count line:\n%s", all)
 	}
 }

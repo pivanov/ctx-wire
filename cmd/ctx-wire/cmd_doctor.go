@@ -21,9 +21,10 @@ func cmdDoctor(args []string) int {
 	fs.SetOutput(io.Discard)
 	verbose := fs.Bool("verbose", false, "show recent scrubbed commands (implies --recent 5)")
 	recent := fs.Int("recent", 0, "show the N most recent scrubbed commands")
+	all := fs.Bool("all", false, "also show optional [off] checks (integrations not set up)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "ctx-wire doctor: %v\n", err)
-		usageHint(os.Stderr, "ctx-wire doctor [--recent N] [--verbose]", "doctor")
+		usageHint(os.Stderr, "ctx-wire doctor [--all] [--recent N] [--verbose]", "doctor")
 		return 2
 	}
 
@@ -44,7 +45,7 @@ func cmdDoctor(args []string) int {
 		Workdir: wd,
 		Recent:  n,
 	})
-	fmt.Print(doctor.FormatThemed(report, themeForStdout()))
+	fmt.Print(doctor.FormatThemed(report, themeForStdout(), *all))
 	if report.Healthy() {
 		return 0
 	}
@@ -53,9 +54,10 @@ func cmdDoctor(args []string) int {
 
 func usageDoctor(out *os.File) {
 	printHelp(out, helpDoc{
-		usage:   []string{"ctx-wire doctor [--recent N] [--verbose]"},
+		usage:   []string{"ctx-wire doctor [--all] [--recent N] [--verbose]"},
 		summary: "Health check: binary, PATH, agent hooks, shims, storage, filters, trust, and telemetry.",
 		flags: [][2]string{
+			{"--all", "also show optional [off] checks (hidden by default)"},
 			{"--recent N", "also show the N most recent recorded commands"},
 			{"--verbose", "show extra detail for each check"},
 		},
