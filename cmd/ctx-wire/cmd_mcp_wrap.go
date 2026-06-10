@@ -105,6 +105,27 @@ func cmdMCPWrap(args []string) int {
 		return 2
 	}
 
+	compress := false
+	pre := args
+	if sep >= 0 {
+		pre = args[:sep]
+	}
+	for _, a := range pre {
+		if a == "--compress" {
+			compress = true
+		}
+	}
+	return runMCPWrapRelay(os.Stdin, os.Stdout, server, compress)
+}
+
+// runMCPWrapRelay is the relay core behind `ctx-wire mcp-wrap -- <server>`,
+// parameterized over the agent-side pipes so the process-level robustness
+// properties (child crash without hang, EOF propagation, exit-code passthrough,
+// byte-verbatim forwarding) are provable in tests against real subprocesses.
+// stdin must be a real file (os.Stdin, an os.Pipe end): Close() unblocking a
+// parked Read is what prevents a hang when the child dies while the agent is
+// idle.
+func runMCPWrapRelay(stdin io.ReadCloser, stdout io.Writer, server []string, compress bool) int {
 	cmd := exec.Command(server[0], server[1:]...)
 	cmd.Stderr = os.Stderr
 	childIn, err := cmd.StdinPipe()
@@ -122,17 +143,6 @@ func cmdMCPWrap(args []string) int {
 		return 1
 	}
 
-	compress := false
-	pre := args
-	if sep >= 0 {
-		pre = args[:sep]
-	}
-	for _, a := range pre {
-		if a == "--compress" {
-			compress = true
-		}
-	}
-
 	m := &mcpMeasure{tools: map[string]*toolStat{}, pending: map[string]string{}, compress: compress, spoolCap: mcpRawSpoolCap}
 	if compress {
 		m.openSpool()
@@ -148,17 +158,17 @@ func cmdMCPWrap(args []string) int {
 	go func() {
 		defer wg.Done()
 		defer childIn.Close()
-		relayMCP(os.Stdin, childIn, m.onAgentMsg)
+		relayMCP(stdin, childIn, m.onAgentMsg)
 	}()
 	// server -> agent: measure result content; with --compress, reduce snapshot
 	// results before forwarding (default forwards verbatim).
 	go func() {
 		defer wg.Done()
-		relayMCPTransform(childOut, os.Stdout, m.serverMsg)
+		relayMCPTransform(childOut, stdout, m.serverMsg)
 		// The child's stdout closed (it exited). Unblock the agent->server reader
-		// that may be parked on os.Stdin, so the session does not hang if the child
+		// that may be parked on stdin, so the session does not hang if the child
 		// crashes while the agent is idle (otherwise wg.Wait blocks forever).
-		_ = os.Stdin.Close()
+		_ = stdin.Close()
 	}()
 	wg.Wait()
 	werr := cmd.Wait()

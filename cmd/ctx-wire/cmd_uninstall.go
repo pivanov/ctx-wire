@@ -58,6 +58,18 @@ func cmdUninstall(args []string) int {
 		fmt.Printf("%s left custom hook files alone: %s\n", theme.Warn.Render("Skipped"), strings.Join(integrations.Skipped, ", "))
 	}
 
+	// Revert MCP wraps BEFORE the binary is removed: a wrapped server entry
+	// launches through this executable, so leaving it would brick that server
+	// the moment the binary disappears.
+	unwrapped, err := unwrapAllCtxWireMCP("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ctx-wire uninstall: mcp unwrap: %v\n", err)
+		return 1
+	}
+	if len(unwrapped) > 0 {
+		fmt.Printf("%s MCP wrap from server(s): %s (original launch restored)\n", theme.OK.Render("Removed"), strings.Join(unwrapped, ", "))
+	}
+
 	report, err := shim.UninstallDefault(filepath.Dir(dest))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ctx-wire uninstall: %v\n", err)

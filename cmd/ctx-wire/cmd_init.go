@@ -18,8 +18,11 @@ import (
 func cmdInit(args []string) int {
 	if isHelpArg(args) {
 		printHelp(os.Stdout, helpDoc{
-			usage:   []string{"ctx-wire init <agent>"},
+			usage:   []string{"ctx-wire init <agent> [--no-mcp]"},
 			summary: "Wire an agent: install the binary into ~/.local/bin and configure that agent's hooks/rules.",
+			flags: [][2]string{
+				{"--no-mcp", "skip MCP auto-wrap (init claude otherwise relays known snapshot-heavy servers through mcp-wrap --compress)"},
+			},
 			examples: []string{
 				"ctx-wire init claude    # wire Claude Code",
 				"ctx-wire init codex     # wire Codex",
@@ -31,6 +34,19 @@ func cmdInit(args []string) int {
 		})
 		return 0
 	}
+	if len(args) == 0 {
+		return initMissingTarget()
+	}
+	noMCP := false
+	kept := args[:0:0]
+	for _, a := range args {
+		if a == "--no-mcp" {
+			noMCP = true
+			continue
+		}
+		kept = append(kept, a)
+	}
+	args = kept
 	if len(args) == 0 {
 		return initMissingTarget()
 	}
@@ -126,7 +142,30 @@ func cmdInit(args []string) int {
 	if code := installSelfAndShims(theme, canonicalInitAgent(agent)); code != 0 {
 		return code
 	}
+	if agent == "claude" && !noMCP {
+		initAutoWrapMCP(theme)
+	}
 	return 0
+}
+
+// initAutoWrapMCP turns on snapshot compression for known snapshot-heavy MCP
+// servers in the Claude config (chrome-devtools, Playwright). Non-silent: every
+// change is printed with the revert path. Best-effort: a failure here warns and
+// never fails init, since the hook wiring above is already complete.
+func initAutoWrapMCP(theme ui.Theme) {
+	wrapped, err := autoWrapSnapshotMCP("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ctx-wire init: mcp auto-wrap skipped: %v\n", err)
+		return
+	}
+	if len(wrapped) == 0 {
+		return
+	}
+	for _, name := range wrapped {
+		fmt.Printf("%s MCP server %q now relays through `ctx-wire mcp-wrap --compress` (browser snapshots reduced, raw spooled locally)\n",
+			theme.OK.Render("Configured"), name)
+	}
+	fmt.Printf("   %s\n", theme.Dim.Render("restart Claude to apply · revert anytime: ctx-wire mcp-wrap uninstall <server> (or skip with init --no-mcp)"))
 }
 
 // canonicalInitAgent maps an init target to the agent name used for per-agent
