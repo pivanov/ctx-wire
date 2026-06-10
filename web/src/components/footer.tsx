@@ -10,9 +10,28 @@ import { BrandMark } from "./brand-mark";
 const REPO = "https://github.com/pivanov/ctx-wire";
 const INSTALL = "curl -fsSL https://ctx-wire.dev/install.sh | sh";
 
+// Backer logos: mono marks render as a mask silhouette (background-color:
+// currentColor clipped to the SVG) so they take the footer's muted color and
+// hover to green. Color marks (sashido's blue+white robot, whose face is
+// defined by color contrast, not shape) must render natively, a single-color
+// mask would erase the face into a blob. w/h match each viewBox at 24px tall.
 const BACKERS = [
-  { label: "LogicStar AI", href: "https://logicstar.ai" },
-  { label: "SashiDo.io", href: "https://www.sashido.io" },
+  {
+    label: "LogicStar AI",
+    href: "https://logicstar.ai",
+    src: "/logos/logicstar.svg",
+    width: 138,
+    height: 26,
+    mono: true,
+  },
+  {
+    label: "SashiDo.io",
+    href: "https://www.sashido.io",
+    src: "/logos/sashido.svg",
+    width: 128,
+    height: 32,
+    mono: false,
+  },
 ];
 
 const SOCIALS = [
@@ -123,27 +142,45 @@ export function Footer() {
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-line-soft py-6 font-mono text-2xs text-label">
           <span>© 2026 Pavel Ivanov · Released under MIT</span>
 
-          <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="uppercase tracking-caps text-dim">Backed by</span>
-            {BACKERS.map((backer, index) => (
-              <span
+          <span className="inline-flex flex-wrap items-center gap-x-5 gap-y-2">
+            <span className="uppercase tracking-caps text-label">Backed by</span>
+            {BACKERS.map((backer) => (
+              <a
                 key={backer.label}
-                className="inline-flex items-center gap-3"
+                href={backer.href}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex text-[#fefefe] opacity-80 transition duration-150 hover:text-white hover:opacity-100 motion-safe:active:scale-[0.98]"
               >
-                {index > 0 ? (
-                  <span aria-hidden="true" className="text-dim">
-                    ·
-                  </span>
-                ) : null}
-                <a
-                  href={backer.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-fg transition-colors hover:text-green"
-                >
-                  {backer.label}
-                </a>
-              </span>
+                <span className="sr-only">{backer.label}</span>
+                {backer.mono ? (
+                  <span
+                    aria-hidden="true"
+                    className="block bg-current"
+                    style={{
+                      width: backer.width,
+                      height: backer.height,
+                      maskImage: `url(${backer.src})`,
+                      WebkitMaskImage: `url(${backer.src})`,
+                      maskSize: "contain",
+                      WebkitMaskSize: "contain",
+                      maskRepeat: "no-repeat",
+                      WebkitMaskRepeat: "no-repeat",
+                      maskPosition: "center",
+                      WebkitMaskPosition: "center",
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={backer.src}
+                    alt=""
+                    width={backer.width}
+                    height={backer.height}
+                    loading="lazy"
+                    className="block"
+                  />
+                )}
+              </a>
             ))}
           </span>
         </div>
