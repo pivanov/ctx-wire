@@ -46,6 +46,38 @@ func TestContainsUnattestableConstruct(t *testing.T) {
 	}
 }
 
+func TestContainsRedirect(t *testing.T) {
+	flagged := []string{
+		"cat x > /dev/sda",       // write to a raw device
+		"cat x >> ~/.bashrc",     // append to a path
+		"cat x 2> /dev/sda",      // stderr to a path
+		"cat x 2>/dev/sda",       // no space
+		"cat x &> out",           // both streams to a path
+		"cat x < in",             // input redirect
+		"diff <(a) <(b)",         // process substitution
+		"ls && cat x > /dev/sda", // redirect in a later segment
+	}
+	for _, s := range flagged {
+		if !ContainsRedirect(s) {
+			t.Errorf("ContainsRedirect(%q) = false, want true", s)
+		}
+	}
+	safe := []string{
+		"cat x",
+		"go test ./... 2>&1",         // fd dup, not a path
+		"git status >&2",             // fd dup
+		"rg 'a > b' file",            // operator inside single quotes
+		`echo "x > y"`,               // inside double quotes
+		`echo \> not-a-redirect`,     // escaped operator
+		"git add . && git commit -m", // no redirect
+	}
+	for _, s := range safe {
+		if ContainsRedirect(s) {
+			t.Errorf("ContainsRedirect(%q) = true, want false", s)
+		}
+	}
+}
+
 func TestLinePassesThroughUnattestable(t *testing.T) {
 	// A line that hides a command must come back unchanged, so a hook never
 	// auto-allows a wrapped form of it (the agent evaluates the original).

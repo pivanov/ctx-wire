@@ -412,6 +412,17 @@ func cmdInitCodex() int {
 		fmt.Printf("%s ctx-wire hook already present in %s\n", theme.OK.Render("OK"), theme.Path.Render(hooksPath))
 	}
 
+	// State the permission posture plainly. ctx-wire is a filter, not a gate: by
+	// default it auto-approves the commands it wraps so codex runs uninterrupted
+	// (the point, for autonomous work). That also means it does NOT prompt before
+	// destructive wrapped commands, safety stays with codex's own approval policy.
+	fmt.Printf("\n%s ctx-wire auto-approves the commands it wraps so codex is not\n", theme.Warn.Render("Permissions:"))
+	fmt.Println("   double-prompted. It is a filter, not a permission boundary: it does")
+	fmt.Println("   not prompt before wrapped commands (including destructive ones),")
+	fmt.Println("   so safety stays with codex's own approval policy.")
+	fmt.Printf("   Want a ctx-wire guard that prompts on anything but read/build/test?\n")
+	fmt.Printf("   Set %s in codex's shell env.\n", theme.Path.Render("CTX_WIRE_CODEX_SAFE=1"))
+
 	configPath, err := install.CodexConfigPath()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ctx-wire init: %v\n", err)

@@ -77,6 +77,46 @@ func ContainsUnattestableConstruct(line string) bool {
 	return false
 }
 
+// ContainsRedirect reports whether line contains a shell I/O redirection to a
+// path (`>`, `>>`, `2>`, `&>`, `<`), which writes or reads an arbitrary path and
+// so does more than the command appears. File-descriptor dups (`>&1`, `2>&1`)
+// target an fd, not a path, and are not flagged. Quoted/escaped operators are
+// literal and ignored. The codex permission gate uses this as defense in depth
+// behind the rewriter's redirect passthrough, so a wrapped safe program
+// (`cat x > /dev/sda`) never auto-approves an arbitrary write.
+func ContainsRedirect(line string) bool {
+	n := len(line)
+	var quote byte
+	for i := 0; i < n; i++ {
+		c := line[i]
+		switch {
+		case quote == '\'':
+			if c == '\'' {
+				quote = 0
+			}
+		case c == '\\':
+			i++ // escape next byte (outside single quotes)
+		case quote == '"':
+			if c == '"' {
+				quote = 0
+			}
+		case c == '\'':
+			quote = '\''
+		case c == '"':
+			quote = '"'
+		case c == '<' || c == '>':
+			j := i + 1
+			for j < n && (line[j] == ' ' || line[j] == '\t') {
+				j++
+			}
+			if j >= n || line[j] != '&' { // not an fd dup → path redirect
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // isCommandSub reports whether a command substitution `$(` begins at index i.
 // It excludes arithmetic expansion `$((`, which executes no command. A command
 // substitution nested inside arithmetic (e.g. `$(( $(id) ))`) is still flagged

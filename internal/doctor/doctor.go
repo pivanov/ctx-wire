@@ -359,6 +359,12 @@ func hooksSection(opts Options) Section {
 	}
 	if p, err := install.CodexHooksPath(); err == nil {
 		sec.Checks = append(sec.Checks, hookCheck("codex", p, "ctx-wire hook codex"))
+		// Permission posture: ctx-wire is a filter, not a gate. By default it
+		// auto-approves the commands it wraps so codex runs uninterrupted; safety
+		// stays with codex's own approval policy. CTX_WIRE_CODEX_SAFE=1 restores
+		// the audited read/build/test gate.
+		sec.Checks = append(sec.Checks, Check{"codex permissions", OK,
+			"auto-approves wrapped commands (a filter, not a permission boundary); safety is codex's approval policy. Set CTX_WIRE_CODEX_SAFE=1 for an audited read/build/test gate."})
 		// Codex requires the hooks feature enabled and per-hook trust; report the
 		// feature flag but never alter trust.
 		if cp, cerr := install.CodexConfigPath(); cerr == nil {
