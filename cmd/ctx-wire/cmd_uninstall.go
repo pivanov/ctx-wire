@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"ctx-wire/internal/agent"
 	"ctx-wire/internal/install"
 	"ctx-wire/internal/paths"
 	"ctx-wire/internal/shim"
@@ -19,17 +20,21 @@ import (
 func cmdUninstall(args []string) int {
 	if isHelpArg(args) {
 		printHelp(os.Stdout, helpDoc{
-			usage:   []string{"ctx-wire uninstall"},
-			summary: "Remove the ctx-wire binary, managed shims, ctx-wire's own config and data, and only ctx-wire's hook entries from shared agent files.",
+			usage:   []string{"ctx-wire uninstall [agent]"},
+			summary: "Remove ctx-wire. No argument: the binary, managed shims, config/data, and ctx-wire's entries from every agent. An agent name: only that agent's wiring.",
 			notes: []string{
-				"Full removal: ctx-wire's own config and data directories (including gain logs, tee captures, trust records, and telemetry config/state) are deleted.",
+				"No argument is full removal: ctx-wire's own config and data directories (gain logs, tee captures, trust records, telemetry config/state) are deleted.",
+				"With an agent (e.g. `ctx-wire uninstall claude`): only that agent's hook/plugin/rules wiring is removed; the binary, shims, config/data, and every other agent are left intact.",
 				"Shared agent files are edited surgically: only the blocks ctx-wire added are removed; the rest of your settings and any custom files are left untouched.",
 			},
 		})
 		return 0
 	}
-	if len(args) > 0 {
-		usageLine(os.Stderr, "ctx-wire uninstall")
+	if len(args) == 1 {
+		return cmdUninstallAgent(args[0])
+	}
+	if len(args) > 1 {
+		usageLine(os.Stderr, "ctx-wire uninstall [agent]")
 		return 2
 	}
 	dest, err := install.SelfInstallPath()
@@ -123,4 +128,42 @@ func cmdUninstall(args []string) int {
 
 	fmt.Println("Unrelated agent settings and custom files were left intact.")
 	return 0
+}
+
+// cmdUninstallAgent removes only one agent's ctx-wire wiring (its
+// hook/plugin/rules and instruction block), leaving the binary, managed shims,
+// ctx-wire config/data, and every other agent intact.
+func cmdUninstallAgent(raw string) int {
+	name := canonicalUninstallAgent(raw)
+	if !agent.IsKnown(name) {
+		fmt.Fprintf(os.Stderr, "ctx-wire uninstall: unknown agent %q\n", raw)
+		fmt.Fprintf(os.Stderr, "known agents: %s\n", strings.Join(agent.Known, ", "))
+		return 2
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ctx-wire uninstall %s: %v\n", name, err)
+		return 1
+	}
+	theme := themeForStdout()
+	report, err := install.UninstallAgent(wd, name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ctx-wire uninstall %s: %v\n", name, err)
+		return 1
+	}
+	if len(report.Removed) > 0 {
+		fmt.Printf("%s %s wiring: %s\n", theme.OK.Render("Removed"), name, strings.Join(report.Removed, ", "))
+	} else {
+		fmt.Printf("%s no ctx-wire wiring found for %s\n", theme.OK.Render("OK"), name)
+	}
+	if len(report.Skipped) > 0 {
+		fmt.Printf("%s left custom files alone: %s\n", theme.Warn.Render("Skipped"), strings.Join(report.Skipped, ", "))
+	}
+	fmt.Println(theme.Dim.Render("binary, shims, config/data, and other agents left intact"))
+	fmt.Println(theme.Dim.Render("MCP wraps, if any, revert separately: ctx-wire mcp-wrap uninstall <server>"))
+	return 0
+}
+
+func canonicalUninstallAgent(raw string) string {
+	return canonicalInitAgent(agent.Normalize(raw))
 }

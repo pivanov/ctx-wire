@@ -57,6 +57,18 @@ func IsHookCapable(name string) bool {
 	return false
 }
 
+// IsKnown reports whether name is a recognized agent ctx-wire can wire (and so
+// can un-wire). Normalizes first, so "Claude" and "claude" both match.
+func IsKnown(name string) bool {
+	name = Normalize(name)
+	for _, a := range Known {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Normalize lowercases and validates an agent name. It returns "" for an empty,
 // over-long, or otherwise malformed value (anything outside [a-z0-9-]). The
 // restricted charset keeps the name safe to pass through hooks, config files,

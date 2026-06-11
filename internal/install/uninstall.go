@@ -176,6 +176,173 @@ func UninstallIntegrations(workdir string) (IntegrationUninstallReport, error) {
 	return report, nil
 }
 
+// UninstallAgent removes only the named agent's ctx-wire wiring: its
+// hook/plugin/MCP entry and its instruction or rules block. It reuses the same
+// surgical helpers as UninstallIntegrations, scoped to one agent, so the binary,
+// managed shims, ctx-wire config/data, and every OTHER agent are left intact.
+// An unrecognized name is an error. Keep the cases in sync with agent.Known
+// (TestUninstallAgentCoversKnownAgents enforces this).
+func UninstallAgent(workdir, name string) (IntegrationUninstallReport, error) {
+	var report IntegrationUninstallReport
+	// instr removes an agent's instruction/rules block at a getter-resolved path;
+	// an unavailable path (different OS/setup) is simply nothing to remove.
+	instr := func(label string, get func() (string, error)) error {
+		p, err := get()
+		if err != nil {
+			return nil
+		}
+		return report.removeInstr(label, p)
+	}
+
+	switch name {
+	case "claude":
+		// UninstallClaude removes by command, so it strips every ctx-wire entry,
+		// the Bash hook and the file-tools Read|Grep entry alike (both carry
+		// claudeHookCommand). TestUninstallAgentRemovesClaudeFileToolsMatcher guards
+		// that this stays true.
+		if path, err := ClaudeSettingsPath(); err == nil {
+			if changed, err := UninstallClaude(path); err != nil {
+				return report, err
+			} else if changed {
+				report.Removed = append(report.Removed, "claude")
+			}
+		}
+		if err := instr("claude instructions", ClaudeMemoryPath); err != nil {
+			return report, err
+		}
+	case "codex":
+		if path, err := CodexHooksPath(); err == nil {
+			if changed, err := UninstallCodexHooks(path); err != nil {
+				return report, err
+			} else if changed {
+				report.Removed = append(report.Removed, "codex")
+			}
+		}
+		if path, err := CodexConfigPath(); err == nil {
+			res, err := UninstallCodexAgentEnv(path)
+			if err != nil {
+				return report, err
+			}
+			switch res {
+			case CodexEnvUpdated:
+				report.Removed = append(report.Removed, "codex agent env")
+			case CodexEnvManual:
+				report.Skipped = append(report.Skipped, path)
+			}
+		}
+		if err := instr("codex instructions", CodexAgentsPath); err != nil {
+			return report, err
+		}
+	case "cursor":
+		if path, err := CursorHooksPath(); err == nil {
+			if changed, err := UninstallCursor(path); err != nil {
+				return report, err
+			} else if changed {
+				report.Removed = append(report.Removed, "cursor")
+			}
+		}
+	case "gemini":
+		if hookPath, err := GeminiHookPath(); err == nil {
+			if settingsPath, err := GeminiSettingsPath(); err == nil {
+				if changed, err := UninstallGeminiSettings(settingsPath, hookPath); err != nil {
+					return report, err
+				} else if changed {
+					report.Removed = append(report.Removed, "gemini settings")
+				}
+			}
+			removed, skipped, err := UninstallGeminiHook(hookPath)
+			if err != nil {
+				return report, err
+			}
+			if removed {
+				report.Removed = append(report.Removed, "gemini hook")
+			}
+			if skipped {
+				report.Skipped = append(report.Skipped, hookPath)
+			}
+		}
+		if err := instr("gemini instructions", GeminiMemoryPath); err != nil {
+			return report, err
+		}
+	case "copilot":
+		changed, err := UninstallCopilotHook(CopilotHookPath(workdir))
+		if err != nil {
+			return report, err
+		}
+		if changed {
+			report.Removed = append(report.Removed, "copilot hook")
+		}
+		if err := report.removeInstr("copilot instructions", CopilotInstructionsPath(workdir)); err != nil {
+			return report, err
+		}
+	case "cline":
+		if err := report.removeInstr("cline rules", ClineRulesPath(workdir)); err != nil {
+			return report, err
+		}
+	case "windsurf":
+		if err := report.removeInstr("windsurf rules", WindsurfRulesPath(workdir)); err != nil {
+			return report, err
+		}
+	case "kilocode":
+		if err := report.removeInstr("kilocode rules", KilocodeRulesPath(workdir)); err != nil {
+			return report, err
+		}
+	case "antigravity":
+		if err := report.removeInstr("antigravity rules", AntigravityRulesPath(workdir)); err != nil {
+			return report, err
+		}
+	case "vscode":
+		changed, err := UninstallMCP(VSCodeMCPPath(workdir))
+		if err != nil {
+			return report, err
+		}
+		if changed {
+			report.Removed = append(report.Removed, "vscode mcp")
+		}
+	case "visualstudio":
+		if path, err := VisualStudioMCPPath(); err == nil {
+			changed, err := UninstallMCP(path)
+			if err != nil {
+				return report, err
+			}
+			if changed {
+				report.Removed = append(report.Removed, "visualstudio mcp")
+			}
+		}
+	case "opencode":
+		if path, err := OpenCodePluginPath(); err == nil && removeFileIfContent(path, opencodePlugin) {
+			report.Removed = append(report.Removed, "opencode plugin")
+		}
+	case "pi":
+		if path, err := PiPluginPath(); err == nil && removeFileIfContent(path, piPlugin) {
+			report.Removed = append(report.Removed, "pi extension")
+		}
+	case "hermes":
+		if dir, err := HermesPluginDir(); err == nil {
+			if removeFileIfContent(filepath.Join(dir, "__init__.py"), hermesPluginInit) {
+				_ = os.RemoveAll(dir)
+				report.Removed = append(report.Removed, "hermes plugin")
+			}
+		}
+	default:
+		return report, fmt.Errorf("unknown agent %q", name)
+	}
+	return report, nil
+}
+
+// removeInstr removes ctx-wire's instruction block at path and records label
+// when it changed. A method on the report so the per-agent cases stay terse.
+func (r *IntegrationUninstallReport) removeInstr(label, path string) error {
+	changed, err := removeInstructionBlock(path)
+	if err != nil {
+		return err
+	}
+	if changed {
+		r.Removed = append(r.Removed, label)
+	}
+	return nil
+}
+
 // removeFileIfContent removes path only when its content equals want (so a
 // user-owned file at the same path is left intact). Reports whether it removed.
 func removeFileIfContent(path, want string) bool {

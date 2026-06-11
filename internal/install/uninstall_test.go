@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"ctx-wire/internal/agent"
 )
 
 func TestUninstallIntegrationsPreservesUnrelatedConfig(t *testing.T) {
@@ -26,6 +28,12 @@ func TestUninstallIntegrationsPreservesUnrelatedConfig(t *testing.T) {
 	writeFile(t, claudePath, `{"model":"opus","hooks":{"PreToolUse":[{"matcher":"Read","hooks":[{"type":"command","command":"other-claude"}]}]}}`)
 	if _, err := InstallClaude(claudePath); err != nil {
 		t.Fatalf("InstallClaude: %v", err)
+	}
+	// Enable the file-tools experiment too, so the full uninstall is proven to
+	// strip its Read|Grep matcher (the assertNoCtxWireAndKeeps below now guards
+	// it). Without removal, a dead ctx-wire hook survives the binary removal.
+	if _, err := InstallClaudeFileTools(claudePath); err != nil {
+		t.Fatalf("InstallClaudeFileTools: %v", err)
 	}
 
 	cursorPath, err := CursorHooksPath()
@@ -158,6 +166,118 @@ func TestUninstallClaudeRemovesOnlyCtxWireInnerHook(t *testing.T) {
 		t.Fatal("expected changed=true")
 	}
 	assertNoCtxWireAndKeeps(t, path, "other-bash")
+}
+
+// TestUninstallAgentCoversKnownAgents guards against a known agent silently
+// missing a case in UninstallAgent: a missing case surfaces as the "unknown
+// agent" error. No files are installed, so each call is a no-op, but the
+// dispatch must still recognize every name in agent.Known.
+func TestUninstallAgentCoversKnownAgents(t *testing.T) {
+	home := t.TempDir()
+	workdir := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, name := range agent.Known {
+		if _, err := UninstallAgent(workdir, name); err != nil {
+			t.Errorf("UninstallAgent(%q): %v (missing case in the switch?)", name, err)
+		}
+	}
+	if _, err := UninstallAgent(workdir, "definitely-not-an-agent"); err == nil {
+		t.Error("UninstallAgent on an unrecognized name should error")
+	}
+}
+
+// TestUninstallAgentRemovesOnlyTheNamedAgent proves the scoping: uninstalling
+// one agent strips its ctx-wire hook while another agent's wiring is left intact.
+func TestUninstallAgentRemovesOnlyTheNamedAgent(t *testing.T) {
+	home := t.TempDir()
+	workdir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+
+	claudePath, err := ClaudeSettingsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, claudePath, `{"model":"opus"}`)
+	if _, err := InstallClaude(claudePath); err != nil {
+		t.Fatalf("InstallClaude: %v", err)
+	}
+	cursorPath, err := CursorHooksPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, cursorPath, `{"hooks":{"preToolUse":[{"command":"other-cursor","matcher":"Shell"}]}}`)
+	if _, err := InstallCursor(cursorPath); err != nil {
+		t.Fatalf("InstallCursor: %v", err)
+	}
+
+	report, err := UninstallAgent(workdir, "claude")
+	if err != nil {
+		t.Fatalf("UninstallAgent claude: %v", err)
+	}
+	if len(report.Removed) == 0 {
+		t.Fatal("expected claude wiring to be removed")
+	}
+
+	claudeData, err := os.ReadFile(claudePath)
+	if err != nil {
+		t.Fatalf("read claude: %v", err)
+	}
+	if strings.Contains(string(claudeData), claudeHookCommand) {
+		t.Error("claude's ctx-wire hook should be removed")
+	}
+	cursorData, err := os.ReadFile(cursorPath)
+	if err != nil {
+		t.Fatalf("read cursor: %v", err)
+	}
+	if !strings.Contains(string(cursorData), cursorHookCommand) {
+		t.Error("cursor's ctx-wire hook must survive a claude-only uninstall")
+	}
+}
+
+// TestUninstallAgentRemovesClaudeFileToolsMatcher is the round-trip guard: after
+// init claude + the file-tools experiment, uninstalling claude must strip BOTH
+// the Bash hook and the Read|Grep file-tools matcher, leaving no ctx-wire entry
+// (an orphan would become a dead hook once the binary is gone). UninstallClaude
+// removes by command, so it already covers both matchers; this pins that, and
+// would fail if hook removal were ever narrowed to the Bash matcher.
+func TestUninstallAgentRemovesClaudeFileToolsMatcher(t *testing.T) {
+	home := t.TempDir()
+	workdir := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+
+	path, err := ClaudeSettingsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, `{"hooks":{"PreToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"other-edit"}]}]}}`)
+	if _, err := InstallClaude(path); err != nil {
+		t.Fatalf("InstallClaude: %v", err)
+	}
+	if _, err := InstallClaudeFileTools(path); err != nil {
+		t.Fatalf("InstallClaudeFileTools: %v", err)
+	}
+	pre, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if !strings.Contains(string(pre), claudeFileToolsMatcher) {
+		t.Fatalf("setup: file-tools matcher %q not installed:\n%s", claudeFileToolsMatcher, pre)
+	}
+
+	if _, err := UninstallAgent(workdir, "claude"); err != nil {
+		t.Fatalf("UninstallAgent claude: %v", err)
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if strings.Contains(string(after), claudeFileToolsMatcher) {
+		t.Errorf("file-tools Read|Grep matcher orphaned after uninstall:\n%s", after)
+	}
+	assertNoCtxWireAndKeeps(t, path, "other-edit")
 }
 
 func writeFile(t *testing.T, path, data string) {
