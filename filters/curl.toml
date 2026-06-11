@@ -2,6 +2,12 @@
 description = "Compact curl output while preserving response payload lines"
 match_command = "^curl\\b"
 strip_ansi = true
+# curl writes its transfer progress meter to STDERR (the response body goes to
+# stdout). Without this, the strip patterns below only saw stdout, so the meter
+# passed through untouched on any non-silent curl. Filtering the combined stream
+# strips it while the payload survives. curl's own errors stay on stderr and are
+# not progress-shaped, so they pass through intact.
+filter_stderr = true
 strip_lines_matching = [
   "^\\s*$",
   "^\\s*% Total\\s+% Received",
@@ -22,5 +28,18 @@ input = """
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
 100    12  100    12    0     0   1200      0 --:--:-- --:--:-- --:--:--  1200
 {"ok":true}
+"""
+expected = "{\"ok\":true}"
+
+[[tests.curl]]
+name = "progress on stderr stripped, stdout payload kept (regression guard for filter_stderr)"
+# Real curl: payload on stdout, progress meter on stderr. This split-stream
+# fixture fails the moment filter_stderr is dropped: the meter would then bypass
+# the filter and pass through raw. stdout keeps its trailing newline so the first
+# stderr line stays line-anchored for the strip patterns.
+stdout = "{\"ok\":true}\n"
+stderr = """
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+100    12  100    12    0     0   1200      0 --:--:-- --:--:-- --:--:--  1200
 """
 expected = "{\"ok\":true}"

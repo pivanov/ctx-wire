@@ -1,6 +1,6 @@
 [filters.js-test]
 description = "Compact Jest and Vitest output"
-match_command = "^(?:(npx\\s+)?(jest|vitest)\\b|(npm|pnpm|yarn)\\s+(test|run\\s+(test|jest|vitest))\\b)"
+match_command = "^(?:(?:{{runner}})?(jest|vitest)\\b|(npm|pnpm|yarn)\\s+(test|run\\s+(test|jest|vitest))\\b)"
 strip_ansi = true
 match_output = [
   { pattern = "(?m)(Test Suites: .*passed|Tests: .*passed|Test Files\\s+\\d+ passed|✓ .*passed)", message = "js tests: ok", unless = "(?i)(fail|failed|error|unhandled)" },

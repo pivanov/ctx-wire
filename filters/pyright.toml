@@ -1,6 +1,6 @@
 [filters.pyright]
 description = "Compact pyright output"
-match_command = "^(uv\\s+run\\s+|python3?\\s+-m\\s+)?pyright\\b"
+match_command = "^(?:{{runner}}|uv\\s+run\\s+|python3?\\s+-m\\s+)?pyright\\b"
 strip_ansi = true
 match_output = [
   { pattern = "(?m)0 errors?, 0 warnings?", message = "pyright: ok" },

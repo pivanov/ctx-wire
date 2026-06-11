@@ -1,6 +1,6 @@
 [filters.eslint]
 description = "Compact ESLint output"
-match_command = "^(?:(npx\\s+)?eslint\\b|(npm|pnpm|yarn)\\s+(run\\s+)?(eslint|lint)\\b)"
+match_command = "^(?:(?:{{runner}})?eslint\\b|(npm|pnpm|yarn)\\s+(run\\s+)?(eslint|lint)\\b)"
 strip_ansi = true
 match_output = [
   { pattern = "(?m)(0 problems|0 errors?[, ]+0 warnings?)", message = "eslint: ok" },

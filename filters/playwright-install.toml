@@ -1,6 +1,6 @@
 [filters.playwright-install]
 description = "Compact Playwright browser install output"
-match_command = "^(?:(npx|bunx)\\s+|pnpm\\s+exec\\s+|yarn\\s+exec\\s+)?playwright\\s+install\\b"
+match_command = "^(?:{{runner}})?playwright\\s+install\\b"
 strip_ansi = true
 match_output = [
   { pattern = "(?mi)(is already installed|downloaded to|Done in|Playwright browsers installed)", message = "playwright install: ok", unless = "(?i)(error|failed|failure|ERR!|warning)" },

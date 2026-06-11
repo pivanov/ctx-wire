@@ -62,6 +62,43 @@ func TestAllBuiltinFiltersHaveTests(t *testing.T) {
 }
 
 // TestRegistryFind checks that LoadBuiltin compiles and matching works.
+// TestRunnerPrefixConsistency is the drift guard for the shared {{runner}}
+// token: every runner-able tool must route to its filter through EVERY launch
+// form. A filter that hand-rolls a partial prefix, or a new runner-able tool
+// that forgets the token, fails here instead of silently going unfiltered. The
+// cross-product makes "the prefix is consistent" a CI fact, not a hope, and is
+// what caught js-test/playwright lagging behind biome/eslint/tsc/pyright.
+func TestRunnerPrefixConsistency(t *testing.T) {
+	reg, err := LoadBuiltin()
+	if err != nil {
+		t.Fatalf("LoadBuiltin: %v", err)
+	}
+	tools := []struct{ invoke, filter string }{
+		{"biome check .", "biome"},
+		{"eslint .", "eslint"},
+		{"tsc --noEmit", "tsc"},
+		{"pyright src", "pyright"},
+		{"vitest run", "js-test"},
+		{"jest", "js-test"},
+		{"playwright install chromium", "playwright-install"},
+	}
+	// Bare invocation plus every launch form the {{runner}} token must cover.
+	runners := []string{"", "npx ", "bunx ", "pnpm dlx ", "yarn dlx ", "pnpm exec ", "yarn exec ", "bun x "}
+	for _, tool := range tools {
+		for _, r := range runners {
+			cmd := r + tool.invoke
+			got := reg.Find(cmd)
+			if got == nil {
+				t.Errorf("Find(%q) = passthrough, want %q (runner-prefix drift?)", cmd, tool.filter)
+				continue
+			}
+			if got.Name != tool.filter {
+				t.Errorf("Find(%q) = %q, want %q", cmd, got.Name, tool.filter)
+			}
+		}
+	}
+}
+
 func TestRegistryFind(t *testing.T) {
 	reg, err := LoadBuiltin()
 	if err != nil {
@@ -131,6 +168,8 @@ func TestRegistryFind(t *testing.T) {
 		{"bunx biome matches biome", "bunx biome check .", "biome"},
 		{"pnpm dlx biome matches biome", "pnpm dlx biome check .", "biome"},
 		{"yarn dlx biome matches biome", "yarn dlx biome check .", "biome"},
+		// Exhaustive runner-form coverage for all runner-able tools lives in
+		// TestRunnerPrefixConsistency (the {{runner}} drift guard).
 		{"npx playwright install prefers playwright", "npx playwright install chromium", "playwright-install"},
 		{"strings matches", "strings /tmp/file.bin", "strings"},
 		{"smoke script path matches", "scripts/smoke.sh", "smoke-sh"},

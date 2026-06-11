@@ -202,6 +202,23 @@ type ApplyOptions struct {
 }
 
 // compile turns a TOML filter definition into a CompiledFilter, compiling all
+// runnerToken expands, inside a filter's match_command, to runnerPrefix: the
+// canonical set of package-runner prefixes a CLI tool can be launched through
+// (npx, bunx, pnpm|yarn dlx|exec, bun x). Defining it once here is what keeps
+// every runner-able filter consistent: a filter writes "^(?:{{runner}})?tool\b"
+// (or folds it into a larger alternation) and inherits the full set, instead of
+// hand-rolling a partial prefix that silently drifts. The token is the bare
+// alternation (no group, no trailing ?), so callers wrap it however they need.
+// Coverage across filters is pinned by TestRunnerPrefixConsistency.
+const (
+	runnerToken  = "{{runner}}"
+	runnerPrefix = `(?:npx|bunx)\s+|(?:pnpm|yarn)\s+(?:dlx|exec)\s+|bun\s+x\s+`
+)
+
+func expandRunnerToken(pattern string) string {
+	return strings.ReplaceAll(pattern, runnerToken, runnerPrefix)
+}
+
 // regexes up front. Returns an error if any regex is invalid or if strip and
 // keep are both set (mutually exclusive).
 func compile(name string, def tomlFilter) (*CompiledFilter, error) {
@@ -209,7 +226,7 @@ func compile(name string, def tomlFilter) (*CompiledFilter, error) {
 		return nil, fmt.Errorf("strip_lines_matching and keep_lines_matching are mutually exclusive")
 	}
 
-	matchRegex, err := regexp.Compile(def.MatchCommand)
+	matchRegex, err := regexp.Compile(expandRunnerToken(def.MatchCommand))
 	if err != nil {
 		return nil, fmt.Errorf("invalid match_command regex: %w", err)
 	}
