@@ -27,6 +27,7 @@ type ProgramValue =
 interface TelemetryPayload {
   schema?: unknown;
   event?: unknown;
+  version?: unknown;
   commands?: unknown;
   raw_bytes?: unknown;
   emitted_bytes?: unknown;
@@ -51,6 +52,16 @@ const MAX_PROGRAMS = 50;
 const MAX_AGENTS = 20;
 const MAX_PROGRAM_RUNS = 100_000;
 const PROGRAM_RE = /^[a-z0-9._+-]{1,64}$/;
+// Version label for the per-version aggregates that drive "did this filter
+// improve across releases" charts. A pre-0.1.17 client sends no version, bucket
+// those as "pre-0.1.17"; an invalid value buckets as "unknown" so one bad
+// payload never pollutes the version axis (and never rejects the whole report).
+const VERSION_RE = /^[0-9a-zA-Z][0-9a-zA-Z.\-+]{0,31}$/;
+function normalizeVersion(v: unknown): string {
+  if (v === undefined || v === null || v === "") return "pre-0.1.17";
+  if (typeof v === "string" && VERSION_RE.test(v)) return v;
+  return "unknown";
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -144,6 +155,7 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
   const tokensSaved = clampInt(payload.tokens_saved, 0, MAX_TOKENS_SAVED);
   const programs = parsePrograms(payload.programs);
   const agents = parseAgents(payload.agents);
+  const version = normalizeVersion(payload.version);
 
   if (
     commands === 0 &&
@@ -172,6 +184,20 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
            updated_at = excluded.updated_at`,
       )
       .bind(country, commands, rawBytes, emittedBytes, bytesSaved, tokensSaved, now),
+    env.ctx_wire_telemetry
+      .prepare(
+        `INSERT INTO version_stats (version, commands, raw_bytes, emitted_bytes, bytes_saved, tokens_saved, reports, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+         ON CONFLICT(version) DO UPDATE SET
+           commands = commands + excluded.commands,
+           raw_bytes = raw_bytes + excluded.raw_bytes,
+           emitted_bytes = emitted_bytes + excluded.emitted_bytes,
+           bytes_saved = bytes_saved + excluded.bytes_saved,
+           tokens_saved = tokens_saved + excluded.tokens_saved,
+           reports = reports + 1,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(version, commands, rawBytes, emittedBytes, bytesSaved, tokensSaved, now),
   ];
 
   for (const program of programs) {
@@ -213,6 +239,30 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
         )
         .bind(
           country,
+          program.name,
+          program.runs,
+          program.rawBytes,
+          program.emittedBytes,
+          program.bytesSaved,
+          program.tokensSaved,
+          now,
+        ),
+    );
+    statements.push(
+      env.ctx_wire_telemetry
+        .prepare(
+          `INSERT INTO version_program_stats (version, program, runs, raw_bytes, emitted_bytes, bytes_saved, tokens_saved, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(version, program) DO UPDATE SET
+             runs = runs + excluded.runs,
+             raw_bytes = raw_bytes + excluded.raw_bytes,
+             emitted_bytes = emitted_bytes + excluded.emitted_bytes,
+             bytes_saved = bytes_saved + excluded.bytes_saved,
+             tokens_saved = tokens_saved + excluded.tokens_saved,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(
+          version,
           program.name,
           program.runs,
           program.rawBytes,
@@ -318,7 +368,7 @@ function parseInstallAgent(value: unknown): string {
 }
 
 async function readStats(env: Env): Promise<Response> {
-  const [totals, countries, programs, countryPrograms, agents, agentInstalls] = await Promise.all([
+  const [totals, countries, programs, countryPrograms, agents, agentInstalls, versions, versionPrograms] = await Promise.all([
     env.ctx_wire_telemetry
       .prepare(
         `SELECT
@@ -376,6 +426,22 @@ async function readStats(env: Env): Promise<Response> {
          LIMIT 50`,
       )
       .all(),
+    env.ctx_wire_telemetry
+      .prepare(
+        `SELECT version, commands, raw_bytes, emitted_bytes, bytes_saved, tokens_saved, reports, updated_at
+         FROM version_stats
+         ORDER BY updated_at DESC
+         LIMIT 100`,
+      )
+      .all(),
+    env.ctx_wire_telemetry
+      .prepare(
+        `SELECT version, program, runs, raw_bytes, emitted_bytes, bytes_saved, tokens_saved, updated_at
+         FROM version_program_stats
+         ORDER BY version DESC, runs DESC
+         LIMIT 2000`,
+      )
+      .all(),
   ]);
 
   return json({
@@ -394,6 +460,8 @@ async function readStats(env: Env): Promise<Response> {
     country_programs: countryPrograms.results,
     agents: agents.results,
     agent_installs: agentInstalls.results,
+    versions: versions.results,
+    version_programs: versionPrograms.results,
   });
 }
 
