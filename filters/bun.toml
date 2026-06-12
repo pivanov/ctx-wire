@@ -3,7 +3,7 @@ description = "Compact Bun install/build/test output"
 match_command = "^bun(?:\\s+(?:--filter|-F)\\s+\\S+)*\\s+(build-storybook|storybook|typecheck|install|remove|build|test|lint|add|run\\s+(build-storybook|storybook|typecheck|build|test|lint))\\b"
 strip_ansi = true
 match_output = [
-  { pattern = "(?mi)(installed .* packages?|Saved lockfile|\\bpass\\b|tests? passed|built in|Done in|Output directory:|=> (Manager|Preview|Storybook) built|Storybook (built|build complete|build completed)|Checked .* No fixes applied)", message = "bun: ok", unless = "(?i)(error|failed|failures?|panic|exception|TypeError|SyntaxError|\\bWARN\\b|warning)" },
+  { pattern = "(?mi)(installed .* packages?|\\d+ packages installed|Saved lockfile|\\bpass\\b|tests? passed|built in|Done in|Output directory:|=> (Manager|Preview|Storybook) built|Storybook (built|build complete|build completed)|Checked .* No fixes applied)", message = "bun: ok", unless = "(?i)(error|failed|failures?|panic|exception|TypeError|SyntaxError|\\bWARN\\b|warning)" },
 ]
 strip_lines_matching = [
   "^\\s*$",
@@ -35,6 +35,25 @@ Saved lockfile
 42 packages installed [320.00ms]
 """
 expected = "bun: ok"
+
+[[tests.bun]]
+name = "real bun install stdout collapses (summary on stdout, lockfile on stderr)"
+input = """
+bun add v1.3.13 (bf2e2cec)
+installed request@2.88.2
+47 packages installed [20.00ms]
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "install failure not collapsed (404 error preserved)"
+failed = true
+input = """
+bun add v1.3.13 (bf2e2cec)
+Resolving dependencies
+error: GET https://registry.npmjs.org/this-pkg-does-not-exist - 404
+"""
+expected = "bun add v1.3.13 (bf2e2cec)\nerror: GET https://registry.npmjs.org/this-pkg-does-not-exist - 404"
 
 [[tests.bun]]
 name = "test failure preserved"
