@@ -169,6 +169,7 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 	filterName := ""
 	mode := "passthrough"
 	filterTruncated := false
+	failureTailFallback := false
 	switch f := reg.Find(cmdline); {
 	case f == nil:
 		stdoutText = scrub.Scrub(out)
@@ -197,6 +198,21 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 			if !f.FilterStderr {
 				stderrText = scrub.Scrub(errOut)
 			}
+			// Safety net: a failed command whose filter stripped every line would
+			// otherwise reach the agent as empty output , a failure with no visible
+			// reason. Fall back to the tail of the raw filtered input, but only when
+			// stderrText is also empty: for the common stderr-on-failure tools the
+			// error is already visible there, so a raw stdout tail would just re-add
+			// the noise the filter correctly removed. stderrText is empty exactly
+			// when filter_stderr consumed the stream, the error went to stdout, or
+			// the streams were merged with 2>&1.
+			if failed &&
+				strings.TrimSpace(stdoutText) == "" &&
+				strings.TrimSpace(stderrText) == "" &&
+				strings.TrimSpace(text) != "" {
+				stdoutText = withTrailingNewline(scrub.Scrub(tailLines(text, failureTailLines)))
+				failureTailFallback = true
+			}
 		}
 	}
 
@@ -211,6 +227,9 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 	}
 	if filterTruncated {
 		meta = append(meta, "[ctx-wire: filter output truncated; full log spooled]")
+	}
+	if failureTailFallback {
+		meta = append(meta, "[ctx-wire: filter emptied a failed command; showing raw tail]")
 	}
 
 	// Dedup: if an eligible read-only command re-ran with byte-identical output,
@@ -234,6 +253,24 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 	}
 	hint = strings.Join(meta, "\n")
 	return stdoutText, stderrText, hint, code, nil
+}
+
+// failureTailLines bounds how many trailing lines of raw output the failure
+// fallback surfaces when a filter empties a failed command. The full scrubbed
+// output is always spooled, so this only needs to be enough to show the error.
+const failureTailLines = 20
+
+// tailLines returns the last n lines of s (a trailing newline is ignored).
+func tailLines(s string, n int) string {
+	s = strings.TrimRight(s, "\n")
+	if s == "" {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // recordGain appends a gain entry, best-effort. Telemetry must never break a run.

@@ -124,6 +124,78 @@ func TestRunBufferedDoesNotUseSuccessMatchOnFailure(t *testing.T) {
 	}
 }
 
+func TestRunBufferedFailureTailFallbackOnEmptiedFilter(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	// cargo is filter_stderr: a failed build whose only lines are noise cargo
+	// strips (Compiling/Checking) would otherwise reach the agent as empty , a
+	// failure with no visible reason. The fallback must surface the raw tail.
+	out, _, hint, code, err := runBuffered(context.Background(), reg, "sh",
+		[]string{"-c", "echo '   Compiling foo v0.1.0'; echo '   Checking bar v0.2.0'; exit 1"},
+		"cargo build", "cargo build", tee.NewSpool("cargo build"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatal("emptied failed filter must fall back to the raw tail, got empty stdout")
+	}
+	if !strings.Contains(out, "Compiling foo") {
+		t.Fatalf("fallback lost the raw tail: %q", out)
+	}
+	if !strings.Contains(hint, "filter emptied a failed command") {
+		t.Fatalf("missing fallback hint: %q", hint)
+	}
+}
+
+func TestRunBufferedNoFallbackWhenFailedCommandIsGenuinelyEmpty(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	out, _, hint, code, err := runBuffered(context.Background(), reg, "sh",
+		[]string{"-c", "exit 1"},
+		"cargo build", "cargo build", tee.NewSpool("cargo build"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("genuinely-empty failure must stay empty, got %q", out)
+	}
+	if strings.Contains(hint, "filter emptied a failed command") {
+		t.Fatalf("must not synthesize a tail when there was no output: %q", hint)
+	}
+}
+
+func TestRunBufferedNoFallbackWhenStderrCarriesError(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	// make is NOT filter_stderr: its stdout noise is stripped, but the real error
+	// is on stderr and passes raw. The fallback must stay silent , re-adding the
+	// stripped stdout noise next to an already-informative stderr is pure cost.
+	out, errOut, hint, code, err := runBuffered(context.Background(), reg, "sh",
+		[]string{"-c", "echo \"make[1]: Entering directory '/x'\"; echo 'make: *** [all] Error 2' >&2; exit 1"},
+		"make", "make", tee.NewSpool("make"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if strings.Contains(hint, "filter emptied a failed command") {
+		t.Fatalf("must not fall back when stderr already carries the error: %q", hint)
+	}
+	if !strings.Contains(errOut, "Error 2") {
+		t.Fatalf("stderr error must be preserved: %q", errOut)
+	}
+	if strings.Contains(out, "Entering directory") {
+		t.Fatalf("stripped stdout noise must not reappear on stdout: %q", out)
+	}
+}
+
 func TestRunBufferedLaunchError(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
