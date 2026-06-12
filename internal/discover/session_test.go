@@ -57,14 +57,18 @@ func TestSessionsCountsFileTools(t *testing.T) {
 		// Two Reads and one Grep (built-in tools, no command field).
 		`{"type":"assistant","timestamp":"2026-06-04T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Read","input":{}},{"type":"tool_use","name":"Read","input":{}}]}}`,
 		`{"type":"assistant","timestamp":"2026-06-04T10:02:00Z","message":{"content":[{"type":"tool_use","name":"Grep","input":{}}]}}`,
-		// Edit refusal as a plain-string tool_result (user line).
-		`{"type":"user","timestamp":"2026-06-04T10:03:00Z","message":{"content":[{"type":"tool_result","content":"File has not been read yet. Read it first before writing to it."}]}}`,
+		// Edit refusal as a plain-string tool_result (user line) , real errors carry is_error.
+		`{"type":"user","timestamp":"2026-06-04T10:03:00Z","message":{"content":[{"type":"tool_result","is_error":true,"content":"File has not been read yet. Read it first before writing to it."}]}}`,
 		// Edit refusal as a text-block array tool_result.
-		`{"type":"user","timestamp":"2026-06-04T10:04:00Z","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"Error: file has not been read yet."}]}]}}`,
+		`{"type":"user","timestamp":"2026-06-04T10:04:00Z","message":{"content":[{"type":"tool_result","is_error":true,"content":[{"type":"text","text":"Error: file has not been read yet."}]}]}}`,
 		// A normal tool_result must NOT count.
 		`{"type":"user","timestamp":"2026-06-04T10:05:00Z","message":{"content":[{"type":"tool_result","content":"ok"}]}}`,
-		// A file-tools capture deny: a Read redirected to a filtered shell read.
-		`{"type":"user","timestamp":"2026-06-04T10:06:00Z","message":{"content":[{"type":"tool_result","content":"Token savings: run nl -ba /work/proj/big.go in Bash instead (the output is filtered, capped, and secrets-scrubbed by ctx-wire; the built-in tool bypasses that)."}]}}`,
+		// A file-tools capture deny: a Read redirected to a filtered shell read (is_error).
+		`{"type":"user","timestamp":"2026-06-04T10:06:00Z","message":{"content":[{"type":"tool_result","is_error":true,"content":"Token savings: run nl -ba /work/proj/big.go in Bash instead (the output is filtered, capped, and secrets-scrubbed by ctx-wire; the built-in tool bypasses that)."}]}}`,
+		// FALSE-POSITIVE GUARDS: a successful Bash tool_result that merely ECHOES a
+		// marker (cat of the source, or the deny JSON) must NOT count, only is_error
+		// results are real denies/refusals.
+		`{"type":"user","timestamp":"2026-06-04T10:07:00Z","message":{"content":[{"type":"tool_result","content":"const captureMarker = \"Token savings: run \" // has not been read yet"}]}}`,
 	}
 	var b []byte
 	for _, l := range lines {

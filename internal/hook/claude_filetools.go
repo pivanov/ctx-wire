@@ -38,6 +38,12 @@ func SetCaptureFileTools(v bool) { captureFileTools = v }
 // shell read does not satisfy), so only large exploration reads redirect.
 const readCapThreshold = 16 * 1024
 
+// CaptureDenyPrefix is the stable lead-in of the capture deny reason. Exported
+// so the transcript parser (internal/discover) can detect a real capture by the
+// exact string the hook emits; a sync test pins the two together so the metric
+// cannot silently zero if this wording ever changes.
+const CaptureDenyPrefix = "Token savings: run "
+
 func claudeFileTool(in claudeInput, w io.Writer) error {
 	if !captureFileTools {
 		return nil
@@ -50,7 +56,7 @@ func claudeFileTool(in claudeInput, w io.Writer) error {
 		return nil // recent deny (agent retrying) or unrecordable state: allow
 	}
 	reason := fmt.Sprintf(
-		"Token savings: run `%s` in Bash instead (the output is filtered, capped, and secrets-scrubbed by ctx-wire; the built-in tool bypasses that).",
+		CaptureDenyPrefix+"`%s` in Bash instead (the output is filtered, capped, and secrets-scrubbed by ctx-wire; the built-in tool bypasses that).",
 		suggestion)
 	return json.NewEncoder(w).Encode(claudeOutput{
 		HookSpecificOutput: claudeHookOutput{

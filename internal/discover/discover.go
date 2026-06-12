@@ -27,6 +27,7 @@ import (
 	"ctx-wire/internal/explain"
 	"ctx-wire/internal/filter"
 	"ctx-wire/internal/gain"
+	"ctx-wire/internal/hook"
 	"ctx-wire/internal/scrub"
 	"ctx-wire/internal/transcript"
 )
@@ -376,6 +377,12 @@ type claudeToolLine struct {
 			Type    string          `json:"type"`
 			Name    string          `json:"name"`
 			Content json.RawMessage `json:"content"`
+			// IsError distinguishes a real error tool_result (a deny or refusal)
+			// from a successful one that merely ECHOES a marker string (e.g. a
+			// Bash run that cats claude_filetools.go or prints the deny JSON). A
+			// substring probe alone over-counts badly when dogfooding ctx-wire on
+			// itself, so the deny/refusal cases also require IsError.
+			IsError bool `json:"is_error"`
 		} `json:"content"`
 	} `json:"message"`
 }
@@ -384,10 +391,10 @@ type claudeToolLine struct {
 // equality: the surrounding wording varies across Claude Code versions.
 const editRefusalMarker = "has not been read yet"
 
-// captureMarker is the lead-in of the file-tools capture deny reason (kept in
-// sync with internal/hook/claude_filetools.go). A tool_result carrying it is a
-// Read/Grep the capture redirected to a filtered shell command.
-const captureMarker = "Token savings: run "
+// captureMarker is the lead-in of the file-tools capture deny reason. It IS the
+// hook's exported constant (single source of truth), so the parser and the hook
+// cannot drift apart and silently zero the metric.
+const captureMarker = hook.CaptureDenyPrefix
 
 // parseClaudeFileTools counts Read/Grep tool uses (assistant lines) and
 // read-before-edit refusals (user-line tool results) in one transcript. It is
@@ -433,9 +440,9 @@ func countClaudeToolLine(st *FileToolStat, line string, since time.Time) {
 			st.Reads++
 		case l.Type == "assistant" && c.Type == "tool_use" && c.Name == "Grep":
 			st.Greps++
-		case l.Type == "user" && c.Type == "tool_result" && strings.Contains(string(c.Content), editRefusalMarker):
+		case l.Type == "user" && c.Type == "tool_result" && c.IsError && strings.Contains(string(c.Content), editRefusalMarker):
 			st.EditRefusals++
-		case l.Type == "user" && c.Type == "tool_result" && strings.Contains(string(c.Content), captureMarker):
+		case l.Type == "user" && c.Type == "tool_result" && c.IsError && strings.Contains(string(c.Content), captureMarker):
 			st.Captures++
 		}
 	}
