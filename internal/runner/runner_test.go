@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -193,6 +194,66 @@ func TestRunBufferedNoFallbackWhenStderrCarriesError(t *testing.T) {
 	}
 	if strings.Contains(out, "Entering directory") {
 		t.Fatalf("stripped stdout noise must not reappear on stdout: %q", out)
+	}
+}
+
+func TestRunBufferedJQCompleteJSONPassesWhole(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	// A complete-JSON array that pretty-prints to far more than jq's 40-line cap.
+	// With reduce_json removed, jq rides jsonGuard like every other filter: the
+	// whole document arrives (<= 1 MiB), never cut mid-structure.
+	var b strings.Builder
+	b.WriteString("[\n")
+	for i := 0; i < 50; i++ {
+		if i > 0 {
+			b.WriteString(",\n")
+		}
+		b.WriteString("  {\"id\": ")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString("}")
+	}
+	b.WriteString("\n]\n")
+	dir := t.TempDir()
+	p := filepath.Join(dir, "data.json")
+	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _, code, err := runBuffered(context.Background(), reg, "cat",
+		[]string{p}, "jq .", "jq .", tee.NewSpool("jq ."))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !json.Valid([]byte(strings.TrimSpace(out))) {
+		t.Fatalf("jq complete-JSON output must arrive parseable, got:\n%s", out)
+	}
+	if !strings.Contains(out, `"id": 49`) {
+		t.Fatalf("jq output was cut mid-structure, missing the last element:\n%s", out)
+	}
+}
+
+func TestRunBufferedJQRawTextStillCapped(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	// jq -r emits raw text, not JSON. IsCompleteJSON is false, so jsonGuard does
+	// NOT fire and the line caps still apply , this is where jq's caps earn it.
+	out, _, _, code, err := runBuffered(context.Background(), reg, "sh",
+		[]string{"-c", "i=1; while [ $i -le 100 ]; do echo value-$i; i=$((i+1)); done"},
+		"jq -r .[]", "jq -r .[]", tee.NewSpool("jq -r"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if n := strings.Count(out, "\n"); n > 45 {
+		t.Fatalf("jq -r raw text must stay capped (max_lines=40), got %d lines:\n%s", n, out)
+	}
+	if strings.Contains(out, "value-100") {
+		t.Fatalf("capped raw output should not contain the last line, got:\n%s", out)
 	}
 }
 
