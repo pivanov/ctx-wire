@@ -205,9 +205,11 @@ const SNIPPETS: Record<string, Snippet> = {
 };
 
 // Filters we actually shipped, framed as a changelog (not the rotation above).
+// Only released fixes belong here , never roadmap.
 const SHIPPED = [
-  { version: "0.1.17", cmd: "cargo" },
-  { version: "0.1.18", cmd: "bunx" },
+  { version: "0.1.20", cmd: "jq" },
+  { version: "0.1.20", cmd: "bun" },
+  { version: "0.1.20", cmd: "make" },
 ];
 
 // Shown when telemetry has no matching programs yet (idle tab / first paint).
