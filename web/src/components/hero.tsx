@@ -31,7 +31,7 @@ const AGENTS = [
 ];
 
 const TRUST = [
-  "142 filters, 370+ tests",
+  "143 filters, 370+ tests",
   "fail-closed scrubbing",
   "inspect what's filtered",
   "runs fully local",

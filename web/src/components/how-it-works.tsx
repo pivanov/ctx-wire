@@ -11,7 +11,7 @@ const STEPS = [
   {
     n: 2,
     title: "Compress & scrub",
-    desc: "142 declarative filters shrink the output; secrets are scrubbed fail-closed; the full log stays on disk, and inspect shows exactly what was cut.",
+    desc: "143 declarative filters shrink the output; secrets are scrubbed fail-closed; the full log stays on disk, and inspect shows exactly what was cut.",
   },
   {
     n: 3,
@@ -42,7 +42,7 @@ const CAPS = [
     desc: "Savings split by agent (Claude, Codex, Cursor, Gemini, Copilot).",
   },
   {
-    name: "142 filters · 370+ tests",
+    name: "143 filters · 370+ tests",
     desc: "Declarative TOML corpus, conformance-tested every release.",
   },
   {
