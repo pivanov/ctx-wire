@@ -2,7 +2,14 @@
 description = "Compact make output"
 match_command = "^make\\b"
 strip_lines_matching = [
-  "^make\\[\\d+\\]:",
+  # Only the recursive-make NOISE verbs, never the `*** Error` failure line.
+  # `^make\[\d+\]:` alone also matches `make[1]: *** [...] Error N`, eating the
+  # one line that says the build failed (RE2 has no negative lookahead, so the
+  # verbs are enumerated instead).
+  "^make\\[\\d+\\]: Entering directory",
+  "^make\\[\\d+\\]: Leaving directory",
+  "^make\\[\\d+\\]: Nothing to be done",
+  "^make\\[\\d+\\]: '.*' is up to date",
   "^\\s*$",
   "^Nothing to be done",
 ]
@@ -39,3 +46,13 @@ make[1]: Entering directory '/home/user'
 make[1]: Leaving directory '/home/user'
 """
 expected = "make: ok"
+
+[[tests.make]]
+name = "recursive failure: *** Error line survives, not eaten as directory noise"
+failed = true
+input = """
+make[1]: Entering directory '/home/user'
+make[1]: *** [Makefile:12: test] Error 1
+make[1]: Leaving directory '/home/user'
+"""
+expected = "make[1]: *** [Makefile:12: test] Error 1"
