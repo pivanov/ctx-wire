@@ -3,9 +3,9 @@ import { useState } from "react";
 // Every supported agent maps to a custom brand SVG in web/public/logos/<id>.svg.
 // Drop a file in and it shows automatically; until then the tile falls back to
 // a monogram. Keep the id in sync with the AGENTS list in hero.tsx.
-type Agent = { label: string; src: string; size?: number };
+type TAgent = { label: string; src: string; size?: number };
 
-const AGENTS: Record<string, Agent> = {
+const AGENTS: Record<string, TAgent> = {
   claude: { label: "Claude", src: "/logos/claude.svg", size: 24 },
   codex: { label: "Codex", src: "/logos/codex.svg", size: 32 },
   cursor: { label: "Cursor", src: "/logos/cursor.svg", size: 24 },
@@ -30,17 +30,17 @@ const AGENTS: Record<string, Agent> = {
   vscode: { label: "VS Code", src: "/logos/vscode.svg", size: 24 },
 };
 
-export function agentLabel(name: string): string {
+export const agentLabel = (name: string): string => {
   return AGENTS[name]?.label ?? name.charAt(0).toUpperCase() + name.slice(1);
-}
+};
 
-export function AgentLogo({
+export const AgentLogo = ({
   name,
   size = 24,
 }: {
   name: string;
   size?: number;
-}) {
+}) => {
   const [failed, setFailed] = useState(false);
   const src = AGENTS[name]?.src;
   const iconSize = AGENTS[name]?.size || size;
@@ -64,4 +64,4 @@ export function AgentLogo({
       {agentLabel(name).charAt(0)}
     </span>
   );
-}
+};

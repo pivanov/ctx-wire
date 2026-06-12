@@ -10,7 +10,8 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { formatBytes, savedPct, topPrograms } from "../format";
 import { useCopy } from "../hooks/use-copy";
 import { fadeUp, scaleIn, staggerContainer } from "../lib/variants";
-import type { ImpactStats } from "../types";
+import type { TImpactStats } from "../types";
+import { SectionEyebrow } from "./section-heading";
 
 const AGENTS = [
   "claude",
@@ -30,7 +31,7 @@ const AGENTS = [
 ];
 
 const TRUST = [
-  "142 filters, 330+ tests",
+  "142 filters, 370+ tests",
   "fail-closed scrubbing",
   "inspect what's filtered",
   "runs fully local",
@@ -51,18 +52,18 @@ const AGENT_LABELS: Record<string, string> = {
 const label = (id: string) =>
   AGENT_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
 
-type FlowItem = {
+type TFlowItem = {
   program: string;
   raw: number;
   emitted: number;
   pct: number;
 };
 
-const FALLBACK: FlowItem[] = [
+const FALLBACK: TFlowItem[] = [
   { program: "rg", raw: 421000, emitted: 12600, pct: 97 },
 ];
 
-function flowItems(stats: ImpactStats): FlowItem[] {
+const flowItems = (stats: TImpactStats): TFlowItem[] => {
   const items = topPrograms(stats)
     .filter(
       (p) => Number(p.raw_bytes || 0) > 0 && Number(p.bytes_saved || 0) > 0
@@ -77,9 +78,9 @@ function flowItems(stats: ImpactStats): FlowItem[] {
       };
     });
   return items.length ? items : FALLBACK;
-}
+};
 
-export function Hero({ stats }: { stats: ImpactStats }) {
+export const Hero = ({ stats }: { stats: TImpactStats }) => {
   const [agent, setAgent] = useState("claude");
   const reduce = useReducedMotion();
   const v = (variant: typeof fadeUp) => (reduce ? undefined : variant);
@@ -93,13 +94,9 @@ export function Hero({ stats }: { stats: ImpactStats }) {
           whileInView="visible"
           viewport={{ once: true, amount: 0.1 }}
         >
-          <motion.p
-            variants={v(fadeUp)}
-            className="m-0 mb-4 inline-flex items-center gap-2.5 font-mono text-xs font-medium uppercase tracking-eyebrow text-green"
-          >
-            <span className="size-1.5 rounded-full bg-green shadow-dot" />
+          <SectionEyebrow className="mb-4">
             context compression for AI coding agents
-          </motion.p>
+          </SectionEyebrow>
 
           <motion.h1
             variants={v(fadeUp)}
@@ -214,9 +211,9 @@ export function Hero({ stats }: { stats: ImpactStats }) {
       </motion.div>
     </section>
   );
-}
+};
 
-function StepLabel({ n, title }: { n: number; title: string }) {
+const StepLabel = ({ n, title }: { n: number; title: string }) => {
   return (
     <div className="mb-2.5 flex items-center gap-2.5">
       <span className="grid size-6 place-items-center rounded-md bg-green font-mono text-2xs font-bold text-ink">
@@ -225,9 +222,9 @@ function StepLabel({ n, title }: { n: number; title: string }) {
       <span className="font-mono text-cap font-bold text-head">{title}</span>
     </div>
   );
-}
+};
 
-function CommandBox({
+const CommandBox = ({
   agent,
   command,
   reduce,
@@ -235,7 +232,7 @@ function CommandBox({
   agent?: string;
   command: string;
   reduce: boolean;
-}) {
+}) => {
   const [copied, copy] = useCopy();
   return (
     <motion.button
@@ -267,9 +264,9 @@ function CommandBox({
       </span>
     </motion.button>
   );
-}
+};
 
-type Phase = "hold" | "out" | "in";
+type TPhase = "hold" | "out" | "in";
 
 const HOLD_MS = 2400;
 const OUT_MS = 520;
@@ -277,15 +274,15 @@ const IN_MS = 760;
 const STEP_OUT = 2.5;
 const STEP_IN = 4;
 
-function FlowDiagram({
+const FlowDiagram = ({
   items,
   reduce,
 }: {
-  items: FlowItem[];
+  items: TFlowItem[];
   reduce: boolean;
-}) {
+}) => {
   const [idx, setIdx] = useState(0);
-  const [phase, setPhase] = useState<Phase>("hold");
+  const [phase, setPhase] = useState<TPhase>("hold");
   const [typed, setTyped] = useState(items[0]?.program ?? "");
 
   const item = items[idx % items.length];
@@ -298,13 +295,17 @@ function FlowDiagram({
   const v = (variant: typeof fadeUp) => (reduce ? undefined : variant);
 
   useEffect(() => {
-    if (items.length <= 1 || reduce) return;
+    if (items.length <= 1 || reduce) {
+      return;
+    }
     let cancelled = false;
     const timers: number[] = [];
     const wait = (fn: () => void, ms: number) => {
       timers.push(
         window.setTimeout(() => {
-          if (!cancelled) fn();
+          if (!cancelled) {
+            fn();
+          }
         }, ms)
       );
     };
@@ -322,7 +323,9 @@ function FlowDiagram({
     wait(loop, HOLD_MS);
     return () => {
       cancelled = true;
-      for (const id of timers) window.clearTimeout(id);
+      for (const id of timers) {
+        window.clearTimeout(id);
+      }
     };
   }, [items.length, reduce]);
 
@@ -339,7 +342,9 @@ function FlowDiagram({
         () => {
           n += 1;
           setTyped(target.slice(0, n));
-          if (n >= target.length) window.clearInterval(id);
+          if (n >= target.length) {
+            window.clearInterval(id);
+          }
         },
         Math.max(30, IN_MS / (target.length + 2))
       );
@@ -350,7 +355,9 @@ function FlowDiagram({
       () => {
         n -= 1;
         setTyped(target.slice(0, Math.max(0, n)));
-        if (n <= 0) window.clearInterval(id);
+        if (n <= 0) {
+          window.clearInterval(id);
+        }
       },
       Math.max(22, OUT_MS / (target.length + 2))
     );
@@ -442,17 +449,17 @@ function FlowDiagram({
       ) : null}
     </motion.div>
   );
-}
+};
 
-function CellGrid({
+const CellGrid = ({
   filled,
   phase,
   tone,
 }: {
   filled: number;
-  phase: Phase;
+  phase: TPhase;
   tone: "cyan" | "green";
-}) {
+}) => {
   const used = tone === "cyan" ? "text-cyan/80" : "text-green";
   const phaseClass = phase === "out" ? "is-out" : phase === "in" ? "is-in" : "";
   return (
@@ -484,4 +491,4 @@ function CellGrid({
       ))}
     </div>
   );
-}
+};

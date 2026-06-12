@@ -4,23 +4,28 @@ const DEFAULT_DURATION = 1600;
 
 const easeOutCubic = (p: number) => 1 - (1 - p) ** 3;
 
-function prefersReducedMotion(): boolean {
+const prefersReducedMotion = (): boolean => {
   return (
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
-}
+};
 
-export function useTween(target: number, duration = DEFAULT_DURATION): number {
+export const useTween = (
+  target: number,
+  duration = DEFAULT_DURATION
+): number => {
   const [display, setDisplay] = useState(target);
-  const displayRef = useRef(target);
-  displayRef.current = display;
-  const rafRef = useRef<number | null>(null);
+  const refDisplay = useRef(target);
+  refDisplay.current = display;
+  const refRaf = useRef<number | null>(null);
 
   useEffect(() => {
-    const from = displayRef.current;
-    if (target === from) return;
+    const from = refDisplay.current;
+    if (target === from) {
+      return;
+    }
 
     if (duration <= 0 || prefersReducedMotion()) {
       setDisplay(target);
@@ -31,18 +36,24 @@ export function useTween(target: number, duration = DEFAULT_DURATION): number {
     let start: number | null = null;
 
     const tick = (now: number) => {
-      if (start === null) start = now;
+      if (start === null) {
+        start = now;
+      }
       const p = Math.min((now - start) / duration, 1);
       setDisplay(p >= 1 ? target : from + delta * easeOutCubic(p));
-      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+      if (p < 1) {
+        refRaf.current = requestAnimationFrame(tick);
+      }
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    refRaf.current = requestAnimationFrame(tick);
 
     return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (refRaf.current !== null) {
+        cancelAnimationFrame(refRaf.current);
+      }
     };
   }, [target, duration]);
 
   return display;
-}
+};

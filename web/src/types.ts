@@ -1,4 +1,4 @@
-export type Totals = {
+export type TTotals = {
   installs?: number;
   commands?: number;
   raw_bytes?: number;
@@ -8,7 +8,7 @@ export type Totals = {
   reports?: number;
 };
 
-export type ProgramStats = {
+export type TProgramStats = {
   program: string;
   runs?: number;
   count?: number;
@@ -18,7 +18,7 @@ export type ProgramStats = {
   tokens_saved?: number;
 };
 
-export type CountryStats = {
+export type TCountryStats = {
   country?: string;
   country_code?: string;
   code?: string;
@@ -31,7 +31,7 @@ export type CountryStats = {
   reports?: number;
 };
 
-export type AgentStats = {
+export type TAgentStats = {
   agent: string;
   runs?: number;
   raw_bytes?: number;
@@ -40,15 +40,15 @@ export type AgentStats = {
   tokens_saved?: number;
 };
 
-export type ImpactStats = {
+export type TImpactStats = {
   schema?: number;
-  totals: Totals;
-  programs: ProgramStats[];
-  countries: CountryStats[];
-  agents?: AgentStats[];
+  totals: TTotals;
+  programs: TProgramStats[];
+  countries: TCountryStats[];
+  agents?: TAgentStats[];
 };
 
-export type CountryMeta = {
+export type TCountryMeta = {
   name: string;
   lat: number;
   lng: number;

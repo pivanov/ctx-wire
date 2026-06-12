@@ -21,21 +21,25 @@ import {
   topCountries,
 } from "../format";
 import { fadeUp, staggerContainer } from "../lib/variants";
-import type { ImpactStats } from "../types";
+import type { TImpactStats } from "../types";
 import { AnimatedNumber } from "./animated-number";
+import { SectionEyebrow } from "./section-heading";
 
 // Canonical cobe focus angles: rotate so a marker faces the camera.
-function focusAngles(lat: number, lng: number): { phi: number; theta: number } {
+const focusAngles = (
+  lat: number,
+  lng: number
+): { phi: number; theta: number } => {
   return {
     phi: Math.PI - ((lng * Math.PI) / 180 - Math.PI / 2),
     theta: Math.max(-1, Math.min(1, (lat * Math.PI) / 180)),
   };
-}
+};
 
-function shortestAngle(delta: number): number {
+const shortestAngle = (delta: number): number => {
   const twoPi = Math.PI * 2;
   return ((((delta + Math.PI) % twoPi) + twoPi) % twoPi) - Math.PI;
-}
+};
 
 // cobe exposes marker positions as CSS anchors (--cobe-<id>) for DOM overlays;
 // anchor positioning is Chromium-only, so tooltips degrade to nothing elsewhere.
@@ -44,7 +48,7 @@ const ANCHOR_OK =
   typeof CSS.supports === "function" &&
   CSS.supports("anchor-name: --x");
 
-type CountryRow = {
+type TCountryRow = {
   rank: number;
   code: string;
   name: string;
@@ -53,19 +57,25 @@ type CountryRow = {
   tokens: number;
   commands: number;
   size: number;
+  // Beacon scale relative to the top country (sqrt of share, so the tail stays
+  // visible). The globe dots encode impact, not just presence.
+  weight: number;
 };
 
-export function GlobePanel({ stats }: { stats: ImpactStats }) {
+export const GlobePanel = ({ stats }: { stats: TImpactStats }) => {
   const rows = buildRows(stats);
   const totals = stats.totals || {};
+  const live = Number(totals.commands || 0) > 0;
   const reduce = useReducedMotion();
-  const [focus, setFocus] = useState<CountryRow | null>(null);
+  const [focus, setFocus] = useState<TCountryRow | null>(null);
   const [globeActive, setGlobeActive] = useState(false);
-  const globeWrapperRef = useRef<HTMLDivElement | null>(null);
+  const refGlobeWrapper = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const el = globeWrapperRef.current;
-    if (!el) return;
+    const el = refGlobeWrapper.current;
+    if (!el) {
+      return;
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -90,16 +100,10 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
         variants={reduce ? undefined : staggerContainer}
         initial={reduce ? undefined : "hidden"}
         whileInView="visible"
-        viewport={{ once: true, amount: 0.2 }}
+        viewport={{ once: true, amount: 0.1 }}
         className="relative z-10"
       >
-        <motion.p
-          variants={reduce ? undefined : fadeUp}
-          className="m-0 mb-4 inline-flex items-center gap-2.5 font-mono text-xs font-medium uppercase tracking-eyebrow text-green"
-        >
-          <span className="size-1.5 rounded-full bg-green shadow-dot" />
-          global reach
-        </motion.p>
+        <SectionEyebrow className="mb-4">global reach</SectionEyebrow>
 
         <motion.h2
           variants={reduce ? undefined : fadeUp}
@@ -119,16 +123,19 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
               label="Countries"
               value={rows.length}
               format={formatInt}
+              live={live}
             />
             <ReachStat
               label="Commands filtered"
               value={Number(totals.commands || 0)}
               format={formatCompact3}
+              live={live}
             />
             <ReachStat
               label="Tokens saved"
               value={Number(totals.tokens_saved || 0)}
               format={formatTokens3}
+              live={live}
             />
             <ReachStat
               label="$ saved · est."
@@ -137,6 +144,7 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
                 TOKEN_PRICE_PER_M
               }
               format={formatUsdCents}
+              live={live}
             />
           </div>
           <p className="m-0 mt-3 font-mono text-2xs text-label">
@@ -153,7 +161,7 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
       </motion.div>
 
       <div
-        ref={globeWrapperRef}
+        ref={refGlobeWrapper}
         className="relative mx-auto grid aspect-square w-full max-w-scope place-items-center"
       >
         <div className="scope-frame">
@@ -188,46 +196,61 @@ export function GlobePanel({ stats }: { stats: ImpactStats }) {
         )}
         <div className="readout-glass absolute bottom-2 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-1 font-mono text-2xs tracking-wide text-label">
           <span className="readout-dot size-1.5 rounded-full bg-green motion-safe:animate-pulse-dot" />
-          <span className="text-green">{rows.length}</span>{" "}
-          {rows.length === 1 ? "country" : "countries"} reporting
+          {live ? (
+            <>
+              <span className="text-green">{rows.length}</span>{" "}
+              {rows.length === 1 ? "country" : "countries"} reporting
+            </>
+          ) : (
+            "acquiring signal"
+          )}
         </div>
       </div>
     </section>
   );
-}
+};
 
-function ReachStat({
+const ReachStat = ({
   format,
   label,
+  live,
   value,
 }: {
   format: (n: number) => string;
   label: string;
+  live: boolean;
   value: number;
-}) {
+}) => {
   return (
     <div className="flex flex-col gap-1">
-      <AnimatedNumber
-        value={value}
-        format={format}
-        className="font-mono text-reach font-bold tabular-nums text-head"
-      />
+      {live ? (
+        <AnimatedNumber
+          value={value}
+          format={format}
+          className="font-mono text-reach font-bold tabular-nums text-head"
+        />
+      ) : (
+        <span
+          className="shimmer h-[1em] w-20 self-start font-mono text-reach"
+          aria-hidden="true"
+        />
+      )}
       <span className="font-mono text-2xs uppercase tracking-widest text-label">
         {label}
       </span>
     </div>
   );
-}
+};
 
-function CountryPills({
+const CountryPills = ({
   activeCode,
   onSelect,
   rows,
 }: {
   activeCode: string | null;
-  onSelect: (row: CountryRow | null) => void;
-  rows: CountryRow[];
-}) {
+  onSelect: (row: TCountryRow | null) => void;
+  rows: TCountryRow[];
+}) => {
   const reduce = useReducedMotion();
   return (
     <motion.ul
@@ -272,74 +295,78 @@ function CountryPills({
       })}
     </motion.ul>
   );
-}
+};
 
-function GlobePulse({
+const GlobePulse = ({
   focus,
   onUserRotate,
   rows,
   speed = 0.0028,
 }: {
-  focus: CountryRow | null;
+  focus: TCountryRow | null;
   onUserRotate: () => void;
-  rows: CountryRow[];
+  rows: TCountryRow[];
   speed?: number;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const globeRef = useRef<Globe | null>(null);
-  const markersRef = useRef<Marker[]>(rows.map(toCobeMarker));
-  const pointerInteracting = useRef<{ x: number; y: number } | null>(null);
-  const dragOffset = useRef({ phi: 0, theta: 0 });
-  const phiOffsetRef = useRef(0);
-  const thetaOffsetRef = useRef(0);
-  const pausedRef = useRef(false);
-  const focusRef = useRef<{ phi: number; theta: number } | null>(null);
-  const onScreenRef = useRef(true);
+}) => {
+  const refCanvas = useRef<HTMLCanvasElement | null>(null);
+  const refGlobe = useRef<Globe | null>(null);
+  const refMarkers = useRef<Marker[]>(rows.map(toCobeMarker));
+  const refPointerInteracting = useRef<{ x: number; y: number } | null>(null);
+  const refDragOffset = useRef({ phi: 0, theta: 0 });
+  const refPhiOffset = useRef(0);
+  const refThetaOffset = useRef(0);
+  const refPaused = useRef(false);
+  const refFocus = useRef<{ phi: number; theta: number } | null>(null);
+  const refOnScreen = useRef(true);
 
   useEffect(() => {
     if (!focus) {
-      focusRef.current = null;
+      refFocus.current = null;
       return;
     }
-    focusRef.current = focusAngles(focus.location[0], focus.location[1]);
+    refFocus.current = focusAngles(focus.location[0], focus.location[1]);
   }, [focus]);
 
   useEffect(() => {
-    markersRef.current = rows.map(toCobeMarker);
-    globeRef.current?.update({
-      markers: markersRef.current,
+    refMarkers.current = rows.map(toCobeMarker);
+    refGlobe.current?.update({
+      markers: refMarkers.current,
     });
   }, [rows]);
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
-      focusRef.current = null;
+      refFocus.current = null;
       onUserRotate();
-      pointerInteracting.current = { x: event.clientX, y: event.clientY };
-      dragOffset.current = { phi: 0, theta: 0 };
-      pausedRef.current = true;
+      refPointerInteracting.current = { x: event.clientX, y: event.clientY };
+      refDragOffset.current = { phi: 0, theta: 0 };
+      refPaused.current = true;
       event.currentTarget.style.cursor = "grabbing";
     },
     [onUserRotate]
   );
 
   const handlePointerUp = useCallback(() => {
-    if (pointerInteracting.current) {
-      phiOffsetRef.current += dragOffset.current.phi;
-      thetaOffsetRef.current += dragOffset.current.theta;
-      dragOffset.current = { phi: 0, theta: 0 };
+    if (refPointerInteracting.current) {
+      refPhiOffset.current += refDragOffset.current.phi;
+      refThetaOffset.current += refDragOffset.current.theta;
+      refDragOffset.current = { phi: 0, theta: 0 };
     }
-    pointerInteracting.current = null;
-    pausedRef.current = false;
-    if (canvasRef.current) canvasRef.current.style.cursor = "grab";
+    refPointerInteracting.current = null;
+    refPaused.current = false;
+    if (refCanvas.current) {
+      refCanvas.current.style.cursor = "grab";
+    }
   }, []);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      if (!pointerInteracting.current) return;
-      dragOffset.current = {
-        phi: (event.clientX - pointerInteracting.current.x) / 280,
-        theta: (event.clientY - pointerInteracting.current.y) / 900,
+      if (!refPointerInteracting.current) {
+        return;
+      }
+      refDragOffset.current = {
+        phi: (event.clientX - refPointerInteracting.current.x) / 280,
+        theta: (event.clientY - refPointerInteracting.current.y) / 900,
       };
     };
 
@@ -354,8 +381,10 @@ function GlobePulse({
   }, [handlePointerUp]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = refCanvas.current;
+    if (!canvas) {
+      return;
+    }
 
     let frame = 0;
     let phi = -0.52;
@@ -364,14 +393,16 @@ function GlobePulse({
     let revealed = false;
 
     const create = (size: number) => {
-      if (size < 120) return;
-      globeRef.current?.destroy();
+      if (size < 120) {
+        return;
+      }
+      refGlobe.current?.destroy();
       activeSize = size;
       canvas.width = size * Math.min(window.devicePixelRatio || 1, 2);
       canvas.height = size * Math.min(window.devicePixelRatio || 1, 2);
       canvas.style.opacity = "0";
 
-      globeRef.current = createGlobe(canvas, {
+      refGlobe.current = createGlobe(canvas, {
         devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
         width: canvas.width,
         height: canvas.height,
@@ -388,7 +419,7 @@ function GlobePulse({
         markerElevation: 0.02,
         scale: 1,
         opacity: 0.95,
-        markers: markersRef.current,
+        markers: refMarkers.current,
         arcs: [],
       });
 
@@ -406,31 +437,31 @@ function GlobePulse({
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const animate = () => {
-      const target = focusRef.current;
+      const target = refFocus.current;
       if (target) {
         // Ease the offsets so the picked country rotates to face the camera.
-        thetaOffsetRef.current +=
-          (target.theta - 0.22 - thetaOffsetRef.current) * 0.08;
+        refThetaOffset.current +=
+          (target.theta - 0.22 - refThetaOffset.current) * 0.08;
         const desired =
-          phiOffsetRef.current +
-          shortestAngle(target.phi - phi - phiOffsetRef.current);
-        phiOffsetRef.current += (desired - phiOffsetRef.current) * 0.08;
+          refPhiOffset.current +
+          shortestAngle(target.phi - phi - refPhiOffset.current);
+        refPhiOffset.current += (desired - refPhiOffset.current) * 0.08;
       } else if (
-        !pausedRef.current &&
+        !refPaused.current &&
         !prefersReducedMotion &&
-        onScreenRef.current
+        refOnScreen.current
       ) {
         // Honor prefers-reduced-motion: hold the globe still rather than
-        // auto-rotating it. A direct drag still updates phi via dragOffset, so
+        // auto-rotating it. A direct drag still updates phi via refDragOffset, so
         // the globe stays interactive without continuous, unrequested motion.
         phi += speed;
       }
       // Skip the WebGL draw while the globe is scrolled off-screen: the loop
       // keeps running (so it always resumes) but the GPU stays idle.
-      if (onScreenRef.current) {
-        globeRef.current?.update({
-          phi: phi + phiOffsetRef.current + dragOffset.current.phi,
-          theta: 0.22 + thetaOffsetRef.current + dragOffset.current.theta,
+      if (refOnScreen.current) {
+        refGlobe.current?.update({
+          phi: phi + refPhiOffset.current + refDragOffset.current.phi,
+          theta: 0.22 + refThetaOffset.current + refDragOffset.current.theta,
         });
         // Fade the canvas in once the globe has drawn a few real frames, not on a
         // guessed RAF count, so no blank/bright flash shows through on load.
@@ -445,7 +476,9 @@ function GlobePulse({
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       const size = Math.round(Math.min(rect.width, rect.height));
-      if (!globeRef.current || Math.abs(size - activeSize) > 12) create(size);
+      if (!refGlobe.current || Math.abs(size - activeSize) > 12) {
+        create(size);
+      }
     };
 
     const observer = new ResizeObserver(resize);
@@ -454,7 +487,7 @@ function GlobePulse({
     // Pause the GPU render loop when the globe scrolls out of view.
     const visibility = new IntersectionObserver(
       ([entry]) => {
-        onScreenRef.current = entry.isIntersecting;
+        refOnScreen.current = entry.isIntersecting;
       },
       { threshold: 0 }
     );
@@ -467,15 +500,15 @@ function GlobePulse({
       observer.disconnect();
       visibility.disconnect();
       cancelAnimationFrame(frame);
-      globeRef.current?.destroy();
-      globeRef.current = null;
+      refGlobe.current?.destroy();
+      refGlobe.current = null;
     };
   }, [speed]);
 
   return (
     <div className="relative z-10 aspect-square w-5/6 select-none">
       <canvas
-        ref={canvasRef}
+        ref={refCanvas}
         className="globe-canvas"
         onPointerDown={handlePointerDown}
         aria-label="Interactive ctx-wire impact globe"
@@ -493,6 +526,8 @@ function GlobePulse({
                   {
                     positionAnchor: `--cobe-${id}`,
                     "--vis": `var(--cobe-visible-${id}, 0)`,
+                    "--beacon-scale": row.weight,
+                    "--beacon-delay": `${row.rank * -0.37}s`,
                   } as CSSProperties
                 }
               >
@@ -502,25 +537,49 @@ function GlobePulse({
                     {flagEmoji(row.code)}
                   </span>
                   {row.name}
+                  <span className="ml-1.5 tabular-nums text-cyan">
+                    {formatTokens(row.tokens)}
+                  </span>
+                  <span className="ml-1.5 tabular-nums text-label">
+                    {formatBytes(row.saved)}
+                  </span>
                 </span>
               </div>
             );
           })
         : null}
+      {/* Anchor positioning is Chromium-only; elsewhere the focused country's
+          readout pins to the globe corner so pill clicks still show the data. */}
+      {!ANCHOR_OK && focus ? (
+        <div className="readout-glass absolute left-3 top-3 z-10 inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-2xs text-fg">
+          <span aria-hidden="true">{flagEmoji(focus.code)}</span>
+          {focus.name}
+          <span className="tabular-nums text-cyan">
+            {formatTokens(focus.tokens)}
+          </span>
+          <span className="tabular-nums text-label">
+            {formatBytes(focus.saved)}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
-}
+};
 
-function buildRows(stats: ImpactStats): CountryRow[] {
-  return topCountries(stats)
+const buildRows = (stats: TImpactStats): TCountryRow[] => {
+  const base = topCountries(stats)
     .map((country, index) => {
       const code = countryCode(country);
       const meta = countryMeta[code];
-      if (!meta) return null;
+      if (!meta) {
+        return null;
+      }
       const saved = Number(country.bytes_saved || 0);
       // Skip countries with nothing saved: this panel is "by context saved", so a
       // country reporting 0 B is noise even if it ran a few commands.
-      if (saved <= 0) return null;
+      if (saved <= 0) {
+        return null;
+      }
       return {
         rank: index + 1,
         code,
@@ -531,15 +590,21 @@ function buildRows(stats: ImpactStats): CountryRow[] {
         commands: Number(country.commands || 0),
         // Faint center point only; the visible marker is the DOM beacon ring.
         size: 0.012,
+        weight: 1,
       };
     })
-    .filter((r): r is CountryRow => Boolean(r));
-}
+    .filter((r): r is TCountryRow => Boolean(r));
+  const maxSaved = Math.max(...base.map((r) => r.saved), 1);
+  return base.map((r) => ({
+    ...r,
+    weight: 0.7 + 0.75 * Math.sqrt(r.saved / maxSaved),
+  }));
+};
 
-function toCobeMarker(row: CountryRow): Marker {
+const toCobeMarker = (row: TCountryRow): Marker => {
   return {
     id: row.code.toLowerCase(),
     location: row.location,
     size: row.size,
   };
-}
+};

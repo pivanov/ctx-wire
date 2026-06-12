@@ -1,19 +1,20 @@
 import { IconStarFilled } from "@tabler/icons-react";
 import { motion, useReducedMotion } from "motion/react";
 import { formatInt } from "../format";
-import type { Stargazer } from "../hooks/use-community";
+import type { TStargazer } from "../hooks/use-community";
 import { fadeUp, staggerContainer } from "../lib/variants";
+import { SectionEyebrow } from "./section-heading";
 
 const REPO = "https://github.com/pivanov/ctx-wire";
 const MAX_SHOWN = 28;
 
-export function Stargazers({
+export const Stargazers = ({
   stargazers,
   stars,
 }: {
-  stargazers: Stargazer[];
+  stargazers: TStargazer[];
   stars: number;
-}) {
+}) => {
   const reduce = useReducedMotion();
   const count = Math.max(stars, stargazers.length);
   const shown = stargazers.slice(0, MAX_SHOWN);
@@ -26,16 +27,14 @@ export function Stargazers({
       variants={reduce ? undefined : staggerContainer}
       initial={reduce ? undefined : "hidden"}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.3 }}
+      viewport={{ once: true, amount: 0.1 }}
       className="globe-card-bg flex w-full max-w-stage flex-col items-center gap-6 rounded-section p-cardpad text-center"
     >
-      <motion.p
-        variants={reduce ? undefined : fadeUp}
-        className="m-0 inline-flex items-center gap-2.5 font-mono text-xs font-medium uppercase tracking-eyebrow text-green"
+      <SectionEyebrow
+        icon={<IconStarFilled size={13} className="text-yellow" />}
       >
-        <IconStarFilled size={13} className="text-yellow" />
         community
-      </motion.p>
+      </SectionEyebrow>
 
       <motion.h2
         variants={reduce ? undefined : fadeUp}
@@ -106,4 +105,4 @@ export function Stargazers({
       </motion.a>
     </motion.section>
   );
-}
+};

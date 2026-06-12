@@ -8,6 +8,7 @@ import { useCopy } from "../hooks/use-copy";
 import { BrandMark } from "./brand-mark";
 
 const REPO = "https://github.com/pivanov/ctx-wire";
+const X_PROFILE = "https://x.com/ctxwire";
 const INSTALL = "curl -fsSL https://ctx-wire.dev/install.sh | sh";
 
 // Backer logos: mono marks render as a mask silhouette (background-color:
@@ -44,7 +45,7 @@ const SOCIALS = [
   },
 ];
 
-export function Footer() {
+export const Footer = () => {
   const [copied, copy] = useCopy();
 
   return (
@@ -127,15 +128,26 @@ export function Footer() {
                 />
               )}
             </button>
-            <a
-              href={`${REPO}/stargazers`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full bg-green/10 px-3 py-1.5 font-mono text-2xs font-medium text-green ring-1 ring-inset ring-green/30 transition-colors hover:bg-green/20"
-            >
-              <IconStarFilled size={13} />
-              Star on GitHub
-            </a>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={`${REPO}/stargazers`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full bg-green/10 px-3 py-1.5 font-mono text-2xs font-medium text-green ring-1 ring-inset ring-green/30 transition-colors hover:bg-green/20"
+              >
+                <IconStarFilled size={13} />
+                Star on GitHub
+              </a>
+              <a
+                href={X_PROFILE}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-2xs font-medium text-fg ring-1 ring-inset ring-line-soft transition-colors hover:bg-green/10 hover:text-white"
+              >
+                <RiTwitterXFill size={13} />
+                Follow @ctxwire
+              </a>
+            </div>
           </div>
         </div>
 
@@ -152,7 +164,7 @@ export function Footer() {
                 href={backer.href}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex text-[#fefefe] opacity-80 transition duration-150 hover:text-white hover:opacity-100 motion-safe:active:scale-[0.98]"
+                className="inline-flex text-white opacity-80 transition duration-150 hover:opacity-100 motion-safe:active:scale-[0.98]"
               >
                 <span className="sr-only">{backer.label}</span>
                 {backer.mono ? (
@@ -189,4 +201,4 @@ export function Footer() {
       </div>
     </footer>
   );
-}
+};

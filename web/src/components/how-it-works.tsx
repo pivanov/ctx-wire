@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from "motion/react";
 import { fadeUp, staggerContainer } from "../lib/variants";
+import { SectionEyebrow } from "./section-heading";
 
 const STEPS = [
   {
@@ -26,7 +27,7 @@ const CAPS = [
   },
   {
     name: "PATH shims",
-    desc: "Coverage for agents without a hook (Cline, Windsurf, VS Code...). Where a hook already rewrites, shims step aside instead of double-wrapping.",
+    desc: "Coverage for agents without a hook (Cline, Windsurf, VS Code...); where a hook already rewrites, shims step aside.",
   },
   {
     name: "Fail-closed scrubbing",
@@ -41,12 +42,12 @@ const CAPS = [
     desc: "Savings split by agent (Claude, Codex, Cursor, Gemini, Copilot).",
   },
   {
-    name: "142 filters · 330+ tests",
+    name: "142 filters · 370+ tests",
     desc: "Declarative TOML corpus, conformance-tested every release.",
   },
   {
     name: "See what was cut",
-    desc: "inspect shows raw-vs-filtered for any recent command, so you can audit what was hidden (opt-in retention).",
+    desc: "inspect shows raw-vs-filtered for any recent command; audit exactly what was hidden (opt-in).",
   },
   {
     name: "Author + share filters",
@@ -54,14 +55,11 @@ const CAPS = [
   },
   {
     name: "Compress the MCP wire",
-    desc: "mcp-wrap relays any MCP server, measures what each tool costs, and compresses verbose browser snapshots. init claude wires chrome-devtools and Playwright automatically; raw stays on disk.",
+    desc: "mcp-wrap relays any MCP server, measures per-tool token cost, and compresses verbose browser snapshots; raw stays on disk.",
   },
 ];
 
-const eyebrow =
-  "m-0 inline-flex items-center gap-2.5 font-mono text-xs font-medium uppercase tracking-eyebrow text-green";
-
-export function HowItWorks() {
+export const HowItWorks = () => {
   const reduce = useReducedMotion();
   const v = (variant: typeof fadeUp) => (reduce ? undefined : variant);
 
@@ -71,13 +69,10 @@ export function HowItWorks() {
       variants={v(staggerContainer)}
       initial={reduce ? undefined : "hidden"}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.1 }}
       className="globe-card-bg w-full max-w-stage rounded-section p-cardpad"
     >
-      <motion.p variants={v(fadeUp)} className={eyebrow}>
-        <span className="size-1.5 rounded-full bg-green shadow-dot" />
-        how it works
-      </motion.p>
+      <SectionEyebrow>how it works</SectionEyebrow>
 
       <motion.div
         variants={v(fadeUp)}
@@ -102,10 +97,7 @@ export function HowItWorks() {
 
       <div className="my-7 border-t border-line-soft" />
 
-      <motion.p variants={v(fadeUp)} className={eyebrow}>
-        <span className="size-1.5 rounded-full bg-green shadow-dot" />
-        what makes it different
-      </motion.p>
+      <SectionEyebrow>what makes it different</SectionEyebrow>
 
       <motion.div
         variants={v(staggerContainer)}
@@ -128,4 +120,4 @@ export function HowItWorks() {
       </motion.div>
     </motion.section>
   );
-}
+};

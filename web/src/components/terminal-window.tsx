@@ -8,13 +8,13 @@ import {
 } from "../format";
 import { useTween } from "../hooks/use-tween";
 import { fadeUp } from "../lib/variants";
-import type { ImpactStats, ProgramStats } from "../types";
+import type { TImpactStats, TProgramStats } from "../types";
 
-type Props = {
-  stats: ImpactStats;
+type TProps = {
+  stats: TImpactStats;
 };
 
-export function TerminalWindow({ stats }: Props) {
+export const TerminalWindow = ({ stats }: TProps) => {
   const totals = stats.totals || {};
   const programs = topPrograms(stats);
   const moreCount = (stats.programs?.length || 0) - programs.length;
@@ -35,6 +35,7 @@ export function TerminalWindow({ stats }: Props) {
     ...programs.map((p) => Number(p.bytes_saved || 0)),
     1
   );
+  const live = Number(totals.commands || 0) > 0;
 
   return (
     <motion.section
@@ -42,7 +43,7 @@ export function TerminalWindow({ stats }: Props) {
       variants={reduce ? undefined : fadeUp}
       initial={reduce ? undefined : "hidden"}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.1 }}
       className="window-shadow w-full overflow-hidden rounded-window bg-screen"
     >
       <header className="titlebar-bg relative flex h-8 items-center px-3.5">
@@ -61,8 +62,9 @@ export function TerminalWindow({ stats }: Props) {
       <div className="screen">
         <div className="scan" aria-hidden="true" />
         <div className="glare" aria-hidden="true" />
+        {live ? null : <ConnectingState />}
         <div
-          className="relative z-10 m-0 w-full font-mono text-term text-fg"
+          className={`relative z-10 m-0 w-full font-mono text-term text-fg ${live ? "" : "hidden"}`}
           aria-live="polite"
         >
           <div className="mb-1 whitespace-pre">
@@ -148,17 +150,21 @@ export function TerminalWindow({ stats }: Props) {
       </div>
     </motion.section>
   );
-}
+};
 
 // pctTone mirrors the CLI's value-based percent coloring (ui.Theme.PercentBare:
 // >=70 green, >=30 yellow, else dim), so the replica colors match a real run.
-function pctTone(v: number): string {
-  if (v >= 70) return "text-green";
-  if (v >= 30) return "text-yellow";
+const pctTone = (v: number): string => {
+  if (v >= 70) {
+    return "text-green";
+  }
+  if (v >= 30) {
+    return "text-yellow";
+  }
   return "text-dim";
-}
+};
 
-function Summary({
+const Summary = ({
   label,
   suffix,
   suffixTone,
@@ -170,7 +176,7 @@ function Summary({
   suffixTone?: string;
   tone: string;
   value: string;
-}) {
+}) => {
   return (
     <div className="flex items-baseline gap-4">
       <dt className="m-0 w-36 shrink-0 text-label sm:w-44">{label}:</dt>
@@ -180,17 +186,17 @@ function Summary({
       </dd>
     </div>
   );
-}
+};
 
-function ProgramRow({
+const ProgramRow = ({
   index,
   maxSaved,
   program,
 }: {
   index: number;
   maxSaved: number;
-  program: ProgramStats;
-}) {
+  program: TProgramStats;
+}) => {
   const runs = useTween(Number(program.runs ?? program.count ?? 0));
   const saved = useTween(Number(program.bytes_saved || 0));
   const raw = useTween(Number(program.raw_bytes || 0));
@@ -209,9 +215,43 @@ function ProgramRow({
       </td>
     </tr>
   );
-}
+};
 
-function Meter({
+// Shown until the first telemetry payload arrives. Zeros are never rendered;
+// a gain report full of "0 B (0.0%)" reads as a dead project, not a loading one.
+const ConnectingState = () => {
+  return (
+    <div
+      className="relative z-10 m-0 w-full font-mono text-term text-fg"
+      aria-live="polite"
+    >
+      <div className="mb-1 whitespace-pre">
+        <span className="text-green">🚀</span> ctx-wire gain
+      </div>
+      <div className="mb-3 whitespace-pre">
+        <span className="font-bold text-green">ctx-wire gain</span>
+        <span className="text-label">: connecting to telemetry</span>
+        <span className="ctx-cursor ml-1 inline-block h-3 w-1.5 bg-green/70 align-middle" />
+      </div>
+      <div className="mb-5 border-t border-line-soft" />
+      <div className="grid max-w-md gap-2.5" aria-hidden="true">
+        {[
+          ["w-36", "w-16"],
+          ["w-28", "w-24"],
+          ["w-32", "w-20"],
+          ["w-40", "w-28"],
+        ].map(([labelW, valueW]) => (
+          <div key={`${labelW}-${valueW}`} className="flex items-center gap-6">
+            <span className={`shimmer h-3 ${labelW}`} />
+            <span className={`shimmer h-3 ${valueW}`} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const Meter = ({
   compact = false,
   value,
   width,
@@ -219,7 +259,7 @@ function Meter({
   compact?: boolean;
   value: number;
   width: number;
-}) {
+}) => {
   const filled = Math.max(
     0,
     Math.min(width, Math.round((value / 100) * width))
@@ -236,4 +276,4 @@ function Meter({
       <span className="text-dim">{"░".repeat(width - filled)}</span>
     </span>
   );
-}
+};

@@ -1,4 +1,4 @@
-import type { CountryMeta, ImpactStats } from "./types";
+import type { TCountryMeta, TImpactStats } from "./types";
 
 export const IMPACT_ENDPOINT =
   "https://ctx-wire-telemetry.iweb-ivanov.workers.dev/v1/impact";
@@ -21,7 +21,7 @@ export const TOKEN_PRICE_PER_M = 3;
 // Public repo; stars + stargazers come from the GitHub API.
 export const STARGAZER_REPO = "pivanov/ctx-wire";
 
-export const emptyStats: ImpactStats = {
+export const emptyStats: TImpactStats = {
   totals: {},
   programs: [],
   countries: [],
@@ -30,7 +30,7 @@ export const emptyStats: ImpactStats = {
 // Country centroids (ISO 3166-1 alpha-2), matching the Cloudflare geo codes the
 // worker stores. Full inhabited set so any country with real data renders a
 // marker; uninhabited codes (AQ/BV/HM/GS/UM) are intentionally omitted.
-export const countryMeta: Record<string, CountryMeta> = {
+export const countryMeta: Record<string, TCountryMeta> = {
   AD: { name: "Andorra", lat: 42.55, lng: 1.6 },
   AE: { name: "United Arab Emirates", lat: 23.42, lng: 53.85 },
   AF: { name: "Afghanistan", lat: 33.94, lng: 67.71 },

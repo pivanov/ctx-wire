@@ -1,11 +1,11 @@
-import { RiGithubFill } from "@remixicon/react";
+import { RiGithubFill, RiTwitterXFill } from "@remixicon/react";
 import { IconStarFilled } from "@tabler/icons-react";
 import { motion, useReducedMotion } from "motion/react";
 import { formatCompact, formatInt } from "../format";
 import { useTween } from "../hooks/use-tween";
 import { BrandMark } from "./brand-mark";
 
-type Props = {
+type TProps = {
   stars: number;
   live: boolean;
   version: number;
@@ -13,13 +13,13 @@ type Props = {
   reports: number;
 };
 
-const tactile = {
+const TACTILE = {
   whileHover: { y: -1 },
   whileTap: { scale: 0.96 },
   transition: { type: "spring", stiffness: 400, damping: 17 },
 } as const;
 
-export function TopBar({ installs, live, reports, stars, version }: Props) {
+export const TopBar = ({ installs, live, reports, stars, version }: TProps) => {
   const starCount = useTween(Number(stars || 0));
   const installCount = useTween(Number(installs || 0));
   const reportCount = useTween(Number(reports || 0));
@@ -52,49 +52,55 @@ export function TopBar({ installs, live, reports, stars, version }: Props) {
         aria-label="Primary"
         className="flex items-center gap-2 font-mono text-cap"
       >
-        <div className="inline-flex items-center gap-2.5 rounded-full bg-white/3 px-3 py-1 ring-1 ring-inset ring-line-soft">
-          <span
-            title={live ? "Live telemetry" : "Awaiting signal"}
-            className={`relative inline-flex items-center gap-1.5 ${
-              live ? "text-green" : "text-label"
-            }`}
+        {/* The stats pill renders only once telemetry is live. A visitor must
+            never see "idle · installs 0": a loading state that reads as a dead
+            project in the most prominent spot on the page. */}
+        {live ? (
+          <motion.div
+            initial={reduce ? undefined : { opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={
+              reduce ? undefined : { duration: 0.4, ease: [0.16, 1, 0.3, 1] }
+            }
+            className="inline-flex items-center gap-2.5 rounded-full bg-white/3 px-3 py-1 ring-1 ring-inset ring-line-soft"
           >
-            {version > 0 && !reduce ? (
-              <motion.span
-                key={version}
-                initial={{ opacity: 0.5, scale: 0.7 }}
-                animate={{ opacity: 0, scale: 2.4 }}
-                transition={{ duration: 1, ease: "easeOut" }}
-                className="pointer-events-none absolute -left-0.5 top-1/2 size-2 -translate-y-1/2 rounded-full ring-1 ring-green/50"
-              />
-            ) : null}
             <span
-              className={`size-1.5 rounded-full ${
-                live ? "bg-green animate-pulse-dot" : "bg-dim"
-              }`}
-            />
-            {live ? "live" : "idle"}
-          </span>
+              title="Live telemetry"
+              className="relative inline-flex items-center gap-1.5 text-green"
+            >
+              {version > 0 && !reduce ? (
+                <motion.span
+                  key={version}
+                  initial={{ opacity: 0.5, scale: 0.7 }}
+                  animate={{ opacity: 0, scale: 2.4 }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="pointer-events-none absolute -left-0.5 top-1/2 size-2 -translate-y-1/2 rounded-full ring-1 ring-green/50"
+                />
+              ) : null}
+              <span className="size-1.5 animate-pulse-dot rounded-full bg-green" />
+              live
+            </span>
 
-          <span className="hidden h-3 w-px bg-line-soft sm:block" />
-          <span
-            title="reported installs"
-            className="hidden items-center gap-1.5 sm:inline-flex"
-          >
-            <span className="text-label">installs</span>
-            <span className="text-fg">{formatInt(installCount)}</span>
-          </span>
-          <span
-            title="gain reports submitted"
-            className="hidden items-center gap-1.5 sm:inline-flex"
-          >
-            <span className="text-label">reports</span>
-            <span className="text-fg">{formatInt(reportCount)}</span>
-          </span>
-        </div>
+            <span className="hidden h-3 w-px bg-line-soft sm:block" />
+            <span
+              title="reported installs"
+              className="hidden items-center gap-1.5 sm:inline-flex"
+            >
+              <span className="text-label">installs</span>
+              <span className="text-fg">{formatInt(installCount)}</span>
+            </span>
+            <span
+              title="gain reports submitted"
+              className="hidden items-center gap-1.5 sm:inline-flex"
+            >
+              <span className="text-label">reports</span>
+              <span className="text-fg">{formatInt(reportCount)}</span>
+            </span>
+          </motion.div>
+        ) : null}
 
         <motion.a
-          {...(reduce ? {} : tactile)}
+          {...(reduce ? {} : TACTILE)}
           href="https://github.com/pivanov/ctx-wire/stargazers"
           target="_blank"
           rel="noreferrer"
@@ -105,7 +111,18 @@ export function TopBar({ installs, live, reports, stars, version }: Props) {
         </motion.a>
 
         <motion.a
-          {...(reduce ? {} : tactile)}
+          {...(reduce ? {} : TACTILE)}
+          href="https://x.com/ctxwire"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="ctx-wire on X"
+          className="inline-flex items-center rounded-full p-1.5 text-fg ring-1 ring-inset ring-line-soft transition-colors hover:bg-green/10 hover:text-white"
+        >
+          <RiTwitterXFill size={15} />
+        </motion.a>
+
+        <motion.a
+          {...(reduce ? {} : TACTILE)}
           href="https://github.com/pivanov/ctx-wire"
           target="_blank"
           rel="noreferrer"
@@ -117,4 +134,4 @@ export function TopBar({ installs, live, reports, stars, version }: Props) {
       </nav>
     </motion.header>
   );
-}
+};

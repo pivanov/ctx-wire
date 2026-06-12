@@ -6,13 +6,14 @@ import { GlobePanel } from "./components/globe-panel";
 import { Hero } from "./components/hero";
 import { HowItWorks } from "./components/how-it-works";
 import { SavedByAgent } from "./components/saved-by-agent";
+import { SectionKicker } from "./components/section-heading";
 import { Stargazers } from "./components/stargazers";
 import { TerminalWindow } from "./components/terminal-window";
 import { TopBar } from "./components/top-bar";
 import { useCommunity } from "./hooks/use-community";
 import { useImpact } from "./hooks/use-impact";
 
-export function App() {
+export const App = () => {
   const { stats, version } = useImpact();
   const { stars, stargazers } = useCommunity();
   const totals = stats.totals || {};
@@ -40,14 +41,9 @@ export function App() {
         <CommandCuts stats={stats} />
 
         <section className="flex w-full max-w-term flex-col gap-4">
-          <div className="flex items-baseline gap-4">
-            <span className="relative pl-6 font-mono text-xs font-semibold uppercase tracking-kicker text-green before:absolute before:left-0 before:top-1/2 before:h-px before:w-3.5 before:bg-green">
-              live impact
-            </span>
-            <p className="m-0 hidden font-mono text-xs text-label sm:block">
-              Real telemetry, refreshed every few seconds.
-            </p>
-          </div>
+          <SectionKicker desc="Real telemetry, refreshed every few seconds.">
+            live impact
+          </SectionKicker>
           <TerminalWindow stats={stats} />
         </section>
 
@@ -67,4 +63,4 @@ export function App() {
       <Footer />
     </>
   );
-}
+};

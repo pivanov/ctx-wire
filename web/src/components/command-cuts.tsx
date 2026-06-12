@@ -2,32 +2,33 @@ import { motion, type Transition, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { topPrograms } from "../format";
 import { fadeUp } from "../lib/variants";
-import type { ImpactStats, ProgramStats } from "../types";
+import type { TImpactStats, TProgramStats } from "../types";
+import { SectionKicker } from "./section-heading";
 
-// "Real cuts" , a live rotation through the commands ctx-wire compresses.
+// "Real cuts": a live rotation through the commands ctx-wire compresses.
 //
 // What's REAL: the command list, the token numbers, the run counts, and the
 // compression % all come from telemetry (topPrograms, per-run averages).
-// What's ILLUSTRATIVE: the dropped/kept output lines , ctx-wire never collects
+// What's ILLUSTRATIVE: the dropped/kept output lines. ctx-wire never collects
 // command output (the full log stays on your disk), so the snippets show the
 // *kind* of noise a command emits, matched by program name. The snippets carry
 // NO hard counts, so nothing can contradict the real token panel beside them.
 
-type Snippet = {
+type TSnippet = {
   cmd: string;
   dropped: string[]; // a few example noise lines (no totals)
   kept: string[]; // the kind of signal that survives (no totals)
 };
 
-type Cut = Snippet & {
+type TCut = TSnippet & {
   raw: number; // real per-run average tokens the shell printed
   sent: number; // real per-run average tokens the agent receives
   runs: number; // real number of runs the average is taken over
 };
 
 // Illustrative output per program, keyed by telemetry program name. Counts are
-// deliberately absent , the only numbers shown come from the real token panel.
-const SNIPPETS: Record<string, Snippet> = {
+// deliberately absent: the only numbers shown come from the real token panel.
+const SNIPPETS: Record<string, TSnippet> = {
   cargo: {
     cmd: "cargo build",
     dropped: [
@@ -47,7 +48,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "lib/db.ts:88:     // TODO: cache the lookup",
       "api/users.ts:13:  // TODO: paginate results",
     ],
-    kept: ["matches grouped by file", "the rest stays on disk"],
+    kept: ["→ matches grouped by file", "→ the rest stays on disk"],
   },
   grep: {
     cmd: "grep -rn useEffect src",
@@ -56,7 +57,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "src/list.tsx:30:   useEffect(() => {",
       "src/feed.tsx:8:    useEffect(() => {",
     ],
-    kept: ["matches grouped by file", "bodies stay on disk"],
+    kept: ["→ matches grouped by file", "→ bodies stay on disk"],
   },
   git: {
     cmd: "git status",
@@ -66,18 +67,18 @@ const SNIPPETS: Record<string, Snippet> = {
       "untracked:  notes/scratch.md",
     ],
     kept: [
-      "branch and ahead/behind",
-      "staged · modified · untracked, summarized",
+      "→ branch and ahead/behind",
+      "→ staged · modified · untracked, summarized",
     ],
   },
   npm: {
     cmd: "npm install",
     dropped: [
       "npm warn deprecated inflight@1.0.6",
-      "npm fund , packages looking for funding",
+      "npm fund: packages looking for funding",
       "added a package, audited the tree",
     ],
-    kept: ["what was added", "warnings and vulnerabilities"],
+    kept: ["→ what was added", "→ warnings and vulnerabilities"],
   },
   pnpm: {
     cmd: "pnpm install",
@@ -86,7 +87,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "packages/app: + dependencies",
       "node_modules/.pnpm linked",
     ],
-    kept: ["done, with timing", "peer warnings, if any"],
+    kept: ["→ done, with timing", "→ peer warnings, if any"],
   },
   yarn: {
     cmd: "yarn install",
@@ -95,7 +96,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "[2/4] Fetching packages",
       "[3/4] Linking dependencies",
     ],
-    kept: ["success, lockfile saved", "done, with timing"],
+    kept: ["→ success, lockfile saved", "→ done, with timing"],
   },
   go: {
     cmd: "go test ./...",
@@ -118,7 +119,7 @@ const SNIPPETS: Record<string, Snippet> = {
   bun: {
     cmd: "bun install",
     dropped: ["+ react@19.0.0", "+ vite@6.0.3", "+ @types/node@22.10.2"],
-    kept: ["installed, with timing", "lockfile up to date"],
+    kept: ["→ installed, with timing", "→ lockfile up to date"],
   },
   bunx: {
     cmd: "bunx prettier --write .",
@@ -127,12 +128,12 @@ const SNIPPETS: Record<string, Snippet> = {
       "formatted  src/api/users.ts",
       "formatted  src/components/feed.tsx",
     ],
-    kept: ["formatted, with timing", "file list collapsed"],
+    kept: ["→ formatted, with timing", "→ file list collapsed"],
   },
   node: {
     cmd: "node scripts/seed.mjs",
     dropped: ["seeded user 1001", "seeded user 1002", "seeded user 1003"],
-    kept: ["rows seeded, with timing", "done"],
+    kept: ["→ rows seeded, with timing", "→ done"],
   },
   kubectl: {
     cmd: "kubectl get pods",
@@ -141,7 +142,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "web-5d2a      1/1   Running",
       "worker-1a3b   1/1   Running",
     ],
-    kept: ["the pods that aren't healthy", "restarts worth noticing"],
+    kept: ["→ the pods that aren't healthy", "→ restarts worth noticing"],
   },
   base64: {
     cmd: "base64 cert.der",
@@ -150,7 +151,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "MIIDdzCCAl+gAwIBAgIEbACz5DANBgkq",
       "hkiG9w0BAQsFADBpMQswCQYDVQQGEwJV",
     ],
-    kept: ["the blob, collapsed to a marker", "full data stays on disk"],
+    kept: ["→ the blob, collapsed to a marker", "→ full data stays on disk"],
   },
   cat: {
     cmd: "cat package-lock.json",
@@ -159,7 +160,7 @@ const SNIPPETS: Record<string, Snippet> = {
       '      "version": "19.0.0",',
       '      "resolved": "https://registry.npmjs.org/…"',
     ],
-    kept: ["head + tail kept", "the middle stays on disk"],
+    kept: ["→ head + tail kept", "→ the middle stays on disk"],
   },
   tr: {
     cmd: "cat access.log | tr -s ' '",
@@ -168,7 +169,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "127.0.0.1 GET /assets/app.js 304",
       "10.0.0.4 POST /auth/login 401",
     ],
-    kept: ["the normalized stream", "collapsed to a summary"],
+    kept: ["→ the normalized stream", "→ collapsed to a summary"],
   },
   nl: {
     cmd: "nl server.log",
@@ -177,7 +178,7 @@ const SNIPPETS: Record<string, Snippet> = {
       "     2  connected to postgres",
       "     3  GET /health 200",
     ],
-    kept: ["the numbered body", "collapsed, full log on disk"],
+    kept: ["→ the numbered body", "→ collapsed, full log on disk"],
   },
   sed: {
     cmd: "sed 's/secret/•••/g' env.dump",
@@ -186,12 +187,12 @@ const SNIPPETS: Record<string, Snippet> = {
       "API_KEY=•••",
       "REDIS_URL=redis://•••",
     ],
-    kept: ["the transformed output", "collapsed to a summary"],
+    kept: ["→ the transformed output", "→ collapsed to a summary"],
   },
   sort: {
     cmd: "sort -u routes.txt",
     dropped: ["/api/auth", "/api/billing", "/api/users"],
-    kept: ["the unique values", "sorted, collapsed"],
+    kept: ["→ the unique values", "→ sorted, collapsed"],
   },
   head: {
     cmd: "head -n 5000 dump.sql",
@@ -200,12 +201,12 @@ const SNIPPETS: Record<string, Snippet> = {
       "INSERT INTO users VALUES (2, …)",
       "INSERT INTO users VALUES (3, …)",
     ],
-    kept: ["the head you asked for", "capped, full file on disk"],
+    kept: ["→ the head you asked for", "→ capped, full file on disk"],
   },
 };
 
 // Filters we actually shipped, framed as a changelog (not the rotation above).
-// Only released fixes belong here , never roadmap.
+// Only released fixes belong here, never roadmap.
 const SHIPPED = [
   { version: "0.1.20", cmd: "jq" },
   { version: "0.1.20", cmd: "bun" },
@@ -215,7 +216,7 @@ const SHIPPED = [
 // Shown when telemetry has no matching programs yet (idle tab / first paint).
 // Seeded with the real top programs + real per-run averages and run counts, so
 // the idle state mirrors production rather than inventing different commands.
-const FALLBACK: Cut[] = [
+const FALLBACK: TCut[] = [
   { ...SNIPPETS.rg, raw: 178000, sent: 904, runs: 19472 },
   { ...SNIPPETS.git, raw: 3712, sent: 110, runs: 182954 },
   { ...SNIPPETS.base64, raw: 8011, sent: 1137, runs: 40092 },
@@ -226,37 +227,41 @@ const FALLBACK: Cut[] = [
 const ROTATE_MS = 3800;
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
-// A cut is never 100% while the agent still receives tokens , cap at 99 so we
+// A cut is never 100% while the agent still receives tokens. Cap at 99 so we
 // never claim we erased output we actually sent.
-const pctCut = (c: Cut) =>
+const pctCut = (c: TCut) =>
   c.sent <= 0 ? 100 : Math.min(99, Math.round((1 - c.sent / c.raw) * 100));
 
 // Real per-run-average token counts for a program, matched to its snippet.
-function toCut(snippet: Snippet, p: ProgramStats): Cut | null {
+const toCut = (snippet: TSnippet, p: TProgramStats): TCut | null => {
   const raw = Number(p.raw_bytes || 0);
   const saved = Number(p.bytes_saved || 0);
   const runs = Number(p.runs ?? p.count ?? 0);
-  if (raw <= 0 || saved <= 0 || runs <= 0) return null;
+  if (raw <= 0 || saved <= 0 || runs <= 0) {
+    return null;
+  }
   const emitted = Number(p.emitted_bytes ?? Math.max(0, raw - saved));
   const rawTok = Math.max(1, Math.round(raw / runs / 4));
   const sentTok = Math.max(1, Math.round(emitted / runs / 4));
   // Need a visible, non-trivial cut to be worth showcasing.
-  if (rawTok < 40 || rawTok <= sentTok) return null;
+  if (rawTok < 40 || rawTok <= sentTok) {
+    return null;
+  }
   return { ...snippet, raw: rawTok, sent: sentTok, runs };
-}
+};
 
-function buildCuts(stats: ImpactStats): Cut[] {
+const buildCuts = (stats: TImpactStats): TCut[] => {
   const real = topPrograms(stats)
     .map((p) => {
       const snippet = SNIPPETS[p.program];
       return snippet ? toCut(snippet, p) : null;
     })
-    .filter((c): c is Cut => c !== null)
+    .filter((c): c is TCut => c !== null)
     .slice(0, 6);
   return real.length >= 3 ? real : FALLBACK;
-}
+};
 
-function Bar({
+const Bar = ({
   label,
   tokens,
   pct,
@@ -270,19 +275,17 @@ function Bar({
   tone: "raw" | "sent";
   delay: number;
   reduce: boolean;
-}) {
+}) => {
   const grow: Transition = reduce
     ? { duration: 0 }
     : { duration: 0.7, ease: EASE_OUT, delay };
   return (
     <div className="flex items-center gap-3">
       <span className="w-16 shrink-0 text-2xs text-label">{label}</span>
-      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-white/[0.04] ring-1 ring-inset ring-line-soft">
+      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-white/4 ring-1 ring-inset ring-line-soft">
         <motion.div
           className={`h-full rounded-full ${
-            tone === "sent"
-              ? "bg-green shadow-[0_0_10px_rgba(142,234,122,0.7)]"
-              : "bg-cyan/30"
+            tone === "sent" ? "bg-green shadow-marker" : "bg-cyan/30"
           }`}
           style={{
             width: `${Math.max(pct, 2)}%`,
@@ -299,18 +302,16 @@ function Bar({
       </span>
     </div>
   );
-}
+};
 
-function Frame({ cut, reduce }: { cut: Cut; reduce: boolean }) {
+const Frame = ({ cut, reduce }: { cut: TCut; reduce: boolean }) => {
   const pct = pctCut(cut);
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_300px] lg:items-start">
-      {/* left: the actual output, cut */}
       <div className="min-w-0">
         <div className="mb-3">
           <span className="select-none text-green">$</span> {cut.cmd}
         </div>
-        {/* dropped (noise) */}
         <div className="relative mb-2 pl-3.5">
           <span className="absolute inset-y-1 left-0 w-px bg-line-soft" />
           <div className="mb-1 inline-flex items-center gap-1.5 text-2xs uppercase tracking-caps text-label">
@@ -326,10 +327,9 @@ function Frame({ cut, reduce }: { cut: Cut; reduce: boolean }) {
             <span className="text-dim"> · full log on disk</span>
           </div>
         </div>
-        {/* kept (signal) */}
-        <div className="rounded-md border-l-2 border-green bg-green/[0.04] py-2.5 pl-3.5 pr-3">
+        <div className="rounded-md border-l-2 border-green bg-green/4 py-2.5 pl-3.5 pr-3">
           <div className="mb-1.5 text-2xs uppercase tracking-caps text-green">
-            kept , what your agent reads
+            kept · what your agent reads
           </div>
           {cut.kept.map((line) => (
             <div
@@ -342,8 +342,7 @@ function Frame({ cut, reduce }: { cut: Cut; reduce: boolean }) {
         </div>
       </div>
 
-      {/* right: the magnitude, in tokens */}
-      <div className="rounded-panel bg-white/[0.02] p-4 ring-1 ring-inset ring-line-soft">
+      <div className="rounded-panel bg-white/2 p-4 ring-1 ring-inset ring-line-soft">
         <div className="mb-3 flex items-baseline gap-2">
           <span className="font-display text-5xl font-extrabold leading-none text-green">
             −{pct}%
@@ -374,16 +373,18 @@ function Frame({ cut, reduce }: { cut: Cut; reduce: boolean }) {
       </div>
     </div>
   );
-}
+};
 
-function CutsTerminal({ cuts }: { cuts: Cut[] }) {
+const CutsTerminal = ({ cuts }: { cuts: TCut[] }) => {
   const reduce = Boolean(useReducedMotion());
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
   const cut = cuts[idx % cuts.length];
 
   useEffect(() => {
-    if (reduce || paused || cuts.length <= 1) return;
+    if (reduce || paused || cuts.length <= 1) {
+      return;
+    }
     const id = window.setInterval(
       () => setIdx((i) => (i + 1) % cuts.length),
       ROTATE_MS
@@ -396,7 +397,7 @@ function CutsTerminal({ cuts }: { cuts: Cut[] }) {
       variants={reduce ? undefined : fadeUp}
       initial={reduce ? undefined : "hidden"}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.1 }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       className="window-shadow w-full overflow-hidden rounded-window bg-screen"
@@ -428,7 +429,6 @@ function CutsTerminal({ cuts }: { cuts: Cut[] }) {
             </motion.div>
           </div>
 
-          {/* which command is showing */}
           <div className="mt-4 flex items-center justify-center gap-1.5">
             {cuts.map((c, i) => (
               <button
@@ -445,7 +445,7 @@ function CutsTerminal({ cuts }: { cuts: Cut[] }) {
             ))}
           </div>
 
-          {/* changelog , recent filter fixes (separate from the rotation) */}
+          {/* changelog: recent filter fixes (separate from the rotation) */}
           <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-soft pt-4 text-2xs">
             <span className="text-label">Newest filter fixes:</span>
             {SHIPPED.map((s) => (
@@ -463,21 +463,19 @@ function CutsTerminal({ cuts }: { cuts: Cut[] }) {
       </div>
     </motion.div>
   );
-}
+};
 
-export function CommandCuts({ stats }: { stats: ImpactStats }) {
+export const CommandCuts = ({ stats }: { stats: TImpactStats }) => {
   const cuts = useMemo(() => buildCuts(stats), [stats]);
   return (
     <section className="flex w-full max-w-term flex-col gap-4">
-      <div className="flex items-baseline gap-4">
-        <span className="relative pl-6 font-mono text-xs font-semibold uppercase tracking-kicker text-green before:absolute before:left-0 before:top-1/2 before:h-px before:w-3.5 before:bg-green">
-          real cuts
-        </span>
-        <p className="m-0 hidden font-mono text-xs text-label sm:block">
-          One command at a time , the noise dropped, the tokens saved.
-        </p>
-      </div>
+      <SectionKicker desc="One command at a time: the noise dropped, the tokens saved.">
+        real cuts
+      </SectionKicker>
+      <h2 className="m-0 mb-1 font-display text-reach font-extrabold text-head">
+        Watch it <span className="text-green">cut</span>.
+      </h2>
       <CutsTerminal cuts={cuts} />
     </section>
   );
-}
+};

@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { COMMUNITY_ENDPOINT } from "../data";
 
-export type Stargazer = {
+export type TStargazer = {
   login: string;
   avatar: string;
   url: string;
 };
 
-export type Community = {
+export type TCommunity = {
   stars: number;
-  stargazers: Stargazer[];
+  stargazers: TStargazer[];
 };
 
-export function useCommunity(): Community {
-  const [data, setData] = useState<Community>({ stars: 0, stargazers: [] });
+export const useCommunity = (): TCommunity => {
+  const [data, setData] = useState<TCommunity>({ stars: 0, stargazers: [] });
 
   useEffect(() => {
     let cancelled = false;
@@ -21,12 +21,16 @@ export function useCommunity(): Community {
     // The browser only ever talks to the telemetry worker; it proxies + caches
     // GitHub server-side (1h fresh, 7d stale on 403), so visitors never hit
     // GitHub's 60/hr unauthenticated limit and the count never collapses to 0.
-    async function load() {
+    const load = async () => {
       try {
         const res = await fetch(COMMUNITY_ENDPOINT, { cache: "no-store" });
-        if (!res.ok) return;
-        const json = (await res.json()) as Partial<Community>;
-        if (cancelled) return;
+        if (!res.ok) {
+          return;
+        }
+        const json = (await res.json()) as Partial<TCommunity>;
+        if (cancelled) {
+          return;
+        }
         setData({
           stars: Number(json.stars || 0),
           stargazers: Array.isArray(json.stargazers) ? json.stargazers : [],
@@ -34,7 +38,7 @@ export function useCommunity(): Community {
       } catch {
         // worker unreachable: keep the empty state rather than calling GitHub
       }
-    }
+    };
 
     load();
     return () => {
@@ -43,4 +47,4 @@ export function useCommunity(): Community {
   }, []);
 
   return data;
-}
+};

@@ -1,6 +1,7 @@
 import { RiArrowDownSLine } from "@remixicon/react";
 import { motion, useReducedMotion } from "motion/react";
 import { fadeUp, staggerContainer } from "../lib/variants";
+import { SectionEyebrow } from "./section-heading";
 
 // Engineering-honest answers to the questions a skeptical dev actually asks.
 // Claims here must stay true to the implementation: pass-through by default,
@@ -12,7 +13,15 @@ const ITEMS = [
   },
   {
     q: "Can it corrupt something my agent parses?",
-    a: "That risk is engineered against. Command substitutions like $(cat config.json) are never rewritten, streaming and interactive commands are auto-detected and bypassed, failing commands keep their output, and 330+ conformance tests pin every filter's behavior on each release.",
+    a: "That risk is engineered against. Command substitutions like $(cat config.json) are never rewritten, streaming and interactive commands are auto-detected and bypassed, and complete JSON output passes through whole (up to 1 MiB), never line-cut mid-structure. 370+ conformance tests pin every filter's behavior on each release.",
+  },
+  {
+    q: "What happens when a command fails?",
+    a: "The failure reaches your agent intact. Exit codes pass through, a failed command keeps its output, and a filter can never collapse a failure into a fake success. If filtering would leave a failed command with nothing visible, the runner falls back to the raw tail, and the full output is always kept on disk.",
+  },
+  {
+    q: "Will it block or interrupt my agent?",
+    a: "No. ctx-wire is a filter, not a permission gate: it never asks for approval and never denies a command, so safety stays with your agent's own policy. Streaming and interactive commands are detected and bypassed. Overnight autonomous runs don't stall on it.",
   },
   {
     q: "What about secrets?",
@@ -32,10 +41,7 @@ const ITEMS = [
   },
 ];
 
-const eyebrow =
-  "m-0 inline-flex items-center gap-2.5 font-mono text-xs font-medium uppercase tracking-eyebrow text-green";
-
-export function Faq() {
+export const Faq = () => {
   const reduce = useReducedMotion();
   const v = (variant: typeof fadeUp) => (reduce ? undefined : variant);
 
@@ -45,13 +51,10 @@ export function Faq() {
       variants={v(staggerContainer)}
       initial={reduce ? undefined : "hidden"}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.15 }}
+      viewport={{ once: true, amount: 0.1 }}
       className="globe-card-bg w-full max-w-stage rounded-section p-cardpad"
     >
-      <motion.p variants={v(fadeUp)} className={eyebrow}>
-        <span className="size-1.5 rounded-full bg-green shadow-dot" />
-        faq
-      </motion.p>
+      <SectionEyebrow>faq</SectionEyebrow>
 
       <motion.div variants={v(staggerContainer)} className="mt-4">
         {ITEMS.map((item) => (
@@ -77,4 +80,4 @@ export function Faq() {
       </motion.div>
     </motion.section>
   );
-}
+};

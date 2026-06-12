@@ -1,15 +1,16 @@
 import { RiArrowRightUpLine } from "@remixicon/react";
 import { motion, useReducedMotion } from "motion/react";
 import { fadeUp, staggerContainer } from "../lib/variants";
+import { SectionEyebrow } from "./section-heading";
 
 const RTK_URL = "https://github.com/rtk-ai/rtk";
 
-type Row = { dim: string; rtk: string; ctx: string; note: string };
+type TRow = { dim: string; rtk: string; ctx: string; note: string };
 
 // Functional comparison only (not packaging or maturity). Each row credits
 // rtk's solid baseline, then shows where ctx-wire takes the same job further.
 // rtk is the respected groundwork, never the punchline.
-const ROWS: Row[] = [
+const ROWS: TRow[] = [
   {
     dim: "Catching the command",
     rtk: "Agent hooks rewrite the command before it runs.",
@@ -48,10 +49,7 @@ const ROWS: Row[] = [
   },
 ];
 
-const eyebrow =
-  "m-0 inline-flex items-center gap-2.5 font-mono text-xs font-medium uppercase tracking-eyebrow text-green";
-
-export function ComparisonRtk() {
+export const ComparisonRtk = () => {
   const reduce = useReducedMotion();
   const v = (variant: typeof fadeUp) => (reduce ? undefined : variant);
 
@@ -61,13 +59,10 @@ export function ComparisonRtk() {
       variants={v(staggerContainer)}
       initial={reduce ? undefined : "hidden"}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.15 }}
+      viewport={{ once: true, amount: 0.1 }}
       className="globe-card-bg w-full max-w-stage rounded-section p-cardpad"
     >
-      <motion.p variants={v(fadeUp)} className={eyebrow}>
-        <span className="size-1.5 rounded-full bg-green shadow-dot" />
-        inspired by rtk
-      </motion.p>
+      <SectionEyebrow>inspired by rtk</SectionEyebrow>
 
       <motion.p
         variants={v(fadeUp)}
@@ -129,9 +124,9 @@ export function ComparisonRtk() {
       </motion.a>
     </motion.section>
   );
-}
+};
 
-function Side({
+const Side = ({
   tool,
   accent,
   text,
@@ -141,7 +136,7 @@ function Side({
   accent: "teal" | "green";
   text: string;
   note?: string;
-}) {
+}) => {
   const isTeal = accent === "teal";
   return (
     <div>
@@ -167,4 +162,4 @@ function Side({
       </p>
     </div>
   );
-}
+};

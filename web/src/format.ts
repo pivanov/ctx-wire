@@ -1,99 +1,141 @@
-import type { CountryStats, ImpactStats, ProgramStats } from "./types";
+import type { TCountryStats, TImpactStats, TProgramStats } from "./types";
 
-export function formatBytes(value?: number): string {
+export const formatBytes = (value?: number): string => {
   const n = Number(value || 0);
-  if (n < 1024) return `${Math.round(n)} B`;
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
-  if (n < 1024 ** 4) return `${(n / 1024 ** 3).toFixed(1)} GB`;
-  if (n < 1024 ** 5) return `${(n / 1024 ** 4).toFixed(1)} TB`;
+  if (n < 1024) {
+    return `${Math.round(n)} B`;
+  }
+  if (n < 1024 ** 2) {
+    return `${(n / 1024).toFixed(1)} KB`;
+  }
+  if (n < 1024 ** 3) {
+    return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  }
+  if (n < 1024 ** 4) {
+    return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  }
+  if (n < 1024 ** 5) {
+    return `${(n / 1024 ** 4).toFixed(1)} TB`;
+  }
   return `${(n / 1024 ** 5).toFixed(1)} PB`;
-}
+};
 
-export function formatCompact(value?: number): string {
+export const formatCompact = (value?: number): string => {
   const n = Number(value || 0);
-  if (n < 1000) return formatInt(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
-  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n < 1_000_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n < 1000) {
+    return formatInt(n);
+  }
+  if (n < 1_000_000) {
+    return `${(n / 1000).toFixed(1)}K`;
+  }
+  if (n < 1_000_000_000) {
+    return `${(n / 1_000_000).toFixed(1)}M`;
+  }
+  if (n < 1_000_000_000_000) {
+    return `${(n / 1_000_000_000).toFixed(1)}B`;
+  }
   return `${(n / 1_000_000_000_000).toFixed(1)}T`;
-}
+};
 
-export function formatTokens(value?: number): string {
+export const formatTokens = (value?: number): string => {
   const n = Number(value || 0);
-  if (n < 1000) return `~${Math.round(n)}`;
+  if (n < 1000) {
+    return `~${Math.round(n)}`;
+  }
   return `~${formatCompact(n)}`;
-}
+};
 
-export function formatCompact3(value?: number): string {
+export const formatCompact3 = (value?: number): string => {
   const n = Number(value || 0);
-  if (n < 1000) return formatInt(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(3)}K`;
-  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(3)}M`;
-  if (n < 1_000_000_000_000) return `${(n / 1_000_000_000).toFixed(3)}B`;
+  if (n < 1000) {
+    return formatInt(n);
+  }
+  if (n < 1_000_000) {
+    return `${(n / 1000).toFixed(3)}K`;
+  }
+  if (n < 1_000_000_000) {
+    return `${(n / 1_000_000).toFixed(3)}M`;
+  }
+  if (n < 1_000_000_000_000) {
+    return `${(n / 1_000_000_000).toFixed(3)}B`;
+  }
   return `${(n / 1_000_000_000_000).toFixed(3)}T`;
-}
+};
 
-export function formatTokens3(value?: number): string {
+export const formatTokens3 = (value?: number): string => {
   const n = Number(value || 0);
-  if (n < 1000) return `~${Math.round(n)}`;
+  if (n < 1000) {
+    return `~${Math.round(n)}`;
+  }
   return `~${formatCompact3(n)}`;
-}
+};
 
-export function formatUsdCents(value?: number): string {
+export const formatUsdCents = (value?: number): string => {
   return `$${Number(value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
+};
 
-export function formatInt(value?: number): string {
+export const formatInt = (value?: number): string => {
   return Math.round(Number(value || 0)).toLocaleString("en-US");
-}
+};
 
-export function formatUsd(value?: number): string {
+export const formatUsd = (value?: number): string => {
   const n = Math.round(Number(value || 0));
-  if (n < 1_000_000) return `$${n.toLocaleString("en-US")}`;
-  if (n < 1_000_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n < 1_000_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n < 1_000_000) {
+    return `$${n.toLocaleString("en-US")}`;
+  }
+  if (n < 1_000_000_000) {
+    return `$${(n / 1_000_000).toFixed(1)}M`;
+  }
+  if (n < 1_000_000_000_000) {
+    return `$${(n / 1_000_000_000).toFixed(1)}B`;
+  }
   return `$${(n / 1_000_000_000_000).toFixed(1)}T`;
-}
+};
 
-export function savedPct(saved?: number, raw?: number): number {
+export const savedPct = (saved?: number, raw?: number): number => {
   const rawValue = Number(raw || 0);
-  if (rawValue <= 0) return 0;
+  if (rawValue <= 0) {
+    return 0;
+  }
   return (Number(saved || 0) / rawValue) * 100;
-}
+};
 
-export function countryCode(country: CountryStats): string {
+export const countryCode = (country: TCountryStats): string => {
   return String(country.country || country.country_code || country.code || "")
     .trim()
     .toUpperCase();
-}
+};
 
-export function flagEmoji(code: string): string {
+export const flagEmoji = (code: string): string => {
   const cc = code.trim().toUpperCase();
-  if (cc.length !== 2 || !/^[A-Z]{2}$/.test(cc)) return "🏳";
+  if (cc.length !== 2 || !/^[A-Z]{2}$/.test(cc)) {
+    return "🏳";
+  }
   const base = 0x1f1e6;
   return String.fromCodePoint(
     base + (cc.charCodeAt(0) - 65),
     base + (cc.charCodeAt(1) - 65)
   );
-}
+};
 
-export function shareOf(value?: number, total?: number): number {
+export const shareOf = (value?: number, total?: number): number => {
   const t = Number(total || 0);
-  if (t <= 0) return 0;
+  if (t <= 0) {
+    return 0;
+  }
   return Math.min(100, (Number(value || 0) / t) * 100);
-}
+};
 
-export function topPrograms(stats: ImpactStats): ProgramStats[] {
+export const topPrograms = (stats: TImpactStats): TProgramStats[] => {
   return [...(stats.programs || [])]
     .sort((a, b) => Number(b.bytes_saved || 0) - Number(a.bytes_saved || 0))
     .slice(0, 10);
-}
+};
 
-export function topCountries(stats: ImpactStats): CountryStats[] {
+export const topCountries = (stats: TImpactStats): TCountryStats[] => {
   return [...(stats.countries || [])]
     .filter(
       (c) =>
@@ -102,9 +144,9 @@ export function topCountries(stats: ImpactStats): CountryStats[] {
     )
     .sort((a, b) => Number(b.bytes_saved || 0) - Number(a.bytes_saved || 0))
     .slice(0, 10);
-}
+};
 
-export function reportText(stats: ImpactStats): string {
+export const reportText = (stats: TImpactStats): string => {
   const totals = stats.totals || {};
   const programs = topPrograms(stats);
   const pct = savedPct(totals.bytes_saved, totals.raw_bytes);
@@ -147,4 +189,4 @@ export function reportText(stats: ImpactStats): string {
     ...rows,
     "────┴──────────┴───────┴──────────┴───────┴────────────────────",
   ].join("\n");
-}
+};

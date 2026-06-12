@@ -1,35 +1,35 @@
 import { motion, useReducedMotion } from "motion/react";
 import { formatInt, formatTokens } from "../format";
 import { fadeUp, staggerContainer } from "../lib/variants";
-import type { AgentStats, ImpactStats } from "../types";
+import type { TAgentStats, TImpactStats } from "../types";
 import { AgentLogo, agentLabel } from "./agent-logos";
+import { SectionEyebrow } from "./section-heading";
 
-const tokensOf = (a: AgentStats) => Number(a.tokens_saved || 0);
+const tokensOf = (a: TAgentStats) => Number(a.tokens_saved || 0);
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
-function Row({
+const Row = ({
   agent,
   pct,
   rank,
   lead,
   reduce,
 }: {
-  agent: AgentStats;
-  pct: number; // share of the leader, drives the row fill
+  agent: TAgentStats;
+  pct: number;
   rank: number;
   lead: boolean;
   reduce: boolean;
-}) {
+}) => {
   return (
     <motion.div
       variants={reduce ? undefined : fadeUp}
-      className="relative overflow-hidden rounded-xl bg-white/[0.02] ring-1 ring-inset ring-line-soft"
+      className="relative overflow-hidden rounded-card bg-white/2 ring-1 ring-inset ring-line-soft"
     >
-      {/* share fill , the bar IS the row */}
       <motion.div
         aria-hidden="true"
         className={`absolute inset-y-0 left-0 ${
-          lead ? "bg-green/[0.14]" : "bg-cyan/[0.08]"
+          lead ? "bg-green/14" : "bg-cyan/8"
         }`}
         style={{ width: `${pct}%`, transformOrigin: "left" }}
         initial={reduce ? false : { scaleX: 0 }}
@@ -64,9 +64,9 @@ function Row({
       </div>
     </motion.div>
   );
-}
+};
 
-export function SavedByAgent({ stats }: { stats: ImpactStats }) {
+export const SavedByAgent = ({ stats }: { stats: TImpactStats }) => {
   const reduce = useReducedMotion();
   const agents = (stats.agents ?? [])
     .filter((a) => tokensOf(a) > 0)
@@ -85,16 +85,10 @@ export function SavedByAgent({ stats }: { stats: ImpactStats }) {
       variants={reduce ? undefined : staggerContainer}
       initial={reduce ? undefined : "hidden"}
       whileInView="visible"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.1 }}
       className="globe-card-bg w-full max-w-stage rounded-section p-cardpad"
     >
-      <motion.p
-        variants={reduce ? undefined : fadeUp}
-        className="m-0 inline-flex items-center gap-2.5 font-mono text-xs font-medium uppercase tracking-eyebrow text-green"
-      >
-        <span className="size-1.5 rounded-full bg-green shadow-dot" />
-        saved by agent
-      </motion.p>
+      <SectionEyebrow>saved by agent</SectionEyebrow>
       <motion.p
         variants={reduce ? undefined : fadeUp}
         className="m-0 mt-3 mb-5 font-mono text-cap text-label"
@@ -122,4 +116,4 @@ export function SavedByAgent({ stats }: { stats: ImpactStats }) {
       </motion.div>
     </motion.section>
   );
-}
+};
