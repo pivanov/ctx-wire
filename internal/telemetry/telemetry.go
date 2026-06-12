@@ -30,7 +30,7 @@ const (
 
 	requestTimeout = 900 * time.Millisecond
 
-	autoFlushInterval         = 5 * time.Minute
+	autoFlushInterval         = 15 * time.Minute
 	autoFlushCommandThreshold = int64(1000)
 	autoFlushSavedThreshold   = int64(10 << 20)
 )

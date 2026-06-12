@@ -232,7 +232,7 @@ func TestTelemetryCanBeDisabled(t *testing.T) {
 	}
 }
 
-func TestRecordCommandFlushesAfterFiveMinutes(t *testing.T) {
+func TestRecordCommandFlushesAfterInterval(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
@@ -253,7 +253,7 @@ func TestRecordCommandFlushesAfterFiveMinutes(t *testing.T) {
 		t.Fatalf("first result = %#v payloads=%d, want pending noop", res, len(payloads))
 	}
 
-	restoreClock(t, base.Add(4*time.Minute))
+	restoreClock(t, base.Add(autoFlushInterval-time.Minute))
 	res, err = RecordCommand("rg TODO .", "claude", 2000, 1000)
 	if err != nil {
 		t.Fatalf("RecordCommand second: %v", err)
@@ -262,7 +262,7 @@ func TestRecordCommandFlushesAfterFiveMinutes(t *testing.T) {
 		t.Fatalf("second result = %#v payloads=%d, want pending noop", res, len(payloads))
 	}
 
-	restoreClock(t, base.Add(5*time.Minute+time.Second))
+	restoreClock(t, base.Add(autoFlushInterval+time.Second))
 	res, err = RecordCommand("git status", "claude", 100, 50)
 	if err != nil {
 		t.Fatalf("RecordCommand third: %v", err)
@@ -332,7 +332,7 @@ func TestRecordCommandFailureKeepsPendingAndThrottlesRetry(t *testing.T) {
 	if _, err := RecordCommand("cat one", "claude", 1000, 0); err != nil {
 		t.Fatalf("RecordCommand first: %v", err)
 	}
-	restoreClock(t, base.Add(6*time.Minute))
+	restoreClock(t, base.Add(autoFlushInterval+time.Minute))
 	if _, err := RecordCommand("cat two", "claude", 1000, 0); err == nil {
 		t.Fatal("second RecordCommand should return send error")
 	}
@@ -347,7 +347,7 @@ func TestRecordCommandFailureKeepsPendingAndThrottlesRetry(t *testing.T) {
 		t.Fatalf("pending commands after failed flush = %d, want 2", st.Pending.Commands)
 	}
 
-	restoreClock(t, base.Add(6*time.Minute+time.Second))
+	restoreClock(t, base.Add(autoFlushInterval+time.Minute+time.Second))
 	res, err := RecordCommand("cat three", "claude", 1000, 0)
 	if err != nil {
 		t.Fatalf("third RecordCommand should be throttled, got error: %v", err)
@@ -423,7 +423,7 @@ func TestRecordCommandPerAgentBreakdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Unattributed: counts in the scalar totals, no agent bucket.
-	restoreClock(t, base.Add(5*time.Minute+time.Second))
+	restoreClock(t, base.Add(autoFlushInterval+time.Second))
 	res, err := RecordCommand("git status", "", 100, 50)
 	if err != nil {
 		t.Fatal(err)

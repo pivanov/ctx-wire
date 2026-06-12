@@ -70,7 +70,7 @@ const corsHeaders = {
 };
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
@@ -85,7 +85,7 @@ export default {
       request.method === "GET" &&
       (url.pathname === "/v1/impact" || url.pathname === "/v1/stats")
     ) {
-      return readStats(env);
+      return cachedStats(request, env, ctx);
     }
 
     if (
@@ -365,6 +365,42 @@ function parseInstallAgent(value: unknown): string {
   }
   const name = value.trim().toLowerCase();
   return PROGRAM_RE.test(name) ? name : "";
+}
+
+// STATS_CACHE_TTL_SECONDS caches the read-only stats response at the edge. The
+// stats are cumulative aggregates that barely move minute to minute, so a few
+// minutes of staleness is fine. Without this, a dashboard polling /v1/stats
+// every couple of seconds re-scans every table on every hit (~1.3k D1 rows per
+// call), which alone burned ~4.5M of the 5M/day free-tier read budget. With a
+// 5-minute cache, D1 is read at most once per window per colo instead.
+const STATS_CACHE_TTL_SECONDS = 300;
+
+// cachedStats serves /v1/stats and /v1/impact from the edge cache, only hitting
+// D1 on a miss. The cache key is normalized to origin+path so query strings and
+// request headers never fragment it. cache.put runs in waitUntil so it never
+// adds latency to the response.
+async function cachedStats(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  // caches.default is the Cloudflare Workers edge cache; the base DOM lib types
+  // CacheStorage without it, so reach it through a narrow cast.
+  const cache = (caches as unknown as { default: Cache }).default;
+  const url = new URL(request.url);
+  const cacheKey = new Request(`${url.origin}${url.pathname}`, { method: "GET" });
+
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    const served = new Response(hit.body, hit);
+    served.headers.set("X-Ctx-Cache", "hit");
+    return served;
+  }
+
+  const fresh = await readStats(env);
+  const cacheable = new Response(fresh.body, fresh);
+  cacheable.headers.set("Cache-Control", `public, max-age=${STATS_CACHE_TTL_SECONDS}`);
+  // Store the clean response (no cache-status header), then mark the one we serve
+  // as a miss. A later hit is served from the stored copy and marked hit.
+  ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+  cacheable.headers.set("X-Ctx-Cache", "miss");
+  return cacheable;
 }
 
 async function readStats(env: Env): Promise<Response> {
