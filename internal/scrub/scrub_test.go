@@ -61,6 +61,16 @@ func TestScrub(t *testing.T) {
 			mustDrop:  []string{"hunter2"},
 		},
 		{
+			// A double-quoted value containing an escaped quote must redact in
+			// full; the old `"[^"]*"` value pattern stopped at the backslash-quote
+			// and leaked the tail (PASSWORD=[REDACTED]bar" next=ok).
+			name:      "double-quoted secret with escaped quote not partially leaked",
+			in:        `PASSWORD="foo\"bar" next=ok`,
+			wantRedac: true,
+			mustKeep:  []string{"PASSWORD=", "next=ok"},
+			mustDrop:  []string{"bar"},
+		},
+		{
 			name:      "double-quoted secret with spaces",
 			in:        `PASSWORD="hunter2 secret phrase" next=ok`,
 			wantRedac: true,

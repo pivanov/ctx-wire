@@ -53,13 +53,14 @@ var rules = []rule{
 	// Split long flags whose following argv value is a secret. This is a
 	// defense-in-depth pass for older persisted command samples; new command
 	// records are scrubbed argv-aware by Command before they reach disk.
-	{name: "secret-flag-value", re: regexp.MustCompile(`(?i)(--(?:password|passwd|pwd|secret|token|auth[_-]?token|access[_-]?token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|client[_-]?secret|credential|credentials)\s+)('[^']*'|"[^"]*"|[^\s]+)`), replacement: "${1}" + redacted},
+	{name: "secret-flag-value", re: regexp.MustCompile(`(?i)(--(?:password|passwd|pwd|secret|token|auth[_-]?token|access[_-]?token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|client[_-]?secret|credential|credentials)\s+)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s]+)`), replacement: "${1}" + redacted},
 	// scheme://user:password@host -> redact only the password, keep the rest
 	{name: "url-userinfo", re: regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+:)[^\s@/]+(@)`), replacement: "${1}" + redacted + "${2}"},
 	// secret-ish key = value (and key: value). Keep the key, redact the value.
 	// The value alternation captures single-quoted, double-quoted (which may
-	// contain spaces), or bare tokens, so the whole secret is redacted.
-	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret)\s*[:=]\s*)('[^']*'|"[^"]*"|[^\s]+)`), replacement: "${1}" + redacted},
+	// contain spaces and backslash-escaped quotes), or bare tokens, so the whole
+	// secret is redacted rather than stopping at the first escaped quote.
+	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret)\s*[:=]\s*)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s]+)`), replacement: "${1}" + redacted},
 }
 
 // Scrub redacts known secret shapes from s. It never returns an error and is
