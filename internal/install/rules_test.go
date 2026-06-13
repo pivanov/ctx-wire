@@ -93,3 +93,40 @@ func TestInstallCopilot(t *testing.T) {
 		t.Fatalf("hook missing: %v %q", err, data)
 	}
 }
+
+func TestInstallCopilotIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	instrPath := CopilotInstructionsPath(dir)
+	hookPath := CopilotHookPath(dir)
+
+	if _, err := InstallCopilot(instrPath, hookPath); err != nil {
+		t.Fatalf("first InstallCopilot: %v", err)
+	}
+
+	changed, err := InstallCopilot(instrPath, hookPath)
+	if err != nil {
+		t.Fatalf("second InstallCopilot: %v", err)
+	}
+	if changed {
+		t.Fatal("expected changed=false on second install (idempotency failure)")
+	}
+
+	// Exactly one ctx-wire block must be present in the instructions file.
+	data, err := os.ReadFile(instrPath)
+	if err != nil {
+		t.Fatalf("read instructions: %v", err)
+	}
+	count := strings.Count(string(data), ctxWireBlockStart)
+	if count != 1 {
+		t.Fatalf("instructions file contains %d ctx-wire block(s), want exactly 1:\n%s", count, data)
+	}
+
+	// The hook file must still contain exactly the managed JSON.
+	hookData, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatalf("read hook: %v", err)
+	}
+	if string(hookData) != copilotHookJSON {
+		t.Fatalf("hook file changed on second install:\ngot:  %q\nwant: %q", hookData, copilotHookJSON)
+	}
+}

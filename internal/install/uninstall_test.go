@@ -142,6 +142,67 @@ func TestUninstallGeminiHookSkipsCustomWrapper(t *testing.T) {
 	assertNoCtxWireAndKeeps(t, path, "echo custom")
 }
 
+// TestUninstallCopilotMixedHookPreservesForeign verifies the surgical removal
+// branch of UninstallCopilotHook: when the hook file contains ctx-wire's
+// managed entry alongside a foreign entry (different command), only the
+// ctx-wire entry is removed and the foreign entry survives byte-for-byte.
+func TestUninstallCopilotMixedHookPreservesForeign(t *testing.T) {
+	dir := t.TempDir()
+	hookPath := CopilotHookPath(dir)
+
+	// First install ctx-wire's managed hook.
+	if _, err := InstallCopilot(CopilotInstructionsPath(dir), hookPath); err != nil {
+		t.Fatalf("InstallCopilot: %v", err)
+	}
+
+	// Now inject a foreign entry into the same PreToolUse array by rewriting
+	// the hook file with both entries present. We build this from the known
+	// managed JSON shape so the test is not fragile to whitespace changes.
+	mixedJSON := `{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "ctx-wire hook copilot",
+        "cwd": ".",
+        "timeout": 5
+      },
+      {
+        "type": "command",
+        "command": "my-other-tool",
+        "cwd": ".",
+        "timeout": 10
+      }
+    ]
+  }
+}
+`
+	writeFile(t, hookPath, mixedJSON)
+
+	changed, err := UninstallCopilotHook(hookPath)
+	if err != nil {
+		t.Fatalf("UninstallCopilotHook: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true: ctx-wire entry was present and should have been removed")
+	}
+
+	// ctx-wire entry must be gone.
+	data, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatalf("read hook after uninstall: %v", err)
+	}
+	got := string(data)
+	if strings.Contains(got, "ctx-wire hook copilot") {
+		t.Fatalf("ctx-wire entry survived uninstall:\n%s", got)
+	}
+
+	// Foreign entry must survive.
+	if !strings.Contains(got, "my-other-tool") {
+		t.Fatalf("foreign entry was deleted (uninstall was not surgical):\n%s", got)
+	}
+}
+
 func TestUninstallClaudeRemovesOnlyCtxWireInnerHook(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	writeFile(t, path, `{
