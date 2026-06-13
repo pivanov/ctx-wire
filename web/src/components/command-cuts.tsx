@@ -208,9 +208,9 @@ const SNIPPETS: Record<string, TSnippet> = {
 // Filters we actually shipped, framed as a changelog (not the rotation above).
 // Only released fixes belong here, never roadmap.
 const SHIPPED = [
+  { version: "0.1.25", cmd: "pytest" },
   { version: "0.1.21", cmd: "git blame" },
   { version: "0.1.20", cmd: "jq" },
-  { version: "0.1.20", cmd: "bun" },
 ];
 
 // Shown when telemetry has no matching programs yet (idle tab / first paint).
