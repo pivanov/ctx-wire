@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // ansiRE matches ANSI CSI escape sequences, including DEC private modes such as
@@ -418,7 +419,7 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 	// 5. truncate_lines_at
 	if at := scaledCap(f.truncateLinesAt, opts.TruncateLevel); at != nil {
 		for i, l := range lines {
-			if len([]rune(l)) > *at {
+			if utf8.RuneCountInString(l) > *at {
 				truncated = true
 			}
 			lines[i] = truncate(l, *at)
@@ -629,10 +630,10 @@ func splitLines(s string) []string {
 // truncate counts runes, appends "..." past maxLen, and returns "..." if
 // maxLen < 3.
 func truncate(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
+	runes := []rune(s)
 	if maxLen < 3 {
 		return "..."
 	}
