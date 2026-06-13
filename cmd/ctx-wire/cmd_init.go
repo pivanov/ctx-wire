@@ -18,6 +18,7 @@ import (
 // cmdInit installs ctx-wire locally or into an agent's configuration.
 func cmdInit(args []string) int {
 	if isHelpArg(args) {
+		agentList := strings.Join(install.AgentNames(), " · ")
 		printHelp(os.Stdout, helpDoc{
 			usage:   []string{"ctx-wire init <agent> [--no-mcp]"},
 			summary: "Wire an agent: install the binary into ~/.local/bin and configure that agent's hooks/rules.",
@@ -31,7 +32,7 @@ func cmdInit(args []string) int {
 				"ctx-wire init codex     # wire Codex",
 			},
 			notes: []string{
-				"a target agent is required:\n    claude · codex · cursor · gemini · copilot · cline · windsurf · kilocode · antigravity · opencode · pi · hermes · vscode · visualstudio",
+				"a target agent is required:\n    " + agentList,
 				"hook/plugin-capable agents (claude, codex, cursor, gemini, copilot, opencode, pi, hermes) are covered by their hook/plugin, so `init` no longer installs PATH shims for them. Steering-only agents (cline, windsurf, kilocode, antigravity, vscode, visualstudio) still get shims. Manage shims explicitly with `ctx-wire shims install|uninstall|status`.",
 			},
 		})
@@ -90,7 +91,7 @@ func cmdInit(args []string) int {
 	canonical := canonicalInitAgent(agent)
 	path, changed, ok, err := install.InstallAgent(canonical, os.Getwd)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "ctx-wire init: unsupported agent %q (supported: claude, cursor, codex, gemini, cline, windsurf, kilocode, antigravity, opencode, pi, hermes, copilot, vscode, visualstudio)\n", agent)
+		fmt.Fprintf(os.Stderr, "ctx-wire init: unsupported agent %q (supported: %s)\n", agent, strings.Join(install.AgentNames(), ", "))
 		return 2
 	}
 	if err != nil {
@@ -254,7 +255,7 @@ func initMissingTarget() int {
 	fmt.Fprintf(os.Stderr, "%s `ctx-wire init` needs an agent.\n\n", theme.Warn.Render("missing agent"))
 	fmt.Fprintln(os.Stderr, "Wire an agent (installs the binary and that agent's hooks; steering-only agents also get PATH shims):")
 	fmt.Fprintf(os.Stderr, "  %s\n", theme.Command.Render("ctx-wire init claude"))
-	fmt.Fprintln(os.Stderr, theme.Dim.Render("  claude · codex · cursor · gemini · copilot · cline · windsurf · kilocode · antigravity · opencode · pi · hermes · vscode · visualstudio"))
+	fmt.Fprintln(os.Stderr, theme.Dim.Render("  "+strings.Join(install.AgentNames(), " · ")))
 	return 2
 }
 

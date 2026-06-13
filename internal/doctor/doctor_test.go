@@ -93,6 +93,47 @@ func TestHookMissingIsWarnNotFail(t *testing.T) {
 	}
 }
 
+// TestHookOrPluginCoverageExcludesMCP guards that only hook/plugin wiring counts
+// as shell-command coverage. An MCP server entry (.vscode/mcp.json) is a separate
+// protocol, not a command rewrite, so an MCP-only setup must not make doctor
+// report installed PATH shims as redundant. Regression for the WiringMCP probes
+// added to AgentProbes when the MCP section moved onto the registry.
+func TestHookOrPluginCoverageExcludesMCP(t *testing.T) {
+	_, wd := isolate(t)
+	opts := Options{Workdir: wd}
+
+	if hookOrPluginConfigured(opts) {
+		t.Fatal("clean env must report no hook/plugin coverage")
+	}
+
+	// A ctx-wire MCP server in the workspace must NOT count as command coverage.
+	mcpPath := install.VSCodeMCPPath(wd)
+	if err := os.MkdirAll(filepath.Dir(mcpPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mcpPath, []byte(`{"servers":{"ctx-wire":{"command":"ctx-wire"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if hookOrPluginConfigured(opts) {
+		t.Error("MCP-only config must not count as command coverage (would wrongly flag PATH shims as redundant)")
+	}
+
+	// A real hook (cursor) DOES count, so the predicate still detects coverage.
+	cursorPath, err := install.CursorHooksPath()
+	if err != nil {
+		t.Fatalf("CursorHooksPath: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(cursorPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cursorPath, []byte(`{"hooks":{"preToolUse":[{"command":"ctx-wire hook cursor"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !hookOrPluginConfigured(opts) {
+		t.Error("a configured hook must count as command coverage")
+	}
+}
+
 func TestShimsDetected(t *testing.T) {
 	_, wd := isolate(t)
 	dest, err := install.SelfInstallPath()

@@ -147,15 +147,30 @@ func TestEveryNonBespokeAgentHasInstall(t *testing.T) {
 	}
 }
 
+// TestAgentNamesCoversRegistry pins that the help/error agent list (AgentNames,
+// used by `init --help` and the "unsupported agent" message) stays complete: it
+// must list every registry agent, in registry order, so adding an agent updates
+// the user-facing lists automatically.
+func TestAgentNamesCoversRegistry(t *testing.T) {
+	names := AgentNames()
+	if len(names) != len(agentRegistry) {
+		t.Fatalf("AgentNames len = %d, want %d (registry size)", len(names), len(agentRegistry))
+	}
+	for i, a := range agentRegistry {
+		if names[i] != a.Name {
+			t.Errorf("AgentNames[%d] = %q, want %q", i, names[i], a.Name)
+		}
+	}
+}
+
 // TestEveryAgentIsDiagnosed guards that every agent is visible to `ctx-wire
-// doctor`: it either carries a hooks-section probe (ProbePaths) or is one of the
-// MCP agents diagnosed in doctor's MCP section instead. A new agent with neither
+// doctor`: it carries a probe (ProbePaths), rendered in the hooks section
+// (Hook/Rule/Plugin) or the MCP section (WiringMCP). A new agent without one
 // would be installable but invisible to doctor.
 func TestEveryAgentIsDiagnosed(t *testing.T) {
-	mcpDiagnosed := map[string]bool{"vscode": true, "visualstudio": true}
 	for _, a := range agentRegistry {
-		if a.ProbePaths == nil && !mcpDiagnosed[a.Name] {
-			t.Errorf("agent %q has no doctor probe and is not an MCP-section agent; doctor would never report it", a.Name)
+		if a.ProbePaths == nil {
+			t.Errorf("agent %q has no doctor probe; doctor would never report it", a.Name)
 		}
 	}
 }

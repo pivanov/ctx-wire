@@ -19,6 +19,9 @@ const (
 	// WiringPlugin is a host plugin file; its presence does not prove the host
 	// loaded it, so doctor reports it with that caveat.
 	WiringPlugin
+	// WiringMCP is an MCP server entry. doctor reports these in its MCP section,
+	// not its hooks section.
+	WiringMCP
 )
 
 // AgentProbe is doctor's read-only view of one agent's wiring detection: the
@@ -26,7 +29,10 @@ const (
 // classified by Kind. It is sourced from the same agentRegistry that drives
 // install and uninstall (see AgentProbes), so a new agent is described once.
 type AgentProbe struct {
-	Name   string
+	Name string
+	// Label is doctor's display name for this check. Usually Name; MCP agents
+	// override it to note their config scope ("vscode (workspace)").
+	Label  string
 	Kind   WiringKind
 	Needle string
 	// Paths returns the files to probe for Needle. Empty means the path is
@@ -65,6 +71,9 @@ type agentDescriptor struct {
 	ProbeKind   WiringKind
 	ProbeNeedle string
 	ProbePaths  func(workdir string) []string
+	// ProbeLabel overrides the doctor display label (default: Name). Used by MCP
+	// agents to note their config scope, e.g. "vscode (workspace)".
+	ProbeLabel string
 }
 
 // agentRegistry is the single source of truth for per-agent install, uninstall,
@@ -326,7 +335,10 @@ var agentRegistry = []agentDescriptor{
 			}
 			return nil
 		},
-		// No hooks-section probe: VS Code is diagnosed in doctor's MCP section.
+		ProbeKind:   WiringMCP,
+		ProbeNeedle: "ctx-wire",
+		ProbeLabel:  "vscode (workspace)",
+		ProbePaths:  workdirProbePath(VSCodeMCPPath),
 	},
 
 	{
@@ -353,7 +365,10 @@ var agentRegistry = []agentDescriptor{
 			}
 			return nil
 		},
-		// No hooks-section probe: Visual Studio is diagnosed in doctor's MCP section.
+		ProbeKind:   WiringMCP,
+		ProbeNeedle: "ctx-wire",
+		ProbeLabel:  "visualstudio (user)",
+		ProbePaths:  singleProbePath(VisualStudioMCPPath),
 	},
 
 	{
@@ -497,14 +512,30 @@ func AgentProbes() []AgentProbe {
 		if a.ProbePaths == nil {
 			continue
 		}
+		label := a.ProbeLabel
+		if label == "" {
+			label = a.Name
+		}
 		probes = append(probes, AgentProbe{
 			Name:   a.Name,
+			Label:  label,
 			Kind:   a.ProbeKind,
 			Needle: a.ProbeNeedle,
 			Paths:  a.ProbePaths,
 		})
 	}
 	return probes
+}
+
+// AgentNames returns every agent's canonical name in registry order. The command
+// layer uses it for the init help text and the "unsupported agent" message, so
+// those lists stay in sync with the table instead of being hand-maintained.
+func AgentNames() []string {
+	names := make([]string, len(agentRegistry))
+	for i, a := range agentRegistry {
+		names[i] = a.Name
+	}
+	return names
 }
 
 // registryByName looks up a descriptor by agent name. Returns (desc, true) when

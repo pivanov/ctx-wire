@@ -278,16 +278,18 @@ func shimPathChecks(dir string, installed, active, total int, hookCovered bool) 
 	return nil
 }
 
-// hookOrPluginConfigured reports whether any hook- or plugin-capable agent
-// integration is actually present. doctor uses it to tell that installed PATH
+// hookOrPluginConfigured reports whether any agent integration that actually
+// rewrites shell commands is present. doctor uses it to tell that installed PATH
 // shims are redundant coverage (hence pure shell-startup overhead) rather than a
 // steering-only agent's sole path. It consumes the same install.AgentProbes as
-// hooksSection, so the per-agent marker and path stay in one place. Steering-rule
-// agents (cline/windsurf/kilocode/antigravity) are excluded: a rules file is not
-// command coverage, so it does not make installed shims redundant.
+// hooksSection, but counts ONLY hook and plugin wiring: a steering-rule file
+// (cline/windsurf/kilocode/antigravity) and an MCP server entry
+// (vscode/visualstudio) do not rewrite shell commands, so neither makes installed
+// shims redundant. Including MCP here would wrongly flag a project's shims as
+// pure overhead just because it has a .vscode/mcp.json.
 func hookOrPluginConfigured(opts Options) bool {
 	for _, p := range install.AgentProbes() {
-		if p.Kind == install.WiringRule {
+		if p.Kind != install.WiringHook && p.Kind != install.WiringPlugin {
 			continue
 		}
 		for _, path := range p.Paths(opts.Workdir) {
@@ -331,6 +333,9 @@ func missingSystemPathDirs() []string {
 func hooksSection(opts Options) Section {
 	sec := Section{Title: "hooks"}
 	for _, p := range install.AgentProbes() {
+		if p.Kind == install.WiringMCP {
+			continue // MCP agents are diagnosed in mcpSection
+		}
 		switch p.Name {
 		case "claude":
 			sec.Checks = append(sec.Checks, claudeHookChecks(p, opts)...)
@@ -496,14 +501,21 @@ func ruleCheck(agent, path, needle string) Check {
 	}
 }
 
+// mcpSection diagnoses the MCP-server agents (vscode, visualstudio) from the
+// registry's WiringMCP probes, then appends the Claude mcp-wrap relay checks
+// (a distinct concern: servers relayed through ctx-wire, not an agent's own
+// MCP entry). VS Code's path is workspace-local (.vscode/mcp.json); Visual
+// Studio's is user-global (~/.mcp.json), which is why each probe carries its
+// own scope label.
 func mcpSection(opts Options) Section {
 	sec := Section{Title: "mcp"}
-	// VS Code: workspace .vscode/mcp.json.
-	vscode := install.VSCodeMCPPath(opts.Workdir)
-	sec.Checks = append(sec.Checks, mcpCheck("vscode (workspace)", vscode))
-	// Visual Studio: ~/.mcp.json.
-	if vs, err := install.VisualStudioMCPPath(); err == nil {
-		sec.Checks = append(sec.Checks, mcpCheck("visualstudio (user)", vs))
+	for _, p := range install.AgentProbes() {
+		if p.Kind != install.WiringMCP {
+			continue
+		}
+		for _, path := range p.Paths(opts.Workdir) {
+			sec.Checks = append(sec.Checks, mcpCheck(p.Label, path))
+		}
 	}
 	sec.Checks = append(sec.Checks, claudeMCPWrapChecks()...)
 	return sec
