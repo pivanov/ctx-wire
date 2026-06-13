@@ -1,8 +1,8 @@
 # ctx-wire troubleshooting & limitations
 
 Common problems and the things ctx-wire deliberately does not do. For the command
-list see [README.md](README.md#commands) and [COMMANDS.md](COMMANDS.md); for
-config and environment variables see [CONFIGURATION.md](CONFIGURATION.md).
+list see [COMMANDS.md](COMMANDS.md); for config and environment variables see
+[CONFIGURATION.md](CONFIGURATION.md).
 
 ## Troubleshooting
 

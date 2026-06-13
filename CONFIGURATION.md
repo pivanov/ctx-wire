@@ -64,6 +64,28 @@ auto = true
 # Minimum hours between background checks (default 2, i.e. ~12x/day). Set
 # CTX_WIRE_NO_AUTOUPDATE=1 to disable for a single run or in CI.
 interval_hours = 2
+
+[retention]
+# Recent-outputs store behind `ctx-wire inspect` (a raw-vs-filtered audit
+# trail). A deliberate exception to "do not persist successful output", so it is
+# OFF unless enabled here. CTX_WIRE_RETENTION=0 force-disables it for one run.
+enabled = false
+# Also keep the scrubbed raw (pre-filter) body, which `inspect` needs for a full
+# raw-vs-filtered audit. The larger persistence cost, off by default;
+# CTX_WIRE_RETENTION_RAW=0 drops just this tier for one run.
+raw_bodies = false
+# Cap on how many recent entries are kept (0 uses the built-in default).
+max_entries = 0
+
+[dedup]
+# When a read-only command re-runs with byte-identical output, emit a short
+# recoverable reference instead of the body (the command still runs; only the
+# re-emission is saved). Off by default; enabling it implies the retention store
+# above is recording, so the reference can be recovered via `inspect`.
+enabled = false
+# How recent the prior run must be to dedup against it (default 60), so a
+# reference is only emitted while the unchanged body is likely still in context.
+recency_minutes = 60
 ```
 
 ## Gain storage
@@ -162,3 +184,7 @@ paths/endpoints for tests.
 `CTX_WIRE_TEE=0` disables full-output spooling. `CTX_WIRE_TEE_DIR` and
 `CTX_WIRE_TEE_FALLBACK_DIR` override the primary and fallback spool
 directories. `ctx-wire doctor` reports which storage locations are writable.
+
+`CTX_WIRE_RETENTION=0` turns off the recent-outputs store (the `[retention]`
+store behind `ctx-wire inspect`) for a single run; `CTX_WIRE_RETENTION_RAW=0`
+drops just the raw (pre-filter) tier, an escape hatch for a sensitive command.

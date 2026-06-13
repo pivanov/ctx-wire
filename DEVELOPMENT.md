@@ -65,7 +65,7 @@ VERSION=0.1.0-rc1 just pack
 
 This writes `dist/ctx-wire_<version>_<os>_<arch>.tar.gz` plus a `.sha256`
 checksum. The archive contains the `ctx-wire` binary with executable
-permissions, `README.md`, `COMMANDS.md`, `CONFIGURATION.md`,
+permissions, `README.md`, `COMMANDS.md`, `CONFIGURATION.md`, `FILTERS.md`,
 `TROUBLESHOOTING.md`, `DEVELOPMENT.md`, and `INSTALL.txt`.
 
 For a downloaded macOS archive, remove the quarantine attribute before the first

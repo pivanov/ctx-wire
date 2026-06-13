@@ -51,6 +51,19 @@ A filter only runs when its command pattern matches.
 `match_command` is a Go regexp (RE2). Anchor it (`^go\s+(test|build|vet)\b`) so a
 broad word does not match unrelated commands.
 
+Two template tokens expand inside `match_command` so you do not hand-roll (and
+drift on) the prefixes a tool can be launched through:
+
+- `{{runner}}` , JS package runners: `npx`, `bunx`, `pnpm|yarn dlx|exec`, `bun x`.
+  Write `^(?:{{runner}})?biome\b` to match both `biome` and `npx biome`.
+- `{{py-runner}}` , Python tool runners: `uv|poetry|pipenv|pdm|hatch|rye run` and
+  `python -m`. Write `^(?:{{py-runner}})?pytest\b` to match `pytest`,
+  `poetry run pytest`, `python -m pytest`, and so on.
+
+Each token is the bare alternation (no group, no trailing `?`), so wrap it as
+your pattern needs. They are defined once in the engine, so every filter using a
+token inherits the full, current set.
+
 ### Selection
 
 When several filters match one command, ctx-wire does **not** pick the first or

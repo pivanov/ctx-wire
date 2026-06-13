@@ -59,7 +59,7 @@ func usageDoctor(out *os.File) {
 		flags: [][2]string{
 			{"--all", "also show optional [off] checks (hidden by default)"},
 			{"--recent N", "also show the N most recent recorded commands"},
-			{"--verbose", "show extra detail for each check"},
+			{"--verbose", "show recent scrubbed commands (implies --recent 5)"},
 		},
 		notes: []string{
 			"Read-only. A good first stop when something is not filtering as expected.",
