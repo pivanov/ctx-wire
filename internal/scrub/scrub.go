@@ -99,13 +99,45 @@ func mightContainSecret(s string) bool {
 			return true
 		}
 	}
-	lower := strings.ToLower(s)
-	for _, kw := range keywordRoots {
-		if strings.Contains(lower, kw) {
-			return true
+	// keywordRoots are lowercase ASCII. Scan s once, rejecting each byte in O(1)
+	// via keywordStarts (most bytes begin no root), instead of allocating a full
+	// strings.ToLower(s) copy and running one Contains pass per root.
+	for i := 0; i < len(s); i++ {
+		for _, kw := range keywordStarts[s[i]] {
+			if i+len(kw) <= len(s) && hasFoldPrefix(s[i:], kw) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// keywordStarts[b] lists the keywordRoots whose first byte folds to b, for both
+// the lowercase and uppercase forms of that byte. Built once so the prefilter
+// rejects a non-starting byte with a single (usually empty) slice lookup.
+var keywordStarts = func() [256][]string {
+	var t [256][]string
+	for _, kw := range keywordRoots {
+		lo := kw[0] // roots are lowercase
+		t[lo] = append(t[lo], kw)
+		t[lo-('a'-'A')] = append(t[lo-('a'-'A')], kw) // uppercase form
+	}
+	return t
+}()
+
+// hasFoldPrefix reports whether s begins with needle under ASCII-lowercase
+// folding. needle is already lowercase ASCII; caller guarantees len(s) >= len(needle).
+func hasFoldPrefix(s, needle string) bool {
+	for j := 0; j < len(needle); j++ {
+		c := s[j]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if c != needle[j] {
+			return false
+		}
+	}
+	return true
 }
 
 // ScrubArgs redacts secrets from each argv element, returning a new slice.
