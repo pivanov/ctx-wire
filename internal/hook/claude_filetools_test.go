@@ -76,6 +76,9 @@ func TestMapGrepSuggestion(t *testing.T) {
 		{"count mode", `{"pattern":"TODO","output_mode":"count"}`, "rg -c -- 'TODO'", true},
 		{"case insensitive", `{"pattern":"todo","output_mode":"content","-i":true}`, "rg -n -i -- 'todo'", true},
 		{"context flags in content mode", `{"pattern":"x","output_mode":"content","-C":2}`, "rg -n -C 2 -- 'x'", true},
+		{"context long-form key maps same as -C", `{"pattern":"x","output_mode":"content","context":3}`, "rg -n -C 3 -- 'x'", true},
+		// real fixture: Claude Code sent "context" (long form) alongside head_limit=0; head_limit != 0 gates, but 0 is falsy so it maps.
+		{"real fixture context=3 with head_limit=0", `{"pattern":"APISessionTokenID","path":"/repo","output_mode":"content","head_limit":0,"context":3}`, "rg -n -C 3 -- 'APISessionTokenID' '/repo'", true},
 		{"before and after", `{"pattern":"x","output_mode":"content","-B":1,"-A":3}`, "rg -n -B 1 -A 3 -- 'x'", true},
 		{"type filter", `{"pattern":"x","output_mode":"content","type":"go"}`, "rg -n -t go -- 'x'", true},
 		{"glob filter", `{"pattern":"x","glob":"*.tsx"}`, "rg -l -g '*.tsx' -- 'x'", true},
@@ -88,6 +91,7 @@ func TestMapGrepSuggestion(t *testing.T) {
 		{"multiline allows", `{"pattern":"x","multiline":true}`, "", false},
 		{"unknown mode allows", `{"pattern":"x","output_mode":"json"}`, "", false},
 		{"context outside content allows", `{"pattern":"x","-C":2}`, "", false},
+		{"context long-form outside content allows", `{"pattern":"x","context":2}`, "", false},
 		{"negative context allows", `{"pattern":"x","output_mode":"content","-A":-1}`, "", false},
 		{"weird type allows", `{"pattern":"x","output_mode":"content","type":"go; rm -rf /"}`, "", false},
 		{"empty pattern allows", `{"path":"/src"}`, "", false},

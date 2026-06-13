@@ -147,18 +147,19 @@ func mapReadSuggestion(raw json.RawMessage, lstat func(string) (os.FileInfo, err
 }
 
 type claudeGrepInput struct {
-	Pattern    string `json:"pattern"`
-	Path       string `json:"path"`
-	Glob       string `json:"glob"`
-	Type       string `json:"type"`
-	OutputMode string `json:"output_mode"`
-	CaseIns    bool   `json:"-i"`
-	LineNums   bool   `json:"-n"`
-	Before     int    `json:"-B"`
-	After      int    `json:"-A"`
-	Context    int    `json:"-C"`
-	HeadLimit  int    `json:"head_limit"`
-	Multiline  bool   `json:"multiline"`
+	Pattern     string `json:"pattern"`
+	Path        string `json:"path"`
+	Glob        string `json:"glob"`
+	Type        string `json:"type"`
+	OutputMode  string `json:"output_mode"`
+	CaseIns     bool   `json:"-i"`
+	LineNums    bool   `json:"-n"`
+	Before      int    `json:"-B"`
+	After       int    `json:"-A"`
+	Context     int    `json:"-C"`
+	ContextLong int    `json:"context"` // newer Claude Code emits "context" instead of "-C"
+	HeadLimit   int    `json:"head_limit"`
+	Multiline   bool   `json:"multiline"`
 }
 
 // rgTypeRe matches the identifiers rg -t accepts; anything else fails open
@@ -192,11 +193,15 @@ func mapGrepSuggestion(raw json.RawMessage) (string, bool) {
 	default:
 		return "", false
 	}
-	hasContext := in.Before != 0 || in.After != 0 || in.Context != 0
+	ctx := in.Context
+	if in.ContextLong != 0 {
+		ctx = in.ContextLong
+	}
+	hasContext := in.Before != 0 || in.After != 0 || ctx != 0
 	if hasContext && mode != "content" {
 		return "", false // context flags only have defined meaning for content
 	}
-	if in.Before < 0 || in.After < 0 || in.Context < 0 {
+	if in.Before < 0 || in.After < 0 || ctx < 0 {
 		return "", false
 	}
 	parts := []string{"rg", modeFlag}
@@ -209,8 +214,8 @@ func mapGrepSuggestion(raw json.RawMessage) (string, bool) {
 	if in.After > 0 {
 		parts = append(parts, "-A", strconv.Itoa(in.After))
 	}
-	if in.Context > 0 {
-		parts = append(parts, "-C", strconv.Itoa(in.Context))
+	if ctx > 0 {
+		parts = append(parts, "-C", strconv.Itoa(ctx))
 	}
 	if in.Type != "" {
 		if !rgTypeRe.MatchString(in.Type) {
