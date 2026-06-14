@@ -26,6 +26,7 @@ import (
 	"ctx-wire/internal/recent"
 	"ctx-wire/internal/scrub"
 	"ctx-wire/internal/shim"
+	"ctx-wire/internal/stripstack"
 	"ctx-wire/internal/tee"
 	"ctx-wire/internal/telemetry"
 )
@@ -194,9 +195,11 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 			filterTruncated = jsonMode == jsonModeCapped
 		} else {
 			filterTruncated = applied.Truncated
-			stdoutText = withTrailingNewline(scrub.Scrub(applied.Output))
+			stdoutText = withTrailingNewline(scrub.Scrub(maybeStripStack(applied.Output, &filterTruncated)))
 			if !f.FilterStderr {
-				stderrText = scrub.Scrub(errOut)
+				// Most language runtimes print stack traces to stderr, so strip it
+				// too when the filter did not already merge it into stdout.
+				stderrText = scrub.Scrub(maybeStripStack(errOut, &filterTruncated))
 			}
 			// Safety net: a failed command whose filter stripped every line would
 			// otherwise reach the agent as empty output , a failure with no visible
@@ -437,6 +440,20 @@ func applySafe(f *filter.CompiledFilter, text string, opts filter.ApplyOptions) 
 		}
 	}()
 	return filter.ApplyWithMetaOptions(f, text, opts)
+}
+
+// maybeStripStack collapses library stack frames in s when the opt-in
+// [output] strip_stacktraces is enabled. When it collapses anything it sets
+// *truncated so the raw (scrubbed) trace stays spooled and the recovery hint
+// fires. A no-op when disabled or when s has no recognizable stack trace.
+func maybeStripStack(s string, truncated *bool) string {
+	if stripstack.Enabled() {
+		if stripped, did := stripstack.Strip(s); did {
+			*truncated = true
+			return stripped
+		}
+	}
+	return s
 }
 
 // withTrailingNewline ensures non-empty filtered output ends with exactly one newline.

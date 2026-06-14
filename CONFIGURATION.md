@@ -50,6 +50,17 @@ ultra_compact = true
 # never a generated summary. "none" disables the ceiling entirely.
 truncate = "default"
 
+# Collapse runs of third-party / language-runtime stack frames (node_modules,
+# site-packages, JDK runtime packages, ...) into a "... (+N library frames
+# hidden)" marker, keeping the exception header, every application frame, and
+# "caused by" links. Off by default: a stack trace is often the answer, so only
+# frames whose source path is provably a library are hidden, and the full raw
+# trace is still spooled to disk. Recognizes Python, Node.js, and Java/JVM
+# traces. Applies to a matched command's filtered stdout and stderr; commands
+# ctx-wire streams or bypasses (dev servers, interactive tools) are untouched.
+# Override per invocation with CTX_WIRE_STRIP_STACKTRACES=1 (or =0).
+strip_stacktraces = false
+
 # Optional token budget framing for `ctx-wire gain --quota`.
 # 0 means no budget; ctx-wire will show context-window multiples instead.
 monthly_token_budget = 2000000

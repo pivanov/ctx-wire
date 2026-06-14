@@ -17,6 +17,7 @@ import (
 	"ctx-wire/internal/runner"
 	"ctx-wire/internal/selfupdate"
 	"ctx-wire/internal/shim"
+	"ctx-wire/internal/stripstack"
 	"ctx-wire/internal/telemetry"
 	"ctx-wire/internal/ui"
 )
@@ -57,6 +58,7 @@ func main() {
 		commandpolicy.SetExcludedCommands(cfg.Hooks.ExcludeCommands)
 		commandpolicy.SetTransparentPrefixes(cfg.Hooks.TransparentPrefixes)
 		filter.SetUltraCompact(cfg.Output.UltraCompact)
+		stripstack.SetEnabled(cfg.Output.StripStacktraces)
 		if cfg.Output.Truncate != "" {
 			if lvl, ok := filter.ParseTruncateLevel(cfg.Output.Truncate); ok {
 				filter.SetConfiguredTruncateLevel(lvl)

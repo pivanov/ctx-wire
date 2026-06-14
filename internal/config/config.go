@@ -110,6 +110,15 @@ type Output struct {
 	// invocation.
 	Truncate string `toml:"truncate"`
 
+	// StripStacktraces, when true, collapses runs of third-party / language-runtime
+	// stack frames (node_modules, site-packages, JDK runtime packages, ...) into a
+	// "... (+N library frames hidden)" marker, keeping the exception header, every
+	// application frame, and "caused by" links. Opt-in (off by default): a stack
+	// trace is often the answer, so this only hides frames whose source path is
+	// provably a library. The full raw trace is still spooled to disk.
+	// CTX_WIRE_STRIP_STACKTRACES overrides this per invocation.
+	StripStacktraces bool `toml:"strip_stacktraces"`
+
 	// MonthlyTokenBudget frames `gain --quota`: the tokens you aim to save (or
 	// are allotted) per month. 0 leaves quota in its budget-free framing, where
 	// savings are shown as context-window multiples. Deliberately vendor-neutral

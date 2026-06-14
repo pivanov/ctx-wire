@@ -125,6 +125,93 @@ func TestRunBufferedDoesNotUseSuccessMatchOnFailure(t *testing.T) {
 	}
 }
 
+// pythonTrace has three consecutive site-packages frames (a collapsible run)
+// between the app frame and the error message.
+const pythonTrace = "Traceback (most recent call last):\n" +
+	"  File \"/app/main.py\", line 10, in <module>\n" +
+	"    run()\n" +
+	"  File \"/usr/lib/python3.11/site-packages/requests/api.py\", line 59, in get\n" +
+	"    return request()\n" +
+	"  File \"/usr/lib/python3.11/site-packages/requests/sessions.py\", line 587, in request\n" +
+	"    resp = self.send(prep)\n" +
+	"  File \"/usr/lib/python3.11/site-packages/urllib3/connectionpool.py\", line 790, in urlopen\n" +
+	"    raise MaxRetryError()\n" +
+	"ConnectionError: boom\n"
+
+func writeTrace(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "trace.txt")
+	if err := os.WriteFile(p, []byte(pythonTrace), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestRunBufferedStripsStacktraceOnStdout(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	t.Setenv("CTX_WIRE_STRIP_STACKTRACES", "1")
+	reg := mustRegistry(t)
+	p := writeTrace(t)
+	out, _, hint, _, err := runBuffered(context.Background(), reg, "cat",
+		[]string{p}, "go test ./...", "go test ./...", tee.NewSpool("go"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if !strings.Contains(out, "library frames hidden") {
+		t.Fatalf("stdout trace not collapsed:\n%s", out)
+	}
+	if strings.Contains(out, "site-packages") {
+		t.Fatalf("library frames leaked on stdout:\n%s", out)
+	}
+	if !strings.Contains(out, "/app/main.py") {
+		t.Fatalf("app frame must be kept:\n%s", out)
+	}
+	if hint == "" {
+		t.Errorf("expected a spool/recovery hint after a collapse")
+	}
+}
+
+func TestRunBufferedStripsStacktraceOnUnmergedStderr(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	t.Setenv("CTX_WIRE_STRIP_STACKTRACES", "1")
+	reg := mustRegistry(t)
+	p := writeTrace(t)
+	// The go filter does not set filter_stderr, so stderr is stripped on its own
+	// path (the case that regressed before stripstack was applied to stderr too).
+	_, errOut, _, _, err := runBuffered(context.Background(), reg, "sh",
+		[]string{"-c", "cat '" + p + "' >&2"}, "go test ./...", "go test ./...", tee.NewSpool("go"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if !strings.Contains(errOut, "library frames hidden") {
+		t.Fatalf("stderr trace not collapsed:\n%s", errOut)
+	}
+	if strings.Contains(errOut, "site-packages") {
+		t.Fatalf("library frames leaked on stderr:\n%s", errOut)
+	}
+	if !strings.Contains(errOut, "/app/main.py") {
+		t.Fatalf("app frame must be kept on stderr:\n%s", errOut)
+	}
+}
+
+func TestRunBufferedStacktraceStrippingOffByDefault(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	// CTX_WIRE_STRIP_STACKTRACES unset -> opt-in feature stays off.
+	reg := mustRegistry(t)
+	p := writeTrace(t)
+	out, _, _, _, err := runBuffered(context.Background(), reg, "cat",
+		[]string{p}, "go test ./...", "go test ./...", tee.NewSpool("go"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if strings.Contains(out, "library frames hidden") {
+		t.Fatalf("must not strip when disabled:\n%s", out)
+	}
+	if !strings.Contains(out, "site-packages") {
+		t.Fatalf("frames should be intact when disabled:\n%s", out)
+	}
+}
+
 func TestRunBufferedFailureTailFallbackOnEmptiedFilter(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
