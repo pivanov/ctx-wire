@@ -37,9 +37,11 @@ just            # list recipes
 | `just test` | Run `go test ./...` |
 | `just race` | Run `go test -race ./...` |
 | `just vet` | Run `go vet ./...` |
+| `just lint` | Run `staticcheck` static analysis |
 | `just verify` | Run `ctx-wire verify` through `go run` |
 | `just smoke` | Run `scripts/smoke.sh` |
-| `just check` | Run format check, vet, tests, race tests, and verify |
+| `just vuln` | Scan for known vulnerabilities with `govulncheck` (run in CI) |
+| `just check` | Run format check, vet, lint, tests, race tests, and verify |
 | `just rc` | Run `just check` plus the smoke suite |
 | `just clean` | Remove the local build output |
 
