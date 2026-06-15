@@ -1,6 +1,6 @@
 [filters.cargo]
 description = "Compact cargo build/test/check/clippy output"
-match_command = "^cargo\\s+(build|test|check|clippy)\\b"
+match_command = "^cargo\\s+(?:\\+\\S+\\s+)?(build|test|check|clippy)\\b"
 strip_ansi = true
 # cargo build/check write "Finished ... target(s)" to STDERR (stdout is empty on a
 # clean check). Without this, on_empty fired "cargo: ok" on the empty stdout while
