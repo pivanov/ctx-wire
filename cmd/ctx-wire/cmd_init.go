@@ -104,6 +104,9 @@ func cmdInit(args []string) int {
 	} else {
 		fmt.Printf("%s ctx-wire already configured in %s\n", theme.OK.Render("OK"), theme.Path.Render(path))
 	}
+	if canonical == "visualstudio" {
+		fmt.Printf("   %s\n", theme.Dim.Render("Visual Studio still needs the ctx-wire MCP server and its read_file/run_command tools enabled in its Copilot settings before the agent can use them. For a managed fleet, see deploy/windows/enable-ctx-wire-visualstudio.ps1."))
+	}
 	if code := installSelfAndShims(theme, canonical); code != 0 {
 		return code
 	}
