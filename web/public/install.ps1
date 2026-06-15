@@ -99,6 +99,9 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($SourcePath)) {
         $SourcePath = (Resolve-Path -LiteralPath $SourcePath).Path
         $tag = 'local source'
+        if ([string]::IsNullOrWhiteSpace($ExpectedSha256)) {
+            Say 'Warning: -SourcePath without -ExpectedSha256 is not integrity-checked. For a fleet deployment, pin the hash from the release .sha256.'
+        }
     }
     else {
         if (-not [string]::IsNullOrWhiteSpace($Version)) {
