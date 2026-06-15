@@ -1,0 +1,51 @@
+[filters.prettier]
+description = "Collapse prettier --check success; keep files needing formatting"
+# `(?:[@\s]|$)` matches `prettier`, `prettier --check`, `prettier@3.2.0` but NOT
+# the separate `prettier-eslint` package (RE2 has no lookahead to use instead).
+match_command = "^(?:{{runner}})?prettier(?:[@\\s]|$)"
+strip_ansi = true
+# match_output runs on the whole blob before strip_lines, so a clean run collapses
+# even though the "Checking formatting..." progress line is present. `unless` keeps
+# any real result (files to fix, warnings, errors) from being hidden, and a non-zero
+# exit suppresses the synthetic-success message entirely.
+match_output = [
+  { pattern = "All matched files use Prettier code style!", message = "prettier: ok", unless = "(?i)(\\[warn\\]|\\[error\\]|code style issues|error)" },
+]
+strip_lines_matching = [
+  "^\\s*$",
+  "^Checking formatting\\.\\.\\.\\s*$",
+]
+max_lines = 100
+on_empty = "prettier: ok"
+
+[[tests.prettier]]
+name = "check success collapses"
+input = """
+Checking formatting...
+All matched files use Prettier code style!
+"""
+expected = "prettier: ok"
+
+[[tests.prettier]]
+name = "files needing formatting are preserved (non-zero exit)"
+failed = true
+input = """
+Checking formatting...
+[warn] src/a.js
+[warn] src/b.ts
+[warn] Code style issues found in 2 files. Run Prettier with --write to fix.
+"""
+expected = "[warn] src/a.js\n[warn] src/b.ts\n[warn] Code style issues found in 2 files. Run Prettier with --write to fix."
+
+[[tests.prettier]]
+name = "write-mode file list passes through"
+input = """
+src/a.js 12ms
+src/b.ts 8ms
+"""
+expected = "src/a.js 12ms\nsrc/b.ts 8ms"
+
+[[tests.prettier]]
+name = "npx/bunx prefix still matches"
+input = "All matched files use Prettier code style!"
+expected = "prettier: ok"

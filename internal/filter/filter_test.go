@@ -7,7 +7,7 @@ import (
 
 // builtinFilterCount is the number of built-in filter definitions.
 // Update this when filters are added or removed under filters/.
-const builtinFilterCount = 143
+const builtinFilterCount = 144
 
 // TestBuiltinConformance runs every inline [[tests.*]] case shipped with the
 // built-in filters and asserts each filter's expected output. These inline
@@ -179,6 +179,11 @@ func TestRegistryFind(t *testing.T) {
 		{"cargo +toolchain build matches", "cargo +nightly build", "cargo"},
 		{"cargo +toolchain test matches", "cargo +stable test --workspace", "cargo"},
 		{"cargo run still passes through (avoids eating program stdout)", "cargo run --bin app", ""},
+		{"prettier matches", "prettier --check .", "prettier"},
+		{"bunx prettier matches", "bunx prettier --check src", "prettier"},
+		{"npx prettier matches", "npx prettier --write .", "prettier"},
+		{"prettier@version matches", "prettier@3.2.0 --check .", "prettier"},
+		{"prettier-eslint does NOT match (separate package)", "prettier-eslint --check .", ""},
 		{"git diff matches", "git diff -- README.md", "git-diff"},
 		{"git -C diff matches", "git -C /tmp/repo diff -- README.md", "git-diff"},
 		{"git show matches", "git show HEAD", "git-diff"},
