@@ -1,0 +1,57 @@
+[filters.prisma]
+# Scoped to `generate` only (migrate/db/studio carry real state, stay passthrough).
+# SUBTRACTIVE, not collapsing: strip the env/schema/tips banner and keep everything
+# that matters , the "Generated ..." result line(s), warnings, and errors. An earlier
+# collapse-to-"prisma: generated" was rejected in review because prisma emits `warn`
+# lines on a ZERO exit (unapplied migration, missing env var) that the agent must see.
+description = "Strip prisma generate banner/tips; keep result, warnings, and errors"
+match_command = "^(?:{{runner}})?prisma\\s+generate\\b"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Environment variables loaded from ",
+  "^Prisma schema loaded from ",
+  "^Start by importing your Prisma Client",
+  "^Tip: ",
+]
+max_lines = 80
+on_empty = "prisma: ok"
+
+[[tests.prisma]]
+name = "generate success: banner stripped, result kept"
+input = """
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 89ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+Tip: Want real-time updates to your database? https://pris.ly/tip-0-pulse
+"""
+expected = "✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 89ms"
+
+[[tests.prisma]]
+name = "warning on zero exit is kept (the corruption a reviewer caught)"
+input = """
+warn There is 1 unapplied migration. To apply it run: prisma migrate dev
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 89ms
+"""
+expected = "warn There is 1 unapplied migration. To apply it run: prisma migrate dev\n✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 89ms"
+
+[[tests.prisma]]
+name = "multiple generators both kept"
+input = """
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 89ms
+✔ Generated DBML for your schema in ./schema.dbml in 12ms
+"""
+expected = "✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 89ms\n✔ Generated DBML for your schema in ./schema.dbml in 12ms"
+
+[[tests.prisma]]
+name = "generate error preserved (non-zero exit)"
+failed = true
+input = """
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Error: Schema parsing error - Argument "provider" is missing.
+"""
+expected = "Error: Schema parsing error - Argument \"provider\" is missing."

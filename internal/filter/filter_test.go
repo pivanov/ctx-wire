@@ -7,7 +7,7 @@ import (
 
 // builtinFilterCount is the number of built-in filter definitions.
 // Update this when filters are added or removed under filters/.
-const builtinFilterCount = 144
+const builtinFilterCount = 145
 
 // TestBuiltinConformance runs every inline [[tests.*]] case shipped with the
 // built-in filters and asserts each filter's expected output. These inline
@@ -184,6 +184,9 @@ func TestRegistryFind(t *testing.T) {
 		{"npx prettier matches", "npx prettier --write .", "prettier"},
 		{"prettier@version matches", "prettier@3.2.0 --check .", "prettier"},
 		{"prettier-eslint does NOT match (separate package)", "prettier-eslint --check .", ""},
+		{"prisma generate matches", "prisma generate", "prisma"},
+		{"bunx prisma generate matches", "bunx prisma generate", "prisma"},
+		{"prisma migrate stays passthrough (scoped to generate)", "prisma migrate dev", ""},
 		{"git diff matches", "git diff -- README.md", "git-diff"},
 		{"git -C diff matches", "git -C /tmp/repo diff -- README.md", "git-diff"},
 		{"git show matches", "git show HEAD", "git-diff"},
