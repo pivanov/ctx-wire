@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!--
+  Source template for web/public/og.png (the 1200x630 social-share card).
+  This is the asset the original was lost for (it was rendered inline off an old
+  hero design and never committed). Edit the counts/copy here, then regenerate.
+
+  REGEN (any headless screenshot tool, exact 1200x630):
+    - open this file at a 1200x630 viewport, device-scale 1, wait for fonts
+    - screenshot the full viewport -> web/public/og.png
+  Counts to keep in sync with the binary on each release: filters (currently 145)
+  and the soft test count ("370+"). See memory: web-design-direction.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --green: #8eea7a; --cyan: #7fdcea; --ink: #05080a;
+      --head: #f4f7f4; --label: #9aa6a0; --line: rgba(142, 234, 122, 0.16);
+    }
+    html, body { width: 1200px; height: 630px; }
+    body {
+      background: radial-gradient(125% 145% at 16% -10%, #0e160f 0%, #070c0a 55%, #05080a 100%);
+      color: var(--head); font-family: 'JetBrains Mono', monospace;
+      position: relative; overflow: hidden;
+    }
+    /* faint code-rain on the right third */
+    .rain {
+      position: absolute; inset: 0 0 0 54%;
+      font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.62;
+      color: rgba(142, 234, 122, 0.06); white-space: pre; padding: 36px 44px;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 34%, #000 86%, transparent 100%);
+      user-select: none;
+    }
+    .wrap { position: relative; z-index: 2; height: 100%; padding: 58px 66px; display: flex; flex-direction: column; }
+    .top { display: flex; align-items: center; gap: 19px; }
+    .logo { display: flex; align-items: center; gap: 14px; }
+    .glyph {
+      width: 44px; height: 44px; border-radius: 12px; background: var(--green);
+      display: grid; place-items: center; color: var(--ink);
+      font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 21px;
+    }
+    .brand { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 28px; letter-spacing: -0.02em; }
+    .kicker { color: var(--green); font-size: 14px; font-weight: 600; letter-spacing: 0.2em; }
+    .sep { width: 1px; height: 21px; background: var(--line); }
+    .headline {
+      font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800;
+      font-size: 94px; line-height: 0.97; letter-spacing: -0.038em; margin-top: auto;
+    }
+    .headline .sig {
+      background: linear-gradient(102deg, var(--green) 8%, var(--cyan) 96%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .tag { margin-top: 27px; max-width: 575px; font-size: 21px; line-height: 1.5; color: var(--label); }
+    .pills { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
+    .pill {
+      border: 1px solid var(--line); border-radius: 12px; padding: 11px 17px;
+      font-size: 15px; color: #cdd6d0; background: rgba(142, 234, 122, 0.045);
+    }
+    .pill b { color: var(--green); font-weight: 500; }
+    .url { margin-left: auto; font-size: 19px; color: var(--head); }
+    .url .d { color: var(--green); }
+  </style>
+</head>
+<body>
+  <div class="rain" id="rain"></div>
+  <div class="wrap">
+    <div class="top">
+      <div class="logo">
+        <div class="glyph">&gt;_</div>
+        <div class="brand">ctx-wire</div>
+      </div>
+      <div class="sep"></div>
+      <div class="kicker">CONTEXT COMPRESSION FOR AI AGENTS</div>
+    </div>
+
+    <h1 class="headline">Cut the noise.<br />Keep the <span class="sig">signal.</span></h1>
+    <p class="tag">A small Go binary between your AI coding agents and the noisy command output they pay tokens to read.</p>
+
+    <div class="pills">
+      <div class="pill"><b>145 filters</b> &middot; 370+ tests</div>
+      <div class="pill">secrets scrubbed</div>
+      <div class="pill">inspect what's cut</div>
+      <div class="pill">MIT</div>
+      <div class="url"><span class="d">$</span> ctx-wire.dev</div>
+    </div>
+  </div>
+  <script>
+    // plausible filtered-output lines for the background texture
+    const lines = [
+      '$ ctx-wire run go test ./...', 'ok  ctx-wire/internal/filter  0.42s',
+      '$ ctx-wire run rg TODO .', '12 matches in 4 files',
+      'cargo: ok', 'prettier: ok', 'prisma: ok',
+      '[ctx-wire] 99.4% saved  278 MB -> 1.6 MB',
+      'hook -> rewrite -> filter -> scrub -> emit',
+      '$ ctx-wire gain', 'Efficiency 94.7%  ~5.08B tokens saved',
+      '[ctx-wire: full output spooled to disk]',
+    ];
+    let out = '';
+    for (let i = 0; i < 44; i++) { out += lines[i % lines.length] + '\n'; }
+    document.getElementById('rain').textContent = out;
+  </script>
+</body>
+</html>
