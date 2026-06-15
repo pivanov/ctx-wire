@@ -19,6 +19,8 @@ ctx-wire run rg "TODO|FIXME" .
 
 ` + readGrepSteering + `
 
+` + mcpToolsSteering + `
+
 Use ` + "`ctx-wire gain`" + ` to inspect savings and ` + "`ctx-wire explain`" + ` to find commands
 that still need tuning.
 ` + ctxWireBlockEnd + `

@@ -22,10 +22,12 @@
 ## Install
 
 ```sh
-curl -fsSL https://ctx-wire.dev/install.sh | sh
+curl -fsSL https://ctx-wire.dev/install.sh | sh   # macOS/Linux
 ctx-wire init claude   # or cursor, codex, gemini, copilot
 ctx-wire gain          # see token savings recorded so far
 ```
+
+On Windows (PowerShell): `irm https://ctx-wire.dev/install.ps1 | iex` (add `-Machine` for a machine-wide install).
 
 ## Links
 

@@ -5,8 +5,8 @@
 #
 # Downloads the latest release binary for your OS/arch from GitHub and installs
 # it to ~/.local/bin (override with CTX_WIRE_INSTALL_DIR). macOS and Linux only;
-# Windows users download a .zip from the releases page. Requires the repository
-# to be public with a published release.
+# on Windows run: irm https://ctx-wire.dev/install.ps1 | iex
+# Requires the repository to be public with a published release.
 set -eu
 
 REPO="pivanov/ctx-wire"
@@ -21,7 +21,7 @@ command -v tar >/dev/null 2>&1 || err "tar is required"
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$os" in
   darwin | linux) ;;
-  *) err "unsupported OS '$os' (macOS/Linux only; Windows: download a .zip from https://github.com/$REPO/releases)" ;;
+  *) err "unsupported OS '$os' (macOS/Linux only; on Windows run: irm https://ctx-wire.dev/install.ps1 | iex)" ;;
 esac
 
 arch=$(uname -m)

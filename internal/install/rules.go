@@ -29,6 +29,13 @@ Glob tools bypass it entirely:
 Use the built-in tools only for small, exact lookups, or when you are about to
 Edit a file (Edit requires a prior Read).`
 
+// mcpToolsSteering points agents that reach ctx-wire through its MCP server
+// (Copilot, VS Code, Visual Studio) at the run_command/read_file tools, which
+// apply the same filtering and secret-scrubbing the built-in tools bypass.
+const mcpToolsSteering = `When the ctx-wire MCP tools are available, prefer ` + "`run_command`" + ` and ` + "`read_file`" + `
+over the built-in shell, terminal, read, grep, or glob tools, so the same
+filtering and secret-scrubbing reaches what the model sees.`
+
 const ctxWireRulesBlock = ctxWireBlockStart + `
 # ctx-wire
 

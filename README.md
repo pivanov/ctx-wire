@@ -36,9 +36,16 @@ fails. Wire it into your agent once; from then on it works transparently.
 ## Quick start
 
 ```sh
-curl -fsSL https://ctx-wire.dev/install.sh | sh   # installs to ~/.local/bin
+curl -fsSL https://ctx-wire.dev/install.sh | sh   # macOS/Linux, installs to ~/.local/bin
 ctx-wire init claude                              # or codex, cursor, gemini, copilot, ...
 ctx-wire gain                                     # watch the savings add up
+```
+
+On Windows (PowerShell), install per-user with no admin:
+
+```powershell
+irm https://ctx-wire.dev/install.ps1 | iex        # add -Machine (elevated) for machine-wide
+ctx-wire init copilot                             # or vscode, visualstudio, claude, ...
 ```
 
 Upgrade anytime with `ctx-wire update` (checksum-verified, atomic, with
