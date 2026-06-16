@@ -1,7 +1,19 @@
 [filters.gcc]
-description = "Compact gcc/g++ compiler output - strip notes, keep errors and warnings"
-match_command = "^g(?:cc\\b|\\+\\+)"
+description = "Compact gcc/g++/clang/cc compiler output - strip notes, keep errors and warnings"
+# clang/clang++/cc/c++ emit byte-identical diagnostics to gcc (clang IS the default
+# compiler on macOS), so they share this filter. Every form is anchored with
+# (?:-\d+)?(?:\s|$) so versioned compilers (gcc-13, clang-17) match while the
+# non-compiler homonyms do NOT: the GCC toolchain wrappers (gcc-ar, gcc-nm,
+# gcc-ranlib, g++-ar) and the clang tooling (clangd, clang-format/-tidy, c++filt).
+match_command = "^(?:g(?:cc|\\+\\+)(?:-\\d+)?(?:\\s|$)|clang(?:\\+\\+)?(?:-\\d+)?(?:\\s|$)|c(?:c|\\+\\+)(?:\\s|$))"
 strip_ansi = true
+# gcc/g++ write diagnostics (warnings AND errors) to STDERR; stdout is empty on a
+# clean or warning-only compile. Without this the strip patterns only saw the
+# (empty) stdout and never fired, while on_empty emitted "gcc: ok" on top of the
+# raw stderr warnings, MORE bytes than raw. Filtering the combined stream lets the
+# noise strips apply and stops the net-negative. Errors still survive (noise-only
+# strips + SuppressSyntheticSuccess on nonzero exit); the failure fixtures prove it.
+filter_stderr = true
 strip_lines_matching = [
   "^\\s*$",
   "^\\s+\\|\\s*$",
@@ -47,3 +59,30 @@ expected = "/usr/bin/ld: /tmp/main.o: undefined reference to 'missing_func'\ncol
 name = "empty input returns on_empty message"
 input = ""
 expected = "gcc: ok"
+
+# Real gcc -Wall output: warnings land on STDERR. Guards the filter_stderr fix:
+# without it the strips never fire and on_empty stacks "gcc: ok" on top of the raw
+# warning (net-negative). The min_saved_percent floor fails the moment filter_stderr
+# is dropped (savings collapse), and expected proves the warning signal survives.
+[[tests.gcc]]
+name = "stderr warnings are filtered, not net-negative (needs filter_stderr)"
+stderr = """
+warn.c:2:9: warning: unused variable 'unused_variable' [-Wunused-variable]
+    2 |     int unused_variable = 42;
+      |         ^~~~~~~~~~~~~~~
+1 warning generated.
+"""
+expected = "warn.c:2:9: warning: unused variable 'unused_variable' [-Wunused-variable]\n    2 |     int unused_variable = 42;\n      |         ^~~~~~~~~~~~~~~"
+min_saved_percent = 10
+
+# Real clang/gcc error (nonzero exit): the diagnostic is on STDERR. With
+# filter_stderr the noise strip eats "1 error generated" but the error line must
+# survive, and the nonzero exit must prevent on_empty from emitting "gcc: ok".
+[[tests.gcc]]
+name = "failed compile: stderr error survives, never collapsed to ok"
+failed = true
+stderr = """
+err.c:2:12: error: use of undeclared identifier 'undefined_symbol'
+1 error generated.
+"""
+expected = "err.c:2:12: error: use of undeclared identifier 'undefined_symbol'"
