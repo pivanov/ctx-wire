@@ -459,16 +459,16 @@ func shouldFlushPending(st stateFile, now time.Time) bool {
 		return false
 	}
 	last := parseStateTime(st.LastAttempt)
+	// First flush (no prior attempt): require a meaningful batch so a single
+	// small command does not immediately hit the wire.
 	if last.IsZero() {
 		return st.Pending.Commands >= autoFlushCommandThreshold ||
 			st.Pending.BytesSaved >= autoFlushSavedThreshold
 	}
-	if !last.IsZero() && now.Sub(last) < autoFlushInterval {
-		return false
-	}
-	return st.Pending.Commands >= autoFlushCommandThreshold ||
-		st.Pending.BytesSaved >= autoFlushSavedThreshold ||
-		now.Sub(last) >= autoFlushInterval
+	// After any prior attempt the interval is the sole gate: it both rate-limits
+	// the endpoint and throttles retries after a failed send. The volume
+	// thresholds only ever bring the FIRST flush forward, never a later one.
+	return now.Sub(last) >= autoFlushInterval
 }
 
 func parseStateTime(value string) time.Time {

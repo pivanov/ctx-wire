@@ -54,8 +54,16 @@ var safePrograms = newStringSet(
 	"curl", "wget", "ssh", "scp", "rsync", "ping", "dig", "nslookup", "host",
 	"tar", "gzip", "gunzip", "zip", "unzip", "jq", "yq", "base64",
 	"sha256sum", "md5sum", "openssl", "systemctl", "journalctl",
-	"mysql", "psql", "redis-cli", "sqlite3", "mongosh",
-	"bash", "sh", "zsh", "fish", "ctx-wire",
+	"mysql", "psql", "redis-cli", "sqlite3", "mongosh", "sqlcmd",
+	"bash", "sh", "zsh", "fish", "pwsh", "powershell", "cmd", "ctx-wire",
+	// Public tools surfaced from live telemetry's "other" bucket (and the
+	// pre-allowlist history): ubiquitous coreutils + standard dev/infra CLIs,
+	// public by definition. nl especially is the file-read replacement AGENTS.md
+	// steers agents to, so it must stay visible instead of folding into (other).
+	"nl", "gh", "just", "true", "time", "pwd", "uname", "mkdir", "rm", "cp",
+	"mv", "touch", "chmod", "od", "cmp", "comm", "strings", "pgrep", "ss",
+	"perl", "php", "helm", "gcloud", "glab", "ansible-playbook", "magick",
+	"ffprobe", "pixi",
 )
 
 // knownAgents allowlists agent labels. agent.Normalize only validates a slug's

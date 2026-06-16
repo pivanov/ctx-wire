@@ -138,11 +138,11 @@ When enabled, telemetry sends only counters used for the public impact page:
   agents reports a real split (token counts only, never dollars)
 
 Impact counters are accumulated locally and flushed opportunistically after a
-command finishes when at least one command is pending and either 5 minutes have
-passed since the last attempt, 1000 commands are pending, or 10 MB has been
-saved. `ctx-wire gain` also performs a best-effort full-summary flush, while
-`ctx-wire gain --since ...` never reports telemetry. Network failures keep the
-pending counters locally for a later retry and never fail the command.
+command finishes: the first flush waits for a meaningful batch (1000 pending
+commands or 10 MB saved), and after that flushes are rate-limited to at most once
+every 15 minutes. `ctx-wire gain` also performs a best-effort full-summary flush,
+while `ctx-wire gain --since ...` never reports telemetry. Network failures keep
+the pending counters locally for a later retry and never fail the command.
 
 The server derives country from Cloudflare's request metadata for aggregate
 country stats. ctx-wire never sends commands, arguments, paths, raw output,

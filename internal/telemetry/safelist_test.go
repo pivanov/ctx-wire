@@ -13,6 +13,11 @@ func TestSafeProgramName(t *testing.T) {
 		{"cargo", "cargo"},                   // public, ships a filter
 		{"git", "git"},                       // public
 		{"ls", "ls"},                         // public passthrough tool
+		{"nl", "nl"},                         // file-read steer in AGENTS.md must stay visible
+		{"gh", "gh"},                         // GitHub CLI, ubiquitous in agent workflows
+		{"just", "just"},                     // task runner (this repo uses it)
+		{"powershell", "powershell"},         // Windows shell, public by definition
+		{"agent-browser", otherBucket},       // user script -> (other): the privacy boundary
 		{"project-zeus-deploy", otherBucket}, // private codename -> (other)
 		{"my_secret_tool", otherBucket},
 		{"", ""}, // not a token: stays empty (callers skip it)

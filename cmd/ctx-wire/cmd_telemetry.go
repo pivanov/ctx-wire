@@ -109,7 +109,7 @@ func cmdTelemetryStatus(verbose bool) int {
 	fmt.Println()
 	fmt.Println(theme.Dim.Render("Sends only aggregate counters: install reports, total commands, raw/emitted bytes,"))
 	fmt.Println(theme.Dim.Render("bytes saved, estimated tokens saved, and per-program + per-agent totals."))
-	fmt.Println(theme.Dim.Render("Flushes after 5 minutes, 1000 pending commands, 10 MB saved, or a `ctx-wire gain` report."))
+	fmt.Println(theme.Dim.Render("Batches locally; flushes at most once every 15 minutes, on the first large batch, or a `ctx-wire gain` report."))
 	fmt.Println(theme.Dim.Render("Never sends commands, args, paths, raw output, repo/user/host names, install IDs, or IPs."))
 	return 0
 }
