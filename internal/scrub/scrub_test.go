@@ -305,6 +305,136 @@ func TestScrubFailClosedRecoversPanic(t *testing.T) {
 	}
 }
 
+// TestMightContainSecret pins mightContainSecret as a strict superset of the
+// redaction rules. It asserts:
+//  1. Every literalAnchor triggers the prefilter.
+//  2. Every keywordRoot triggers the prefilter in both lower and upper case.
+//  3. Clean strings return false.
+//  4. Every TestScrub case with wantRedac:true also triggers the prefilter
+//     (the load-bearing superset guard: if this breaks, the prefilter would
+//     silently skip a string that Scrub would redact, leaking the secret).
+func TestMightContainSecret(t *testing.T) {
+	t.Run("literal anchors trigger", func(t *testing.T) {
+		localAnchors := []string{
+			"eyJ", "AKIA", "ASIA", "AIza", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
+			"github_pat_", "xox", "sk_", "rk_", "sk-", "-----BEGIN", "://",
+			"hvs.", "hvb.", "hvr.", "pypi-",
+		}
+		for _, anchor := range localAnchors {
+			s := "noise " + anchor + " noise"
+			if !mightContainSecret(s) {
+				t.Errorf("literalAnchor %q: mightContainSecret(%q) = false, want true", anchor, s)
+			}
+		}
+	})
+
+	t.Run("keyword roots trigger lower and upper", func(t *testing.T) {
+		localRoots := []string{
+			"passw", "pwd", "secret", "token", "api", "key", "auth", "client", "access", "private",
+		}
+		for _, root := range localRoots {
+			lower := root + "=x"
+			if !mightContainSecret(lower) {
+				t.Errorf("keywordRoot %q (lower): mightContainSecret(%q) = false, want true", root, lower)
+			}
+			upper := strings.ToUpper(root) + "=x"
+			if !mightContainSecret(upper) {
+				t.Errorf("keywordRoot %q (upper): mightContainSecret(%q) = false, want true", root, upper)
+			}
+		}
+	})
+
+	t.Run("clean strings return false", func(t *testing.T) {
+		clean := []string{
+			"the quick brown fox jumps",
+			"",
+			"Build succeeded. 0 warnings, 0 errors.",
+		}
+		for _, s := range clean {
+			if mightContainSecret(s) {
+				t.Errorf("clean string: mightContainSecret(%q) = true, want false", s)
+			}
+		}
+	})
+
+	t.Run("superset guard: all TestScrub redacting inputs trigger prefilter", func(t *testing.T) {
+		cases := []struct {
+			name string
+			in   string
+		}{
+			{
+				name: "aws access key",
+				in:   "key=AKIAIOSFODNN7EXAMPLE done",
+			},
+			{
+				name: "github token",
+				in:   "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa here",
+			},
+			{
+				name: "jwt",
+				in:   "auth eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.dozjgNryP4J3jVmNHl0w5N",
+			},
+			{
+				name: "pem private key block",
+				in:   "before\n-----BEGIN RSA PRIVATE KEY-----\nMIIBVgIBADANBg\n-----END RSA PRIVATE KEY-----\nafter",
+			},
+			{
+				name: "authorization bearer header keeps prefix",
+				in:   "Authorization: Bearer abc123secrettoken",
+			},
+			{
+				name: "secret assignment keeps key",
+				in:   "PASSWORD=hunter2 OTHER=ok",
+			},
+			{
+				name: "single-quoted secret",
+				in:   "PASSWORD='hunter2' next=ok",
+			},
+			{
+				name: "double-quoted secret with escaped quote not partially leaked",
+				in:   `PASSWORD="foo\"bar" next=ok`,
+			},
+			{
+				name: "double-quoted secret with spaces",
+				in:   `PASSWORD="hunter2 secret phrase" next=ok`,
+			},
+			{
+				name: "api key colon form",
+				in:   "api_key: sk_test_abcdefghijklmnop1234",
+			},
+			{
+				name: "split secret long flag",
+				in:   "deploy --password hunter2 --token 'a b c' --env prod",
+			},
+			{
+				name: "url userinfo redacts only password",
+				in:   "postgres://admin:s3cr3tP4ss@db.example.com:5432/app",
+			},
+			{
+				name: "vault service token with keyword",
+				in:   "token = hvs.CAESIFakeVaultTokenValue000000000000",
+			},
+			{
+				name: "pypi token in isolation",
+				in:   "pypi-AgEIcHlwaS5vcmcFakePypiTokenValue00000",
+			},
+			{
+				name: "vault token bare no keyword (prefilter regression guard)",
+				in:   "hvs.CAESIFakeVaultTokenValue000000000000",
+			},
+			{
+				name: "aws control shape still redacts",
+				in:   "key=AKIAIOSFODNN7EXAMPLE done",
+			},
+		}
+		for _, tc := range cases {
+			if !mightContainSecret(tc.in) {
+				t.Errorf("superset guard FAILED for case %q: mightContainSecret(%q) = false, but Scrub would redact it (secret-leak gap in prefilter)", tc.name, tc.in)
+			}
+		}
+	})
+}
+
 // TestTokenizeShell characterizes the current behavior of tokenizeShell for
 // edge-case inputs. Expectations are derived from reading the function body
 // directly (characterization tests of EXISTING behavior, not ideal behavior).
