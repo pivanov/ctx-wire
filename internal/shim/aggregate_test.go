@@ -22,21 +22,21 @@ func TestAggregateStatusUnionsAcrossDirs(t *testing.T) {
 	ctxWire := filepath.Join(realDir, "ctx-wire")
 	write(ctxWire)
 	write(filepath.Join(realDir, "git"))
-	write(filepath.Join(realDir, "grep"))
+	write(filepath.Join(realDir, "rg"))
 
 	if _, err := Install(dirA, ctxWire, []string{"git"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Install(dirB, ctxWire, []string{"grep"}); err != nil {
+	if _, err := Install(dirB, ctxWire, []string{"rg"}); err != nil {
 		t.Fatal(err)
 	}
-	// dirA and dirB before realDir, so git resolves to dirA's shim and grep to dirB's.
+	// dirA and dirB before realDir, so git resolves to dirA's shim and rg to dirB's.
 	sep := string(os.PathListSeparator)
 	t.Setenv("PATH", dirA+sep+dirB+sep+realDir)
 
 	installed, active, _, _ := AggregateStatus([]string{dirA, dirB})
 	if installed != 2 {
-		t.Errorf("installed across dirs = %d, want 2 (git in A + grep in B)", installed)
+		t.Errorf("installed across dirs = %d, want 2 (git in A + rg in B)", installed)
 	}
 	if active != 2 {
 		t.Errorf("active across dirs = %d, want 2 (both resolve to a shim)", active)

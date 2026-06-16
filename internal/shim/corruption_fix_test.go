@@ -46,6 +46,37 @@ func TestCatIsDeShimmedButDeprecation(t *testing.T) {
 	}
 }
 
+// grep/head/sed/tail are commonly used in pipes and redirections; shim-side
+// filtering silently truncates/corrupts redirected data (same bug class as cat).
+// They must not be in DefaultCommands. They must be in DeprecatedShims so the
+// self-heal prunes shims left by older installs. cat must still be there too.
+func TestPipeCorruptionCommandsDeShimmed(t *testing.T) {
+	deShimmed := []string{"grep", "head", "sed", "tail"}
+
+	defaultSet := make(map[string]bool, len(DefaultCommands))
+	for _, c := range DefaultCommands {
+		defaultSet[c] = true
+	}
+	deprecatedSet := make(map[string]bool, len(DeprecatedShims))
+	for _, c := range DeprecatedShims {
+		deprecatedSet[c] = true
+	}
+
+	for _, cmd := range deShimmed {
+		if defaultSet[cmd] {
+			t.Errorf("%s must NOT be in DefaultCommands (shim-side filtering corrupts piped/redirected output)", cmd)
+		}
+		if !deprecatedSet[cmd] {
+			t.Errorf("%s must be in DeprecatedShims so the self-heal prunes existing shims", cmd)
+		}
+	}
+
+	// Regression: cat must still be in DeprecatedShims.
+	if !deprecatedSet["cat"] {
+		t.Error("cat must still be in DeprecatedShims (regression guard)")
+	}
+}
+
 // RefreshManaged must prune a managed shim for a deprecated command from every
 // managed dir on PATH (an upgrade has to reach existing users), while keeping
 // non-deprecated managed shims and never touching foreign files.

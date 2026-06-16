@@ -52,6 +52,12 @@ const (
 // (capping/truncating) that output silently corrupts the captured value. The
 // `cat` filter still applies to an agent's explicit `cat file` via the hook;
 // see DeprecatedShims for pruning a `cat` shim left by an older install.
+//
+// `grep`, `head`, `sed`, and `tail` are also NOT shimmed for the same reason:
+// they are routinely used in pipes and redirections (`grep pat f > out.txt`,
+// `sed ... f | next`), and shim-side filtering (capping/truncating) silently
+// corrupts the redirected data. Their filters still apply via the hook and
+// `ctx-wire run`; see DeprecatedShims for pruning shims left by older installs.
 var DefaultCommands = []string{
 	"agent-browser",
 	"awk",
@@ -70,8 +76,6 @@ var DefaultCommands = []string{
 	"git",
 	"go",
 	"gofmt",
-	"grep",
-	"head",
 	"jq",
 	"kubectl",
 	"ls",
@@ -83,10 +87,8 @@ var DefaultCommands = []string{
 	"pnpm",
 	"rg",
 	"ruff",
-	"sed",
 	"sort",
 	"strings",
-	"tail",
 	"tee",
 	"tr",
 	"tsc",
@@ -112,6 +114,10 @@ var DefaultCommands = []string{
 // shim, would remove this constraint at the cost of stat-ing more files.)
 var DeprecatedShims = []string{
 	"cat",
+	"grep",
+	"head",
+	"sed",
+	"tail",
 }
 
 // InstallReport describes a shim installation pass.
