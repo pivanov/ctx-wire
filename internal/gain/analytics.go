@@ -343,6 +343,8 @@ type jsonExport struct {
 	SavedTokens  int64         `json:"saved_tokens"`
 	SavingsPct   float64       `json:"savings_pct"`
 	ByProgram    []jsonProgram `json:"by_program"`
+	ByAgent      []AgentStat   `json:"by_agent"`
+	BySource     []SourceStat  `json:"by_source"`
 	Daily        []DailyStat   `json:"daily"`
 }
 
@@ -355,6 +357,8 @@ func FormatJSON(s *Summary, daily []DailyStat) (string, error) {
 		SavedBytes:   s.SavedBytes,
 		SavedTokens:  approxTokens(s.SavedBytes),
 		SavingsPct:   s.SavingsPct(),
+		ByAgent:      s.ByAgent,
+		BySource:     s.BySource,
 		Daily:        daily,
 	}
 	for _, st := range s.ByProgram {

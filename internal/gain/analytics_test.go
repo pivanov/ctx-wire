@@ -121,6 +121,63 @@ func TestFormatJSONShape(t *testing.T) {
 	}
 }
 
+func TestFormatJSONByAgentAndBySource(t *testing.T) {
+	s := &Summary{
+		Commands: 5, RawBytes: 3000, EmittedBytes: 600, SavedBytes: 2400,
+		ByProgram: []CommandStat{{Program: "git", Count: 2, RawBytes: 2000, SavedBytes: 1600}},
+		ByAgent: []AgentStat{
+			{Agent: "claude", Commands: 3, RawBytes: 2000, EmittedBytes: 400, SavedBytes: 1600},
+			{Agent: "codex", Commands: 2, RawBytes: 1000, EmittedBytes: 200, SavedBytes: 800},
+		},
+		BySource: []SourceStat{
+			{Source: "hook", Commands: 4, RawBytes: 2500, EmittedBytes: 500, SavedBytes: 2000},
+			{Source: "shim", Commands: 1, RawBytes: 500, EmittedBytes: 100, SavedBytes: 400},
+		},
+	}
+	daily := []DailyStat{{Date: "2026-06-17", Commands: 5, RawBytes: 3000, SavedBytes: 2400}}
+	out, err := FormatJSON(s, daily)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed jsonExport
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
+	}
+	// Existing top-level keys must be unchanged.
+	if parsed.Commands != 5 || parsed.SavedBytes != 2400 || len(parsed.ByProgram) != 1 || len(parsed.Daily) != 1 {
+		t.Errorf("top-level keys wrong: %+v", parsed)
+	}
+	// New by_agent key.
+	if len(parsed.ByAgent) != 2 {
+		t.Fatalf("want 2 by_agent entries, got %d: %+v", len(parsed.ByAgent), parsed.ByAgent)
+	}
+	if parsed.ByAgent[0].Agent != "claude" || parsed.ByAgent[0].Commands != 3 || parsed.ByAgent[0].SavedBytes != 1600 {
+		t.Errorf("by_agent[0] wrong: %+v", parsed.ByAgent[0])
+	}
+	if parsed.ByAgent[1].Agent != "codex" || parsed.ByAgent[1].SavedBytes != 800 {
+		t.Errorf("by_agent[1] wrong: %+v", parsed.ByAgent[1])
+	}
+	// New by_source key.
+	if len(parsed.BySource) != 2 {
+		t.Fatalf("want 2 by_source entries, got %d: %+v", len(parsed.BySource), parsed.BySource)
+	}
+	if parsed.BySource[0].Source != "hook" || parsed.BySource[0].Commands != 4 || parsed.BySource[0].SavedBytes != 2000 {
+		t.Errorf("by_source[0] wrong: %+v", parsed.BySource[0])
+	}
+	if parsed.BySource[1].Source != "shim" || parsed.BySource[1].SavedBytes != 400 {
+		t.Errorf("by_source[1] wrong: %+v", parsed.BySource[1])
+	}
+	// Verify empty slices are present (not null) when Summary has no entries for these.
+	sEmpty := &Summary{Commands: 1, RawBytes: 100, SavedBytes: 50}
+	outEmpty, err := FormatJSON(sEmpty, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(outEmpty, `"by_agent"`) || !strings.Contains(outEmpty, `"by_source"`) {
+		t.Errorf("by_agent/by_source keys missing from empty summary output:\n%s", outEmpty)
+	}
+}
+
 func TestFormatCSVHeaderAndRows(t *testing.T) {
 	daily := []DailyStat{
 		{Date: "2026-06-03", Commands: 1, RawBytes: 1000, EmittedBytes: 100, SavedBytes: 900},
