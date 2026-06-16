@@ -68,3 +68,7 @@ rollback) on macOS, Linux, and Windows.
 ## Backed by
 
 [LogicStar AI](https://logicstar.ai) · [SashiDo.io](https://www.sashido.io)
+
+## License
+
+[MIT](LICENSE). Free and open source.
