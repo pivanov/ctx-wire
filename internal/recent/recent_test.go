@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestConcurrentRecordNoLostWrites pins the cross-process safety of the
@@ -123,5 +125,53 @@ func TestClipBoundsBody(t *testing.T) {
 	}
 	if len(got[0].Emitted) != perBodyCap || len(got[0].Raw) != perBodyCap {
 		t.Errorf("bodies should be clipped to perBodyCap, got emit=%d raw=%d", len(got[0].Emitted), len(got[0].Raw))
+	}
+}
+
+// writeLockFile creates a lock file in dir with the given PID content and
+// returns its path.
+func writeLockFile(t *testing.T, dir string, pid int) string {
+	t.Helper()
+	p := filepath.Join(dir, "store.lock")
+	if err := os.WriteFile(p, []byte(strconv.Itoa(pid)+"\n"), 0600); err != nil {
+		t.Fatalf("writeLockFile: %v", err)
+	}
+	return p
+}
+
+// TestStaleLockDeadPIDWithinTTL: a lock holding a dead PID should be reclaimed
+// even when its mtime is fresh.
+func TestStaleLockDeadPIDWithinTTL(t *testing.T) {
+	dir := t.TempDir()
+	// PID 999999999 is virtually guaranteed to be dead.
+	p := writeLockFile(t, dir, 999999999)
+	if !staleLock(p) {
+		t.Error("staleLock returned false for a dead PID within TTL; want true")
+	}
+}
+
+// TestStaleLockLivePIDWithinTTL: a lock holding the current process's PID with
+// a fresh mtime must NOT be reclaimed.
+func TestStaleLockLivePIDWithinTTL(t *testing.T) {
+	dir := t.TempDir()
+	p := writeLockFile(t, dir, os.Getpid())
+	if staleLock(p) {
+		t.Error("staleLock returned true for a live PID within TTL; want false")
+	}
+}
+
+// TestStaleLockOldMtime: any lock whose mtime exceeds lockTTL must be reclaimed
+// regardless of what PID it contains.
+func TestStaleLockOldMtime(t *testing.T) {
+	dir := t.TempDir()
+	// Use the live PID so the PID check alone would say "not stale", proving
+	// the age check fires independently.
+	p := writeLockFile(t, dir, os.Getpid())
+	old := time.Now().Add(-(lockTTL + time.Second))
+	if err := os.Chtimes(p, old, old); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	if !staleLock(p) {
+		t.Error("staleLock returned false for an old lock; want true")
 	}
 }

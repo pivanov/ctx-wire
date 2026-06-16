@@ -17,6 +17,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,8 +30,9 @@ const (
 	// command cannot blow the store.
 	perBodyCap = 256 << 10
 	// lockTTL is how long a lock file may sit before a peer treats it as
-	// abandoned by a crashed writer and reclaims it.
-	lockTTL = 10 * time.Second
+	// abandoned by a crashed writer and reclaims it. Matches gainLockTTL so
+	// that the age-only backstop is consistent across packages.
+	lockTTL = 30 * time.Second
 )
 
 // Options is the retention configuration (derived from config.Retention, then
@@ -168,7 +170,18 @@ func staleLock(lockPath string) bool {
 	if err != nil {
 		return false
 	}
-	return time.Since(info.ModTime()) > lockTTL
+	if time.Since(info.ModTime()) > lockTTL {
+		return true
+	}
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	return !processAlive(pid)
 }
 
 // List returns the retained entries, oldest first. Best-effort: nil on error.
