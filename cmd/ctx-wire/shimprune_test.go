@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // TestShouldFlagRedundantShims is the truth table for the redundant-shims advisory
 // (no deletion happens; this only decides whether to NUDGE). Load-bearing gates:
@@ -30,5 +34,37 @@ func TestShouldFlagRedundantShims(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s: shouldFlagRedundantShims = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestHookOrPluginCoverageConfiguredSiblingDir verifies that a ctx-wire Claude
+// hook installed only in a sibling config dir (e.g. ~/.claude-main) is
+// detected, not just hooks in the primary ~/.claude directory.
+func TestHookOrPluginCoverageConfiguredSiblingDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+
+	// Primary ~/.claude: exists with settings.json (no needle) and projects/.
+	primaryDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(filepath.Join(primaryDir, "projects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(primaryDir, "settings.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sibling ~/.claude-main: has settings.json WITH the needle and projects/.
+	siblingDir := filepath.Join(home, ".claude-main")
+	if err := os.MkdirAll(filepath.Join(siblingDir, "projects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	siblingSettings := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"ctx-wire hook claude"}]}]}}`
+	if err := os.WriteFile(filepath.Join(siblingDir, "settings.json"), []byte(siblingSettings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !hookOrPluginCoverageConfigured(home) {
+		t.Error("hookOrPluginCoverageConfigured = false, want true (hook lives in sibling ~/.claude-main)")
 	}
 }

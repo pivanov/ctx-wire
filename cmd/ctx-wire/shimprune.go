@@ -107,8 +107,12 @@ func fileHasNeedle(path, needle string) bool {
 // actually wired, the signal that shims are redundant coverage. Needles match the
 // install writers and the doctor checks.
 func hookOrPluginCoverageConfigured(wd string) bool {
-	if p, err := install.ClaudeSettingsPath(); err == nil && fileHasNeedle(p, "ctx-wire hook claude") {
-		return true
+	if dirs, err := install.ClaudeConfigDirs(); err == nil {
+		for _, d := range dirs {
+			if fileHasNeedle(filepath.Join(d, "settings.json"), "ctx-wire hook claude") {
+				return true
+			}
+		}
 	}
 	if p, err := install.CursorHooksPath(); err == nil && fileHasNeedle(p, "ctx-wire hook cursor") {
 		return true
