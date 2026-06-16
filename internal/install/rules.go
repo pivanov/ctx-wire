@@ -23,7 +23,10 @@ Glob tools bypass it entirely:
 - ` + "`nl -ba <file>`" + ` (numbered) or ` + "`cat`/`head`/`tail`" + ` instead of the Read tool:
   large files arrive capped instead of flooding your context.
 - ` + "`rg -n <pattern> <path>`" + ` instead of the Grep tool: matches arrive grouped
-  and deduplicated.
+  and deduplicated. If a search returns no matches, retry once with
+  ` + "`rg -n --no-ignore-vcs <pattern> <path>`" + ` before concluding it is absent:
+  rg skips .gitignore'd files by default (build output, generated code, vendored
+  deps), so "0 matches" can be a false negative.
 - ` + "`find`" + ` instead of the Glob tool.
 
 Use the built-in tools only for small, exact lookups, or when you are about to
