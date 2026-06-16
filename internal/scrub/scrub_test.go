@@ -5,143 +5,143 @@ import (
 	"testing"
 )
 
-func TestScrub(t *testing.T) {
-	tests := []struct {
-		name      string
-		in        string
-		wantRedac bool     // expect [REDACTED] present
-		mustKeep  []string // substrings that must survive
-		mustDrop  []string // secret substrings that must be gone
-	}{
-		{
-			name:      "aws access key",
-			in:        "key=AKIAIOSFODNN7EXAMPLE done",
-			wantRedac: true,
-			mustKeep:  []string{"done"},
-			mustDrop:  []string{"AKIAIOSFODNN7EXAMPLE"},
-		},
-		{
-			name:      "github token",
-			in:        "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa here",
-			wantRedac: true,
-			mustDrop:  []string{"ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-		},
-		{
-			name:      "jwt",
-			in:        "auth eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.dozjgNryP4J3jVmNHl0w5N",
-			wantRedac: true,
-			mustDrop:  []string{"eyJhbGciOiJIUzI1NiJ9"},
-		},
-		{
-			name:      "pem private key block",
-			in:        "before\n-----BEGIN RSA PRIVATE KEY-----\nMIIBVgIBADANBg\n-----END RSA PRIVATE KEY-----\nafter",
-			wantRedac: true,
-			mustKeep:  []string{"before", "after"},
-			mustDrop:  []string{"MIIBVgIBADANBg", "BEGIN RSA PRIVATE KEY"},
-		},
-		{
-			name:      "authorization bearer header keeps prefix",
-			in:        "Authorization: Bearer abc123secrettoken",
-			wantRedac: true,
-			mustKeep:  []string{"Authorization: Bearer "},
-			mustDrop:  []string{"abc123secrettoken"},
-		},
-		{
-			name:      "secret assignment keeps key",
-			in:        "PASSWORD=hunter2 OTHER=ok",
-			wantRedac: true,
-			mustKeep:  []string{"PASSWORD=", "OTHER=ok"},
-			mustDrop:  []string{"hunter2"},
-		},
-		{
-			name:      "single-quoted secret",
-			in:        "PASSWORD='hunter2' next=ok",
-			wantRedac: true,
-			mustKeep:  []string{"PASSWORD=", "next=ok"},
-			mustDrop:  []string{"hunter2"},
-		},
-		{
-			// A double-quoted value containing an escaped quote must redact in
-			// full; the old `"[^"]*"` value pattern stopped at the backslash-quote
-			// and leaked the tail (PASSWORD=[REDACTED]bar" next=ok).
-			name:      "double-quoted secret with escaped quote not partially leaked",
-			in:        `PASSWORD="foo\"bar" next=ok`,
-			wantRedac: true,
-			mustKeep:  []string{"PASSWORD=", "next=ok"},
-			mustDrop:  []string{"bar"},
-		},
-		{
-			name:      "double-quoted secret with spaces",
-			in:        `PASSWORD="hunter2 secret phrase" next=ok`,
-			wantRedac: true,
-			mustKeep:  []string{"PASSWORD=", "next=ok"},
-			mustDrop:  []string{"hunter2", "secret phrase"},
-		},
-		{
-			name:      "api key colon form",
-			in:        "api_key: sk_test_abcdefghijklmnop1234",
-			wantRedac: true,
-			mustDrop:  []string{"sk_test_abcdefghijklmnop1234"},
-		},
-		{
-			name:      "split secret long flag",
-			in:        "deploy --password hunter2 --token 'a b c' --env prod",
-			wantRedac: true,
-			mustKeep:  []string{"--password ", "--token ", "--env prod"},
-			mustDrop:  []string{"hunter2", "a b c"},
-		},
-		{
-			name:      "url userinfo redacts only password",
-			in:        "postgres://admin:s3cr3tP4ss@db.example.com:5432/app",
-			wantRedac: true,
-			mustKeep:  []string{"postgres://admin:", "@db.example.com:5432/app"},
-			mustDrop:  []string{"s3cr3tP4ss"},
-		},
-		{
-			name:      "vault service token with keyword",
-			in:        "token = hvs.CAESIFakeVaultTokenValue000000000000",
-			wantRedac: true,
-			mustDrop:  []string{"hvs.CAESIFakeVaultTokenValue000000000000"},
-		},
-		{
-			name:      "pypi token in isolation",
-			in:        "pypi-AgEIcHlwaS5vcmcFakePypiTokenValue00000",
-			wantRedac: true,
-			mustDrop:  []string{"pypi-AgEIcHlwaS5vcmcFakePypiTokenValue00000"},
-		},
-		{
-			name:      "vault token bare no keyword (prefilter regression guard)",
-			in:        "hvs.CAESIFakeVaultTokenValue000000000000",
-			wantRedac: true,
-			mustDrop:  []string{"hvs.CAESIFakeVaultTokenValue000000000000"},
-		},
-		{
-			name:      "aws control shape still redacts",
-			in:        "key=AKIAIOSFODNN7EXAMPLE done",
-			wantRedac: true,
-			mustKeep:  []string{"done"},
-			mustDrop:  []string{"AKIAIOSFODNN7EXAMPLE"},
-		},
-		{
-			name:      "benign hover and pypiserver prose not redacted",
-			in:        "Use hover.css from pypiserver to style buttons.",
-			wantRedac: false,
-			mustKeep:  []string{"hover.css", "pypiserver"},
-		},
-		{
-			name:      "plain text untouched",
-			in:        "Build succeeded. 0 warnings, 0 errors.",
-			wantRedac: false,
-			mustKeep:  []string{"Build succeeded. 0 warnings, 0 errors."},
-		},
-		{
-			name:      "empty stays empty",
-			in:        "",
-			wantRedac: false,
-		},
-	}
+var scrubCases = []struct {
+	name      string
+	in        string
+	wantRedac bool     // expect [REDACTED] present
+	mustKeep  []string // substrings that must survive
+	mustDrop  []string // secret substrings that must be gone
+}{
+	{
+		name:      "aws access key",
+		in:        "key=AKIAIOSFODNN7EXAMPLE done",
+		wantRedac: true,
+		mustKeep:  []string{"done"},
+		mustDrop:  []string{"AKIAIOSFODNN7EXAMPLE"},
+	},
+	{
+		name:      "github token",
+		in:        "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa here",
+		wantRedac: true,
+		mustDrop:  []string{"ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+	},
+	{
+		name:      "jwt",
+		in:        "auth eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.dozjgNryP4J3jVmNHl0w5N",
+		wantRedac: true,
+		mustDrop:  []string{"eyJhbGciOiJIUzI1NiJ9"},
+	},
+	{
+		name:      "pem private key block",
+		in:        "before\n-----BEGIN RSA PRIVATE KEY-----\nMIIBVgIBADANBg\n-----END RSA PRIVATE KEY-----\nafter",
+		wantRedac: true,
+		mustKeep:  []string{"before", "after"},
+		mustDrop:  []string{"MIIBVgIBADANBg", "BEGIN RSA PRIVATE KEY"},
+	},
+	{
+		name:      "authorization bearer header keeps prefix",
+		in:        "Authorization: Bearer abc123secrettoken",
+		wantRedac: true,
+		mustKeep:  []string{"Authorization: Bearer "},
+		mustDrop:  []string{"abc123secrettoken"},
+	},
+	{
+		name:      "secret assignment keeps key",
+		in:        "PASSWORD=hunter2 OTHER=ok",
+		wantRedac: true,
+		mustKeep:  []string{"PASSWORD=", "OTHER=ok"},
+		mustDrop:  []string{"hunter2"},
+	},
+	{
+		name:      "single-quoted secret",
+		in:        "PASSWORD='hunter2' next=ok",
+		wantRedac: true,
+		mustKeep:  []string{"PASSWORD=", "next=ok"},
+		mustDrop:  []string{"hunter2"},
+	},
+	{
+		// A double-quoted value containing an escaped quote must redact in
+		// full; the old `"[^"]*"` value pattern stopped at the backslash-quote
+		// and leaked the tail (PASSWORD=[REDACTED]bar" next=ok).
+		name:      "double-quoted secret with escaped quote not partially leaked",
+		in:        `PASSWORD="foo\"bar" next=ok`,
+		wantRedac: true,
+		mustKeep:  []string{"PASSWORD=", "next=ok"},
+		mustDrop:  []string{"bar"},
+	},
+	{
+		name:      "double-quoted secret with spaces",
+		in:        `PASSWORD="hunter2 secret phrase" next=ok`,
+		wantRedac: true,
+		mustKeep:  []string{"PASSWORD=", "next=ok"},
+		mustDrop:  []string{"hunter2", "secret phrase"},
+	},
+	{
+		name:      "api key colon form",
+		in:        "api_key: sk_test_abcdefghijklmnop1234",
+		wantRedac: true,
+		mustDrop:  []string{"sk_test_abcdefghijklmnop1234"},
+	},
+	{
+		name:      "split secret long flag",
+		in:        "deploy --password hunter2 --token 'a b c' --env prod",
+		wantRedac: true,
+		mustKeep:  []string{"--password ", "--token ", "--env prod"},
+		mustDrop:  []string{"hunter2", "a b c"},
+	},
+	{
+		name:      "url userinfo redacts only password",
+		in:        "postgres://admin:s3cr3tP4ss@db.example.com:5432/app",
+		wantRedac: true,
+		mustKeep:  []string{"postgres://admin:", "@db.example.com:5432/app"},
+		mustDrop:  []string{"s3cr3tP4ss"},
+	},
+	{
+		name:      "vault service token with keyword",
+		in:        "token = hvs.CAESIFakeVaultTokenValue000000000000",
+		wantRedac: true,
+		mustDrop:  []string{"hvs.CAESIFakeVaultTokenValue000000000000"},
+	},
+	{
+		name:      "pypi token in isolation",
+		in:        "pypi-AgEIcHlwaS5vcmcFakePypiTokenValue00000",
+		wantRedac: true,
+		mustDrop:  []string{"pypi-AgEIcHlwaS5vcmcFakePypiTokenValue00000"},
+	},
+	{
+		name:      "vault token bare no keyword (prefilter regression guard)",
+		in:        "hvs.CAESIFakeVaultTokenValue000000000000",
+		wantRedac: true,
+		mustDrop:  []string{"hvs.CAESIFakeVaultTokenValue000000000000"},
+	},
+	{
+		name:      "aws control shape still redacts",
+		in:        "key=AKIAIOSFODNN7EXAMPLE done",
+		wantRedac: true,
+		mustKeep:  []string{"done"},
+		mustDrop:  []string{"AKIAIOSFODNN7EXAMPLE"},
+	},
+	{
+		name:      "benign hover and pypiserver prose not redacted",
+		in:        "Use hover.css from pypiserver to style buttons.",
+		wantRedac: false,
+		mustKeep:  []string{"hover.css", "pypiserver"},
+	},
+	{
+		name:      "plain text untouched",
+		in:        "Build succeeded. 0 warnings, 0 errors.",
+		wantRedac: false,
+		mustKeep:  []string{"Build succeeded. 0 warnings, 0 errors."},
+	},
+	{
+		name:      "empty stays empty",
+		in:        "",
+		wantRedac: false,
+	},
+}
 
-	for _, tt := range tests {
+func TestScrub(t *testing.T) {
+	for _, tt := range scrubCases {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := Scrub(tt.in)
@@ -358,78 +358,12 @@ func TestMightContainSecret(t *testing.T) {
 	})
 
 	t.Run("superset guard: all TestScrub redacting inputs trigger prefilter", func(t *testing.T) {
-		cases := []struct {
-			name string
-			in   string
-		}{
-			{
-				name: "aws access key",
-				in:   "key=AKIAIOSFODNN7EXAMPLE done",
-			},
-			{
-				name: "github token",
-				in:   "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa here",
-			},
-			{
-				name: "jwt",
-				in:   "auth eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.dozjgNryP4J3jVmNHl0w5N",
-			},
-			{
-				name: "pem private key block",
-				in:   "before\n-----BEGIN RSA PRIVATE KEY-----\nMIIBVgIBADANBg\n-----END RSA PRIVATE KEY-----\nafter",
-			},
-			{
-				name: "authorization bearer header keeps prefix",
-				in:   "Authorization: Bearer abc123secrettoken",
-			},
-			{
-				name: "secret assignment keeps key",
-				in:   "PASSWORD=hunter2 OTHER=ok",
-			},
-			{
-				name: "single-quoted secret",
-				in:   "PASSWORD='hunter2' next=ok",
-			},
-			{
-				name: "double-quoted secret with escaped quote not partially leaked",
-				in:   `PASSWORD="foo\"bar" next=ok`,
-			},
-			{
-				name: "double-quoted secret with spaces",
-				in:   `PASSWORD="hunter2 secret phrase" next=ok`,
-			},
-			{
-				name: "api key colon form",
-				in:   "api_key: sk_test_abcdefghijklmnop1234",
-			},
-			{
-				name: "split secret long flag",
-				in:   "deploy --password hunter2 --token 'a b c' --env prod",
-			},
-			{
-				name: "url userinfo redacts only password",
-				in:   "postgres://admin:s3cr3tP4ss@db.example.com:5432/app",
-			},
-			{
-				name: "vault service token with keyword",
-				in:   "token = hvs.CAESIFakeVaultTokenValue000000000000",
-			},
-			{
-				name: "pypi token in isolation",
-				in:   "pypi-AgEIcHlwaS5vcmcFakePypiTokenValue00000",
-			},
-			{
-				name: "vault token bare no keyword (prefilter regression guard)",
-				in:   "hvs.CAESIFakeVaultTokenValue000000000000",
-			},
-			{
-				name: "aws control shape still redacts",
-				in:   "key=AKIAIOSFODNN7EXAMPLE done",
-			},
-		}
-		for _, tc := range cases {
-			if !mightContainSecret(tc.in) {
-				t.Errorf("superset guard FAILED for case %q: mightContainSecret(%q) = false, but Scrub would redact it (secret-leak gap in prefilter)", tc.name, tc.in)
+		for _, c := range scrubCases {
+			if !c.wantRedac {
+				continue
+			}
+			if !mightContainSecret(c.in) {
+				t.Errorf("superset guard FAILED for case %q: mightContainSecret(%q) = false, but Scrub would redact it (secret-leak gap in prefilter)", c.name, c.in)
 			}
 		}
 	})
