@@ -53,7 +53,7 @@ func TestShouldBypass(t *testing.T) {
 func TestRunBufferedPassthroughScrubs(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
-	out, _, _, code, err := runBuffered(context.Background(), reg, "printf",
+	out, _, _, code, err := runBuffered(context.Background(), reg, reg.Find("printf ..."), "printf",
 		[]string{"deploy token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa done"},
 		"printf ...", "printf ...", tee.NewSpool("printf"))
 	if err != nil {
@@ -73,7 +73,7 @@ func TestRunBufferedPassthroughScrubs(t *testing.T) {
 func TestRunBufferedPropagatesExitCode(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
-	_, _, _, code, err := runBuffered(context.Background(), reg, "sh",
+	_, _, _, code, err := runBuffered(context.Background(), reg, reg.Find("sh -c exit 7"), "sh",
 		[]string{"-c", "exit 7"}, "sh -c exit 7", "sh -c exit 7", tee.NewSpool("sh"))
 	if err != nil {
 		t.Fatalf("runBuffered: %v", err)
@@ -86,7 +86,7 @@ func TestRunBufferedPropagatesExitCode(t *testing.T) {
 func TestRunBufferedDoesNotInventOnEmptyOKOnFailure(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
-	out, errOut, _, code, err := runBuffered(context.Background(), reg, "sh",
+	out, errOut, _, code, err := runBuffered(context.Background(), reg, reg.Find("bun lint"), "sh",
 		[]string{"-c", "echo 'error: lint failed' >&2; exit 1"},
 		"bun lint", "bun lint", tee.NewSpool("bun lint"))
 	if err != nil {
@@ -107,7 +107,7 @@ func TestRunBufferedDoesNotInventOnEmptyOKOnFailure(t *testing.T) {
 func TestRunBufferedDoesNotUseSuccessMatchOnFailure(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
-	out, errOut, _, code, err := runBuffered(context.Background(), reg, "sh",
+	out, errOut, _, code, err := runBuffered(context.Background(), reg, reg.Find("bun build"), "sh",
 		[]string{"-c", "echo '✓ built in 1.23s'; exit 1"},
 		"bun build", "bun build", tee.NewSpool("bun build"))
 	if err != nil {
@@ -152,7 +152,7 @@ func TestRunBufferedStripsStacktraceOnStdout(t *testing.T) {
 	t.Setenv("CTX_WIRE_STRIP_STACKTRACES", "1")
 	reg := mustRegistry(t)
 	p := writeTrace(t)
-	out, _, hint, _, err := runBuffered(context.Background(), reg, "cat",
+	out, _, hint, _, err := runBuffered(context.Background(), reg, reg.Find("go test ./..."), "cat",
 		[]string{p}, "go test ./...", "go test ./...", tee.NewSpool("go"))
 	if err != nil {
 		t.Fatalf("runBuffered: %v", err)
@@ -178,7 +178,7 @@ func TestRunBufferedStripsStacktraceOnUnmergedStderr(t *testing.T) {
 	p := writeTrace(t)
 	// The go filter does not set filter_stderr, so stderr is stripped on its own
 	// path (the case that regressed before stripstack was applied to stderr too).
-	_, errOut, _, _, err := runBuffered(context.Background(), reg, "sh",
+	_, errOut, _, _, err := runBuffered(context.Background(), reg, reg.Find("go test ./..."), "sh",
 		[]string{"-c", "cat '" + p + "' >&2"}, "go test ./...", "go test ./...", tee.NewSpool("go"))
 	if err != nil {
 		t.Fatalf("runBuffered: %v", err)
@@ -199,7 +199,7 @@ func TestRunBufferedStacktraceStrippingOffByDefault(t *testing.T) {
 	// CTX_WIRE_STRIP_STACKTRACES unset -> opt-in feature stays off.
 	reg := mustRegistry(t)
 	p := writeTrace(t)
-	out, _, _, _, err := runBuffered(context.Background(), reg, "cat",
+	out, _, _, _, err := runBuffered(context.Background(), reg, reg.Find("go test ./..."), "cat",
 		[]string{p}, "go test ./...", "go test ./...", tee.NewSpool("go"))
 	if err != nil {
 		t.Fatalf("runBuffered: %v", err)
@@ -218,7 +218,7 @@ func TestRunBufferedFailureTailFallbackOnEmptiedFilter(t *testing.T) {
 	// cargo is filter_stderr: a failed build whose only lines are noise cargo
 	// strips (Compiling/Checking) would otherwise reach the agent as empty , a
 	// failure with no visible reason. The fallback must surface the raw tail.
-	out, _, hint, code, err := runBuffered(context.Background(), reg, "sh",
+	out, _, hint, code, err := runBuffered(context.Background(), reg, reg.Find("cargo build"), "sh",
 		[]string{"-c", "echo '   Compiling foo v0.1.0'; echo '   Checking bar v0.2.0'; exit 1"},
 		"cargo build", "cargo build", tee.NewSpool("cargo build"))
 	if err != nil {
@@ -241,7 +241,7 @@ func TestRunBufferedFailureTailFallbackOnEmptiedFilter(t *testing.T) {
 func TestRunBufferedNoFallbackWhenFailedCommandIsGenuinelyEmpty(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
-	out, _, hint, code, err := runBuffered(context.Background(), reg, "sh",
+	out, _, hint, code, err := runBuffered(context.Background(), reg, reg.Find("cargo build"), "sh",
 		[]string{"-c", "exit 1"},
 		"cargo build", "cargo build", tee.NewSpool("cargo build"))
 	if err != nil {
@@ -264,7 +264,7 @@ func TestRunBufferedNoFallbackWhenStderrCarriesError(t *testing.T) {
 	// make is NOT filter_stderr: its stdout noise is stripped, but the real error
 	// is on stderr and passes raw. The fallback must stay silent , re-adding the
 	// stripped stdout noise next to an already-informative stderr is pure cost.
-	out, errOut, hint, code, err := runBuffered(context.Background(), reg, "sh",
+	out, errOut, hint, code, err := runBuffered(context.Background(), reg, reg.Find("make"), "sh",
 		[]string{"-c", "echo \"make[1]: Entering directory '/x'\"; echo 'make: *** [all] Error 2' >&2; exit 1"},
 		"make", "make", tee.NewSpool("make"))
 	if err != nil {
@@ -306,7 +306,7 @@ func TestRunBufferedJQCompleteJSONPassesWhole(t *testing.T) {
 	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, _, _, code, err := runBuffered(context.Background(), reg, "cat",
+	out, _, _, code, err := runBuffered(context.Background(), reg, reg.Find("jq ."), "cat",
 		[]string{p}, "jq .", "jq .", tee.NewSpool("jq ."))
 	if err != nil {
 		t.Fatalf("runBuffered: %v", err)
@@ -327,7 +327,7 @@ func TestRunBufferedJQRawTextStillCapped(t *testing.T) {
 	reg := mustRegistry(t)
 	// jq -r emits raw text, not JSON. IsCompleteJSON is false, so jsonGuard does
 	// NOT fire and the line caps still apply , this is where jq's caps earn it.
-	out, _, _, code, err := runBuffered(context.Background(), reg, "sh",
+	out, _, _, code, err := runBuffered(context.Background(), reg, reg.Find("jq -r .[]"), "sh",
 		[]string{"-c", "i=1; while [ $i -le 100 ]; do echo value-$i; i=$((i+1)); done"},
 		"jq -r .[]", "jq -r .[]", tee.NewSpool("jq -r"))
 	if err != nil {
@@ -347,7 +347,7 @@ func TestRunBufferedJQRawTextStillCapped(t *testing.T) {
 func TestRunBufferedLaunchError(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
-	_, _, _, _, err := runBuffered(context.Background(), reg, "ctx-wire-no-such-binary-xyz",
+	_, _, _, _, err := runBuffered(context.Background(), reg, reg.Find("ctx-wire-no-such-binary-xyz"), "ctx-wire-no-such-binary-xyz",
 		nil, "ctx-wire-no-such-binary-xyz", "ctx-wire-no-such-binary-xyz", tee.NewSpool("missing"))
 	if err == nil {
 		t.Error("expected launch error for missing binary")

@@ -104,7 +104,7 @@ func TestRunBufferedJSONPassthrough(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _, _, code, err := runBuffered(context.Background(), reg, "cat",
+	out, _, _, code, err := runBuffered(context.Background(), reg, reg.Find("cat "+file), "cat",
 		[]string{file}, "cat "+file, "cat ...", tee.NewSpool("cat"))
 	if err != nil {
 		t.Fatalf("runBuffered: %v", err)
@@ -122,7 +122,7 @@ func TestRunBufferedJSONPassthrough(t *testing.T) {
 func TestRunBufferedDisablesNestedShims(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
-	out, _, _, code, err := runBuffered(context.Background(), reg, "sh",
+	out, _, _, code, err := runBuffered(context.Background(), reg, reg.Find("sh -c ..."), "sh",
 		[]string{"-c", `printf 'shims=%s' "$CTX_WIRE_DISABLE_SHIMS"`},
 		"sh -c ...", "sh -c ...", tee.NewSpool("sh"))
 	if err != nil {

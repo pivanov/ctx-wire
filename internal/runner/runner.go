@@ -78,7 +78,7 @@ func Run(ctx context.Context, reg *filter.Registry, name string, args []string) 
 	}
 
 	// A filter needs the whole output, so buffer (bounded), then emit.
-	out, errOut, hint, code, err := runBuffered(ctx, reg, execName, args, cmdline, scrubbedCmd, spool)
+	out, errOut, hint, code, err := runBuffered(ctx, reg, matched, execName, args, cmdline, scrubbedCmd, spool)
 	if err != nil {
 		return code, err
 	}
@@ -152,7 +152,7 @@ func streamLive(ctx context.Context, name string, args []string, scrubbedCmd str
 // the matching filter (if any), scrubs the result, and spools the full scrubbed
 // output to disk (kept on failure or truncation). It returns the strings to
 // deliver rather than writing them, so both the CLI and MCP paths can reuse it.
-func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []string, cmdline, scrubbedCmd string, spool *tee.Spool) (stdoutText, stderrText, hint string, code int, err error) {
+func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.CompiledFilter, name string, args []string, cmdline, scrubbedCmd string, spool *tee.Spool) (stdoutText, stderrText, hint string, code int, err error) {
 	outCap := &capWriter{max: maxCapture}
 	errCap := &capWriter{max: maxCapture}
 
@@ -171,7 +171,7 @@ func runBuffered(ctx context.Context, reg *filter.Registry, name string, args []
 	mode := "passthrough"
 	filterTruncated := false
 	failureTailFallback := false
-	switch f := reg.Find(cmdline); {
+	switch f := matched; {
 	case f == nil:
 		stdoutText = scrub.Scrub(out)
 		stderrText = scrub.Scrub(errOut)
@@ -402,7 +402,8 @@ func Capture(ctx context.Context, reg *filter.Registry, name string, args []stri
 	cmdline := commandLine(name, args)
 	scrubbedCmd := scrub.Command(name, args)
 	spool := tee.NewSpool(scrubbedCmd)
-	out, errOut, hint, code, err := runBuffered(ctx, reg, execName, args, cmdline, scrubbedCmd, spool)
+	matched := reg.Find(cmdline)
+	out, errOut, hint, code, err := runBuffered(ctx, reg, matched, execName, args, cmdline, scrubbedCmd, spool)
 	if err != nil {
 		return "", code, err
 	}
