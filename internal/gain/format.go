@@ -116,40 +116,7 @@ func FormatThemed(s *Summary, theme ui.Theme) string {
 			fmt.Fprintf(&b, "%s\n", gt.Dim.Render("unattributed = agent unknown: run outside an agent hook, or the invoking agent was not detectable (codex sandbox: `ctx-wire init codex` fixes this; scripts can set CTX_WIRE_AGENT)"))
 		}
 	}
-	actionable := actionableOpportunities(s.Opportunities)
-	if len(actionable) > 0 {
-		fmt.Fprintf(&b, "\n%s\n", gt.Section.Render("Token Opportunities"))
-		limit := min(len(actionable), 10)
-		rows := make([][]string, 0, limit)
-		for i := 0; i < limit; i++ {
-			st := actionable[i]
-			rows = append(rows, []string{
-				fmt.Sprintf("%d.", i+1),
-				st.Program,
-				st.Mode,
-				st.Filter,
-				fmt.Sprintf("%d", st.Count),
-				ui.HumanBytes(st.EmittedBytes),
-				gt.percentBare(opportunitySavingsPct(st)),
-			})
-		}
-		b.WriteString(gt.opportunityTable(rows))
-		b.WriteByte('\n')
-		if len(actionable) > limit {
-			fmt.Fprintf(&b, "%s\n", gt.Dim.Render(fmt.Sprintf("... %d more opportunities", len(actionable)-limit)))
-		}
-	}
 	return b.String()
-}
-
-func actionableOpportunities(rows []OpportunityStat) []OpportunityStat {
-	out := make([]OpportunityStat, 0, len(rows))
-	for _, row := range rows {
-		if IsActionableOpportunity(row) {
-			out = append(out, row)
-		}
-	}
-	return out
 }
 
 func programSavingsPct(st CommandStat) float64 {
@@ -167,13 +134,6 @@ func maxProgramSaved(stats []CommandStat) int64 {
 		}
 	}
 	return max
-}
-
-func opportunitySavingsPct(st OpportunityStat) float64 {
-	if st.RawBytes == 0 {
-		return 0
-	}
-	return float64(st.SavedBytes) / float64(st.RawBytes) * 100
 }
 
 type gainTheme struct {
@@ -279,32 +239,6 @@ func (t gainTheme) tableWith(headers []string, rightAlign map[int]bool, rows [][
 				return style.Align(lipgloss.Right).Padding(0, 1)
 			}
 			return style.Padding(0, 1)
-		}).
-		String()
-}
-
-func (t gainTheme) opportunityTable(rows [][]string) string {
-	headerStyle := t.Header
-	cellStyle := t.Cell
-	borderStyle := t.Border
-	return table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderLeft(false).
-		BorderRight(false).
-		BorderStyle(borderStyle).
-		Headers("#", "Program", "Mode", "Filter", "Count", "Emitted", "Saved%").
-		Rows(rows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == table.HeaderRow {
-				if col == 0 || col == 4 || col == 5 || col == 6 {
-					return headerStyle.Align(lipgloss.Right).Padding(0, 1)
-				}
-				return headerStyle.Padding(0, 1)
-			}
-			if col == 0 || col == 4 || col == 5 || col == 6 {
-				return cellStyle.Align(lipgloss.Right).Padding(0, 1)
-			}
-			return cellStyle.Padding(0, 1)
 		}).
 		String()
 }

@@ -779,25 +779,6 @@ func TestFormatPlainHasNoANSI(t *testing.T) {
 	}
 }
 
-func TestFormatShowsOpportunities(t *testing.T) {
-	s := &Summary{
-		Commands:     1,
-		RawBytes:     3000,
-		EmittedBytes: 2900,
-		SavedBytes:   100,
-		Opportunities: []OpportunityStat{
-			{Program: "go", Mode: "filtered", Filter: "go", Count: 1, RawBytes: 3000, EmittedBytes: 2900, SavedBytes: 100},
-		},
-	}
-
-	out := Format(s)
-	for _, want := range []string{"Token Opportunities", "go", "filtered", "2.9 KB"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("Format missing %q:\n%s", want, out)
-		}
-	}
-}
-
 func TestFormatStyledUsesANSI(t *testing.T) {
 	s := &Summary{
 		Commands:     1,
