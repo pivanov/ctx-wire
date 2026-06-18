@@ -170,7 +170,7 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	filterName := ""
 	mode := "passthrough"
 	filterTruncated := false
-	failureTailFallback := false
+	emptyTailFallback := false
 	switch f := matched; {
 	case f == nil:
 		stdoutText = scrub.Scrub(out)
@@ -201,20 +201,21 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 				// too when the filter did not already merge it into stdout.
 				stderrText = scrub.Scrub(maybeStripStack(errOut, &filterTruncated))
 			}
-			// Safety net: a failed command whose filter stripped every line would
-			// otherwise reach the agent as empty output , a failure with no visible
-			// reason. Fall back to the tail of the raw filtered input, but only when
-			// stderrText is also empty: for the common stderr-on-failure tools the
-			// error is already visible there, so a raw stdout tail would just re-add
-			// the noise the filter correctly removed. stderrText is empty exactly
-			// when filter_stderr consumed the stream, the error went to stdout, or
-			// the streams were merged with 2>&1.
-			if failed &&
-				strings.TrimSpace(stdoutText) == "" &&
+			// Safety net: a command whose filter stripped every line would otherwise
+			// reach the agent as empty output. Fall back to the tail of the raw
+			// filtered input, but only when stderrText is also empty: for the common
+			// stderr-on-failure tools the error is already visible there, so a raw
+			// stdout tail would just re-add the noise the filter correctly removed.
+			// stderrText is empty exactly when filter_stderr consumed the stream, the
+			// error went to stdout, or the streams were merged with 2>&1.
+			// Filters with on_empty are naturally exempt (they emit a non-empty
+			// message, so stdoutText=="" is false). Legitimately-empty output (e.g.
+			// grep no-match) is excluded by text != "" (raw was empty too).
+			if strings.TrimSpace(stdoutText) == "" &&
 				strings.TrimSpace(stderrText) == "" &&
 				strings.TrimSpace(text) != "" {
-				stdoutText = withTrailingNewline(scrub.Scrub(tailLines(text, failureTailLines)))
-				failureTailFallback = true
+				stdoutText = withTrailingNewline(scrub.Scrub(tailLines(text, emptyTailLines)))
+				emptyTailFallback = true
 			}
 		}
 	}
@@ -231,8 +232,8 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	if filterTruncated {
 		meta = append(meta, "[ctx-wire: filter output truncated; full log spooled]")
 	}
-	if failureTailFallback {
-		meta = append(meta, "[ctx-wire: filter emptied a failed command; showing raw tail]")
+	if emptyTailFallback {
+		meta = append(meta, "[ctx-wire: filter emptied the output; showing raw tail]")
 	}
 
 	// Dedup: if an eligible read-only command re-ran with byte-identical output,
@@ -251,17 +252,17 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	recordGain(scrubbedCmd, filterName, mode, outCap.total+errCap.total, len(stdoutText)+len(stderrText), code)
 	recordRecent(scrubbedCmd, filterName, mode, outCap, errCap, stdoutText, stderrText, code)
 
-	if path, ok := spool.Finalize(code != 0 || truncated); ok {
+	if path, ok := spool.Finalize(code != 0 || truncated || emptyTailFallback); ok {
 		meta = append(meta, tee.Hint(path))
 	}
 	hint = strings.Join(meta, "\n")
 	return stdoutText, stderrText, hint, code, nil
 }
 
-// failureTailLines bounds how many trailing lines of raw output the failure
-// fallback surfaces when a filter empties a failed command. The full scrubbed
+// emptyTailLines bounds how many trailing lines of raw output the empty-output
+// fallback surfaces when a filter empties a command's output. The full scrubbed
 // output is always spooled, so this only needs to be enough to show the error.
-const failureTailLines = 20
+const emptyTailLines = 20
 
 // tailLines returns the last n lines of s (a trailing newline is ignored).
 func tailLines(s string, n int) string {

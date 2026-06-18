@@ -233,8 +233,48 @@ func TestRunBufferedFailureTailFallbackOnEmptiedFilter(t *testing.T) {
 	if !strings.Contains(out, "Compiling foo") {
 		t.Fatalf("fallback lost the raw tail: %q", out)
 	}
-	if !strings.Contains(hint, "filter emptied a failed command") {
+	if !strings.Contains(hint, "filter emptied the output") {
 		t.Fatalf("missing fallback hint: %q", hint)
+	}
+}
+
+// TestRunBufferedEmptyTailFallbackOnSuccessfulFilter verifies that a SUCCESSFUL
+// command (exit 0) whose matched filter strips all output to empty still gets
+// the raw-tail fallback and keeps its spool for full-raw recovery. This is the
+// symmetric sibling of the failure-fallback test above: the `failed &&` guard
+// was the original bug (a docker filter that only emitted cache/layer lines
+// would silently return empty on success, causing the agent to retry).
+func TestRunBufferedEmptyTailFallbackOnSuccessfulFilter(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CTX_WIRE_TEE_DIR", dir)
+	reg := mustRegistry(t)
+	// docker filter strips all #N [...] / #N CACHED lines with no on_empty.
+	// A successful build whose output is only cache hits would be emptied.
+	out, _, hint, code, err := runBuffered(context.Background(), reg, reg.Find("docker build ."), "sh",
+		[]string{"-c", "echo '#1 [internal] load build definition from Dockerfile'; echo '#2 CACHED [2/5] WORKDIR /app'"},
+		"docker build .", "docker build .", tee.NewSpool("docker build"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatal("emptied successful filter must fall back to the raw tail, got empty stdout")
+	}
+	if !strings.Contains(out, "load build definition") {
+		t.Fatalf("fallback lost the raw tail: %q", out)
+	}
+	if !strings.Contains(hint, "filter emptied the output") {
+		t.Fatalf("missing fallback hint: %q", hint)
+	}
+	// The spool must be kept (full-raw recovery on success).
+	if !strings.Contains(hint, "[full output:") {
+		t.Fatalf("spool must be kept when emptyTailFallback fires: %q", hint)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 spool file to be kept, got %d", len(entries))
 	}
 }
 
@@ -253,7 +293,7 @@ func TestRunBufferedNoFallbackWhenFailedCommandIsGenuinelyEmpty(t *testing.T) {
 	if strings.TrimSpace(out) != "" {
 		t.Fatalf("genuinely-empty failure must stay empty, got %q", out)
 	}
-	if strings.Contains(hint, "filter emptied a failed command") {
+	if strings.Contains(hint, "filter emptied the output") {
 		t.Fatalf("must not synthesize a tail when there was no output: %q", hint)
 	}
 }
@@ -273,7 +313,7 @@ func TestRunBufferedNoFallbackWhenStderrCarriesError(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if strings.Contains(hint, "filter emptied a failed command") {
+	if strings.Contains(hint, "filter emptied the output") {
 		t.Fatalf("must not fall back when stderr already carries the error: %q", hint)
 	}
 	if !strings.Contains(errOut, "Error 2") {
