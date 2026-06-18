@@ -1,0 +1,83 @@
+[filters.rubocop]
+description = "Compact RuboCop output - strip the inspecting header and the per-file progress line, keep every offense and the summary"
+# RuboCop prints `Inspecting N files`, then a one-char-per-file progress line
+# (`.` per clean file, `C`/`W`/`E`/`F` per offense, e.g. `....................CW`),
+# then offenses, then a summary. The progress line scales with repo size (a
+# 500-file run is a 500-char block of pure noise), so stripping it saves real
+# tokens that grow with the repo. We keep the `Offenses:` header, every offense
+# block, and the `N files inspected, M offenses detected` summary.
+# In a configured repo (a .rubocop.yml present) the result is on stdout, so we do
+# not filter stderr; the unconfigured "new cops not configured" nag is stderr and
+# config-dependent, left for a possible v2.
+match_command = "^(?:bundle\\s+exec\\s+)?(?:.*/)?rubocop\\b"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Inspecting \\d+ files?$",
+  # The progress line is composed solely of the per-file markers. Offense lines
+  # (file:line:col), source-echo lines, and caret lines all contain characters
+  # outside this class, so only the progress line matches. A source line that is
+  # coincidentally all of these characters is possible but rare, and because the
+  # offense location lines are always kept, a false strip would drop only a code
+  # echo, never the offense identity.
+  "^[.CWEF]+$",
+]
+max_lines = 200
+
+# Real captured clean run (20 files, configured repo, stdout). Strips the header
+# and the dots line, keeps the summary. Gated: this saving is concentrated and
+# scales, so the gate catches a future rubocop renaming the header or progress
+# format. The clean run is the common CI case.
+[[tests.rubocop]]
+name = "clean: strip inspecting header and progress dots, keep summary"
+input = """
+Inspecting 20 files
+....................
+
+20 files inspected, no offenses detected
+"""
+expected = "20 files inspected, no offenses detected"
+min_saved_percent = 40
+
+# Real captured noisy run (22 files, 2 with offenses). rubocop exits non-zero on
+# offenses, so failed = true. The strip must remove the header and the
+# `....................CW` progress line but keep the Offenses header, every
+# offense block (location, source echo, caret), and the summary.
+[[tests.rubocop]]
+name = "offenses on a non-zero exit: every offense and the summary survive"
+failed = true
+input = """
+Inspecting 22 files
+....................CW
+
+Offenses:
+
+bad1.rb:1:1: C: [Correctable] Style/FrozenStringLiteralComment: Missing frozen string literal comment.
+x=1
+^
+bad1.rb:1:2: C: [Correctable] Layout/SpaceAroundOperators: Surrounding space missing for operator =.
+x=1
+ ^
+bad2.rb:1:5: C: Naming/MethodName: Use snake_case for method names.
+def Foo
+    ^^^
+bad2.rb:2:3: W: [Correctable] Lint/UselessAssignment: Useless assignment to variable - y.
+  y = 1
+  ^
+
+22 files inspected, 7 offenses detected, 6 offenses autocorrectable
+"""
+expected = """Offenses:
+bad1.rb:1:1: C: [Correctable] Style/FrozenStringLiteralComment: Missing frozen string literal comment.
+x=1
+^
+bad1.rb:1:2: C: [Correctable] Layout/SpaceAroundOperators: Surrounding space missing for operator =.
+x=1
+ ^
+bad2.rb:1:5: C: Naming/MethodName: Use snake_case for method names.
+def Foo
+    ^^^
+bad2.rb:2:3: W: [Correctable] Lint/UselessAssignment: Useless assignment to variable - y.
+  y = 1
+  ^
+22 files inspected, 7 offenses detected, 6 offenses autocorrectable"""
