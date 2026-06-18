@@ -302,6 +302,11 @@ func TestRegistryFind(t *testing.T) {
 		{"python unittest matches", "python -m unittest discover", "python-unittest"},
 		{"bundle exec rspec matches", "bundle exec rspec", "rspec"},
 		{"phpunit matches", "vendor/bin/phpunit", "phpunit"},
+		// uv add/lock/remove match uv-sync; uv run still routes to inner tool.
+		{"uv add matches uv-sync", "uv add requests", "uv-sync"},
+		{"uv lock matches uv-sync", "uv lock", "uv-sync"},
+		{"uv remove matches uv-sync", "uv remove flask", "uv-sync"},
+		{"uv run pytest still routes to pytest not uv-sync", "uv run pytest", "pytest"},
 	}
 	for _, tt := range tests {
 		tt := tt

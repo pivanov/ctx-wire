@@ -1,12 +1,14 @@
 [filters.uv-sync]
-description = "Compact uv sync/pip install output - strip downloads, short-circuit when up-to-date"
-match_command = "^uv\\s+(sync|pip\\s+install)\\b"
+description = "Compact uv sync/add/lock/remove/pip install output - strip downloads and venv ceremony, short-circuit when up-to-date"
+match_command = "^uv\\s+(sync|add|lock|remove|pip\\s+install)\\b"
 strip_ansi = true
 strip_lines_matching = [
   "^\\s*$",
   "^\\s+Downloading ",
   "^\\s+Using cached ",
   "^\\s+Preparing ",
+  "^Using CPython ",
+  "^Creating virtual environment at:",
 ]
 match_output = [
   { pattern = "Audited \\d+ package", message = "ok (up to date)" },
@@ -44,3 +46,30 @@ Resolved 5 packages in 12ms
 Audited 5 packages in 0.01ms
 """
 expected = "Resolved 5 packages in 12ms\nAudited 5 packages in 0.01ms"
+
+[[tests.uv-sync]]
+name = "uv add strips venv ceremony keeps result lines"
+input = """
+Using CPython 3.14.3
+Creating virtual environment at: .venv
+Resolved 2 packages in 57ms
+Installed 1 package in 6ms
+ + idna==3.18
+"""
+expected = "Resolved 2 packages in 57ms\nInstalled 1 package in 6ms\n + idna==3.18"
+
+[[tests.uv-sync]]
+name = "uv lock keeps resolve line"
+input = """
+Resolved 2 packages in 2ms
+"""
+expected = "Resolved 2 packages in 2ms"
+
+[[tests.uv-sync]]
+name = "uv remove keeps uninstall result lines"
+input = """
+Resolved 1 package in 2ms
+Uninstalled 1 package in 0.83ms
+ - idna==3.18
+"""
+expected = "Resolved 1 package in 2ms\nUninstalled 1 package in 0.83ms\n - idna==3.18"
