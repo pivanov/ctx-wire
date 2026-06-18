@@ -7,7 +7,7 @@ import (
 
 // builtinFilterCount is the number of built-in filter definitions.
 // Update this when filters are added or removed under filters/.
-const builtinFilterCount = 145
+const builtinFilterCount = 146
 
 // TestBuiltinConformance runs every inline [[tests.*]] case shipped with the
 // built-in filters and asserts each filter's expected output. These inline

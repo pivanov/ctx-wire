@@ -1,0 +1,102 @@
+[filters.next-build]
+description = "Compact `next build` output - strip build-progress ceremony, keep the route table, compile/static-page success markers, and the full build-error block"
+# `next build` (both Turbopack and the older webpack pipeline) prints a wall of
+# progress ceremony (TypeScript phase, "Creating an optimized production build",
+# per-batch "Generating static pages (x/N)", "Collecting page data", "Finalizing
+# page optimization") around a small, useful route table. We strip only those
+# ceremony phrases and blank lines; the route table, the `▲ Next.js` header, the
+# `✓ Compiled successfully` line, and the final `✓ Generating static pages (N/N)`
+# line all survive. Bare `next build` and the local-bin form are matched; `npx
+# next build` is left to the broader node-package filter (it starts with `npx`).
+match_command = "^(?:.*/)?next\\s+build\\b"
+strip_ansi = true
+# Ceremony lands on stdout, but a real build error lands on STDERR. We filter the
+# combined stream so the stdout ceremony is stripped while the error block (which
+# matches none of the ceremony phrases below) survives, ansi-stripped and clean.
+# Strip-only, so this is never net-negative even when the build fails.
+filter_stderr = true
+strip_lines_matching = [
+  "^\\s*$",
+  "Running TypeScript",
+  "Finished TypeScript",
+  "Checking validity of types",
+  "Creating an optimized production build",
+  "Collecting page data",
+  "^\\s+Generating static pages",
+  "Finalizing page optimization",
+]
+max_lines = 120
+
+# Real captured `next build` (Next 16.2.9 Turbopack), small 4-route app, success
+# (stdout only). Strips the ceremony, keeps the header, both ✓ markers, the route
+# table, and the legend. Gated: if a future Next renames a ceremony phrase the
+# strip silently stops and this saving collapses, which this gate catches.
+[[tests.next-build]]
+name = "success: strip build ceremony, keep route table and success markers"
+input = """
+▲ Next.js 16.2.9 (Turbopack)
+
+  Running TypeScript ...
+  Finished TypeScript in 35ms ...
+  Creating an optimized production build ...
+✓ Compiled successfully in 515ms
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/4) ...
+  Generating static pages using 7 workers (1/4)
+  Generating static pages using 7 workers (2/4)
+  Generating static pages using 7 workers (3/4)
+✓ Generating static pages using 7 workers (4/4) in 110ms
+  Finalizing page optimization ...
+
+Route (pages)
+┌ ○ /
+├ ○ /404
+├ ○ /about
+└ ƒ /api/hello
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+"""
+expected = """▲ Next.js 16.2.9 (Turbopack)
+✓ Compiled successfully in 515ms
+✓ Generating static pages using 7 workers (4/4) in 110ms
+Route (pages)
+┌ ○ /
+├ ○ /404
+├ ○ /about
+└ ƒ /api/hello
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand"""
+min_saved_percent = 30
+
+# Real captured build error (Next 16.2.9 Turbopack), ansi already stripped. The
+# error block is on stderr and contains no ceremony phrase, so the entire block
+# (the "> Build error occurred" line, the module-not-found, the source context,
+# the docs link, the stack) must survive. failed = true models the non-zero exit.
+[[tests.next-build]]
+name = "failed build: entire error block survives on stderr"
+failed = true
+stderr = """
+> Build error occurred
+Error: Turbopack build failed with 1 errors:
+./pages/broken.js:2:1
+Module not found: Can't resolve './does-not-exist'
+  1 | export default function Broken(){ return <h1>{x}</h1> }
+> 2 | import nope from "./does-not-exist"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+https://nextjs.org/docs/messages/module-not-found
+    at <unknown> (./pages/broken.js:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+"""
+expected = """> Build error occurred
+Error: Turbopack build failed with 1 errors:
+./pages/broken.js:2:1
+Module not found: Can't resolve './does-not-exist'
+  1 | export default function Broken(){ return <h1>{x}</h1> }
+> 2 | import nope from "./does-not-exist"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+https://nextjs.org/docs/messages/module-not-found
+    at <unknown> (./pages/broken.js:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)"""
