@@ -17,8 +17,14 @@ strip_ansi = true
 filter_stderr = true
 strip_lines_matching = [
   "^\\s*$",
-  "Running TypeScript",
-  "Finished TypeScript",
+  # The TypeScript-phase lines are Turbopack-only and always indented, so we
+  # anchor them (no false match on a stray line mentioning "Running TypeScript").
+  "^\\s+Running TypeScript",
+  "^\\s+Finished TypeScript",
+  # These phrases are intentionally UNANCHORED so one pattern covers both the
+  # Turbopack form (leading whitespace) and the older webpack form (an "info  -"
+  # prefix). They are distinctive enough that a stray match is not a real risk,
+  # and the filter is strip-only so a false strip would still never be negative.
   "Checking validity of types",
   "Creating an optimized production build",
   "Collecting page data",
