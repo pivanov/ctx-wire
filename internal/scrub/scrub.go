@@ -60,7 +60,7 @@ var rules = []rule{
 	// The value alternation captures single-quoted, double-quoted (which may
 	// contain spaces and backslash-escaped quotes), or bare tokens, so the whole
 	// secret is redacted rather than stopping at the first escaped quote.
-	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret)\s*[:=]\s*)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s]+)`), replacement: "${1}" + redacted},
+	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret)\s*[:=]\s*)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s=>][^\s]*)`), replacement: "${1}" + redacted},
 }
 
 // Scrub redacts known secret shapes from s. It never returns an error and is

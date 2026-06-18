@@ -138,6 +138,31 @@ var scrubCases = []struct {
 		in:        "",
 		wantRedac: false,
 	},
+	{
+		name:      "php strict-equality not redacted",
+		in:        "if ($user->password === hash('x', $i)) {",
+		wantRedac: false,
+		mustKeep:  []string{"==="},
+	},
+	{
+		name:      "loose-equality on token not redacted",
+		in:        "token == $expected",
+		wantRedac: false,
+		mustKeep:  []string{"=="},
+	},
+	{
+		name:      "php array arrow not redacted",
+		in:        "secret => 'required'",
+		wantRedac: false,
+		mustKeep:  []string{"=>", "required"},
+	},
+	{
+		name:      "real secret assignment still redacts",
+		in:        "password = ghp_realsecret123 here",
+		wantRedac: true,
+		mustKeep:  []string{"here"},
+		mustDrop:  []string{"ghp_realsecret123"},
+	},
 }
 
 func TestScrub(t *testing.T) {
