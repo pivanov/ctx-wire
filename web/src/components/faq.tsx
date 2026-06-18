@@ -13,7 +13,7 @@ const ITEMS = [
   },
   {
     q: "Can it corrupt something my agent parses?",
-    a: "That risk is engineered against. Command substitutions like $(cat config.json) are never rewritten, streaming and interactive commands are auto-detected and bypassed, and complete JSON output passes through whole (up to 1 MiB), never line-cut mid-structure. 370+ conformance tests pin every filter's behavior on each release.",
+    a: "That risk is engineered against. Command substitutions like $(cat config.json) are never rewritten, streaming and interactive commands are auto-detected and bypassed, and complete JSON output passes through whole (up to 1 MiB), never line-cut mid-structure. 390+ conformance tests pin every filter's behavior on each release.",
   },
   {
     q: "What happens when a command fails?",
