@@ -39,8 +39,9 @@ type runOutput struct {
 const toolDescription = "Run a shell command and return its output with noise filtered out and " +
 	"secrets redacted, using far fewer tokens than raw output. Prefer this over running commands " +
 	"in the native terminal: pass the executable in 'command' and each argument as a separate " +
-	"element of 'args' (do not include shell operators like |, &&, or redirects). On failure the " +
-	"full output is saved to disk and referenced in the result."
+	"element of 'args' (do not include shell operators like |, &&, or redirects). When output is " +
+	"truncated or a command fails, the full scrubbed output is spooled to disk and the result ends " +
+	"with a '[full output: ctx-wire fetch <hash>]' hint; run that command to recover it."
 
 // readInput is the structured argument for the read_file tool.
 type readInput struct {

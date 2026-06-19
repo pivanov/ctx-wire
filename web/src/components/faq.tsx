@@ -9,7 +9,7 @@ import { SectionEyebrow } from "./section-heading";
 const ITEMS = [
   {
     q: "What if a filter doesn't recognize the output?",
-    a: "It passes through untouched, up to a generous ceiling. A filter only compresses output it positively recognizes, and unknown output reaches the agent unmodified unless a single dump runs past roughly 64 KB; then the head and tail are kept, the omitted middle is marked explicitly, and the full output stays on disk. The ceiling scales with the truncate dial in config, and setting it to none disables even that.",
+    a: "It passes through untouched, up to a generous ceiling. A filter only compresses output it positively recognizes, and unknown output reaches the agent unmodified unless a single dump runs past roughly 64 KB; then the head and tail are kept, the omitted middle is marked explicitly, and the full output stays on disk, recoverable any time with ctx-wire fetch <hash>. The ceiling scales with the truncate dial in config, and setting it to none disables even that.",
   },
   {
     q: "Can it corrupt something my agent parses?",
@@ -17,7 +17,7 @@ const ITEMS = [
   },
   {
     q: "What happens when a command fails?",
-    a: "The failure reaches your agent intact. Exit codes pass through, a failed command keeps its output, and a filter can never collapse a failure into a fake success. If filtering would leave a failed command with nothing visible, the runner falls back to the raw tail, and the full output is always kept on disk.",
+    a: "The failure reaches your agent intact. Exit codes pass through, a failed command keeps its output, and a filter can never collapse a failure into a fake success. If filtering would leave a failed command with nothing visible, the runner falls back to the raw tail, and the full output is always kept on disk, recoverable with ctx-wire fetch <hash>.",
   },
   {
     q: "Will it block or interrupt my agent?",
