@@ -119,7 +119,7 @@ func TestPyRunnerPrefixConsistency(t *testing.T) {
 		{"basedpyright src", "basedpyright"},
 	}
 	// Bare invocation plus every prefix form the {{py-runner}} token must cover.
-	prefixes := []string{"", "uv run ", "poetry run ", "pipenv run ", "pdm run ", "hatch run ", "rye run ", "python -m ", "python3 -m "}
+	prefixes := []string{"", "uv run ", "poetry run ", "pipenv run ", "pdm run ", "hatch run ", "rye run ", "uvx ", "uv tool run ", "python -m ", "python3 -m "}
 	for _, tool := range tools {
 		for _, p := range prefixes {
 			cmd := p + tool.invoke

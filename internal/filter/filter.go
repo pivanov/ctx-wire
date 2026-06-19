@@ -216,14 +216,15 @@ const (
 	runnerPrefix = `(?:npx|bunx)\s+|(?:pnpm|yarn)\s+(?:dlx|exec)\s+|bun\s+x\s+`
 
 	// pyRunnerToken expands to the canonical set of Python tool-runner prefixes:
-	// a `<manager> run` form (uv/poetry/pipenv/pdm/hatch/rye) or `python -m`.
-	// Like runnerToken, defining it once keeps the Python cohort (pytest, ruff,
-	// mypy, pylint, flake8, pyright, basedpyright) consistent instead of each
-	// hand-rolling a partial prefix that drifts , which is exactly what happened:
-	// every one matched only `uv run` and silently missed the far more common
-	// `poetry run` (and pipenv/pdm/hatch/rye). Pinned by TestPyRunnerPrefixConsistency.
+	// a `<manager> run` form (uv/poetry/pipenv/pdm/hatch/rye), uv's ephemeral
+	// `uvx` / `uv tool run`, or `python -m`. Like runnerToken, defining it once
+	// keeps the Python cohort (pytest, ruff, mypy, pylint, flake8, pyright,
+	// basedpyright) consistent instead of each hand-rolling a partial prefix that
+	// drifts , which is exactly what happened: every one matched only `uv run` and
+	// silently missed the far more common `poetry run` (and pipenv/pdm/hatch/rye)
+	// and the ephemeral `uvx ruff`. Pinned by TestPyRunnerPrefixConsistency.
 	pyRunnerToken  = "{{py-runner}}"
-	pyRunnerPrefix = `(?:uv|poetry|pipenv|pdm|hatch|rye)\s+run\s+|python3?\s+-m\s+`
+	pyRunnerPrefix = `(?:uv|poetry|pipenv|pdm|hatch|rye)\s+run\s+|uvx\s+|uv\s+tool\s+run\s+|python3?\s+-m\s+`
 )
 
 func expandRunnerToken(pattern string) string {
