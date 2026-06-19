@@ -135,6 +135,10 @@ export const topPrograms = (stats: TImpactStats): TProgramStats[] => {
     .slice(0, 10);
 };
 
+// All countries with saved context, ranked by bytes saved. No slice on purpose:
+// the "Countries" stat and the "N reporting" label derive from this, so it must
+// reflect the true reach, not a top-N. The pill list is flex-wrap, so it grows
+// gracefully as more countries report.
 export const topCountries = (stats: TImpactStats): TCountryStats[] => {
   return [...(stats.countries || [])]
     .filter(
@@ -142,8 +146,7 @@ export const topCountries = (stats: TImpactStats): TCountryStats[] => {
         countryCode(c) &&
         Number(c.bytes_saved || c.tokens_saved || c.commands || 0) > 0
     )
-    .sort((a, b) => Number(b.bytes_saved || 0) - Number(a.bytes_saved || 0))
-    .slice(0, 10);
+    .sort((a, b) => Number(b.bytes_saved || 0) - Number(a.bytes_saved || 0));
 };
 
 export const reportText = (stats: TImpactStats): string => {

@@ -154,7 +154,7 @@ export const GlobePanel = ({ stats }: { stats: TImpactStats }) => {
         </motion.div>
 
         <CountryPills
-          rows={rows.slice(0, 10)}
+          rows={rows}
           activeCode={focus?.code ?? null}
           onSelect={setFocus}
         />
