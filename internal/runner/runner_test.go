@@ -337,6 +337,75 @@ func TestRunBufferedNoFallbackWhenStderrCarriesError(t *testing.T) {
 	}
 }
 
+// TestRunBufferedFailureFooterDroppedWhenNetNegative pins the net-negative guard:
+// a small failure the filter could not shrink must NOT grow by a recovery footer.
+// The agent already has the full output, so the "[full output: ...]" pointer is
+// pure cost and is dropped.
+func TestRunBufferedFailureFooterDroppedWhenNetNegative(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	out, _, hint, code, err := runBuffered(context.Background(), reg, reg.Find("definitely-no-filter-xyz"), "sh",
+		[]string{"-c", "echo oops; exit 1"},
+		"definitely-no-filter-xyz", "definitely-no-filter-xyz", tee.NewSpool("x"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if strings.Contains(hint, "[full output:") {
+		t.Errorf("net-negative failure must not append a recovery footer: hint=%q", hint)
+	}
+	if strings.TrimSpace(out) != "oops" {
+		t.Errorf("output must be the raw oops, not grown: %q", out)
+	}
+}
+
+// TestRunBufferedFailureFooterKeptWhenFilterSavedMore pins the other side: when the
+// filter removed far more than the footer costs, the recovery pointer is kept.
+func TestRunBufferedFailureFooterKeptWhenFilterSavedMore(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	// make strips the "Entering directory" noise; 60 noisy lines dwarf the footer.
+	out, _, hint, code, err := runBuffered(context.Background(), reg, reg.Find("make"), "sh",
+		[]string{"-c", "for i in $(seq 1 60); do echo \"make[1]: Entering directory '/x'\"; done; echo 'make: *** [all] Error 2' >&2; exit 1"},
+		"make", "make", tee.NewSpool("make"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(hint, "[full output:") {
+		t.Errorf("a failure where the filter saved >> footer must keep the recovery pointer: hint=%q", hint)
+	}
+	if strings.Contains(out, "Entering directory") {
+		t.Errorf("the stripped noise must not be in stdout: %q", out)
+	}
+}
+
+// TestRunBufferedNetNegativeFallbackStaysScrubbed pins that the raw fallback the
+// net-negative guard emits is the SCRUBBED raw, never the unsanitized bytes.
+func TestRunBufferedNetNegativeFallbackStaysScrubbed(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	out, _, _, code, err := runBuffered(context.Background(), reg, reg.Find("definitely-no-filter-xyz"), "sh",
+		[]string{"-c", "echo 'api_key=SUPERSECRETVALUE'; exit 1"},
+		"definitely-no-filter-xyz", "definitely-no-filter-xyz", tee.NewSpool("x"))
+	if err != nil {
+		t.Fatalf("runBuffered: %v", err)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if strings.Contains(out, "SUPERSECRETVALUE") {
+		t.Errorf("net-negative raw fallback leaked a secret: %q", out)
+	}
+	if !strings.Contains(out, "[REDACTED]") {
+		t.Errorf("expected the secret redacted in the raw fallback: %q", out)
+	}
+}
+
 func TestRunBufferedJQCompleteJSONPassesWhole(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
@@ -449,6 +518,31 @@ func TestStreamLiveSpoolsOnFailure(t *testing.T) {
 	data, _ := os.ReadFile(dir + "/" + entries[0].Name())
 	if strings.Contains(string(data), "hunter2") {
 		t.Error("secret leaked into spool file")
+	}
+}
+
+// TestStreamLiveNoFooterOnPlainFailure pins the passthrough net-negative guard: the
+// full scrubbed output already streamed live, so a small failure with nothing
+// omitted must not append a "[full output: ...]" footer (the spool is still kept
+// for recovery, just not pointed at).
+func TestStreamLiveNoFooterOnPlainFailure(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CTX_WIRE_TEE_DIR", dir)
+	var out, errOut bytes.Buffer
+	code, err := streamLive(context.Background(), "sh",
+		[]string{"-c", "echo oops; exit 1"},
+		"sh -c oops", tee.NewSpool("oops"), &out, &errOut)
+	if err != nil {
+		t.Fatalf("streamLive: %v", err)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if strings.Contains(errOut.String(), "[full output:") {
+		t.Errorf("plain passthrough failure must not append a recovery footer: %q", errOut.String())
+	}
+	if strings.TrimSpace(out.String()) != "oops" {
+		t.Errorf("streamed output must be unchanged, got %q", out.String())
 	}
 }
 

@@ -140,10 +140,14 @@ func streamLive(ctx context.Context, name string, args []string, scrubbedCmd str
 		return code, err
 	}
 	recordGain(scrubbedCmd, "", "passthrough", rawOut.n+rawErr.n, emitOut.n+emitErr.n, code)
-	// Keep the spool when the ceiling fired, exactly like the buffered path
-	// keeps it on truncation: never omit bytes without a recovery path.
+	// Keep the spool on failure or truncation, but only POINT at it when the
+	// ceiling actually omitted bytes. Passthrough already streamed the full scrubbed
+	// output live, so on a plain failure with nothing omitted the agent already has
+	// everything and a "[full output: ...]" footer would be pure net-negative cost.
 	if path, ok := spool.Finalize(code != 0 || truncated); ok {
-		fmt.Fprintln(stderr, tee.Hint(path))
+		if truncated {
+			fmt.Fprintln(stderr, tee.Hint(path))
+		}
 	}
 	return code, nil
 }
@@ -249,12 +253,40 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 		}
 	}
 
+	// Spool retention + net-negative guard. The recovery footer earns its bytes
+	// only when content was actually omitted. On a failure with no truncation, if
+	// the filtered output plus the footer is not smaller than the full scrubbed
+	// raw, the raw is complete and no larger, so emit it instead and drop the
+	// footer and spool. Truncation and the empty-tail fallback always keep the
+	// footer (genuine recovery). The fallback emits the already-scrubbed raw, never
+	// unsanitized bytes.
+	recovery := truncated || emptyTailFallback
+	if path, ok := spool.Finalize(code != 0 || recovery); ok {
+		footer := tee.Hint(path)
+		rawStdout, rawStderr := scrub.Scrub(out), scrub.Scrub(errOut)
+		switch {
+		case recovery:
+			// Genuine recovery (truncation / empty-tail): always show the pointer.
+			meta = append(meta, footer)
+		case len(stdoutText)+len(stderrText) >= len(rawStdout)+len(rawStderr):
+			// The filter did not shrink the output, so the full scrubbed raw is no
+			// larger and is complete: emit it (the agent already has everything) and
+			// skip the pointer. Always scrubbed, never raw bytes.
+			stdoutText, stderrText = rawStdout, rawStderr
+		case len(stdoutText)+len(stderrText)+len(footer) < len(rawStdout)+len(rawStderr):
+			// The filter saved more than the footer costs: keep the recovery pointer.
+			meta = append(meta, footer)
+		default:
+			// The filter helped, but by fewer bytes than the footer would add: keep
+			// the smaller filtered output and drop the pointer so the footer can
+			// never make a failure net-negative. The spool stays on disk as a
+			// best-effort recovery copy.
+		}
+	}
+
 	recordGain(scrubbedCmd, filterName, mode, outCap.total+errCap.total, len(stdoutText)+len(stderrText), code)
 	recordRecent(scrubbedCmd, filterName, mode, outCap, errCap, stdoutText, stderrText, code)
 
-	if path, ok := spool.Finalize(code != 0 || truncated || emptyTailFallback); ok {
-		meta = append(meta, tee.Hint(path))
-	}
 	hint = strings.Join(meta, "\n")
 	return stdoutText, stderrText, hint, code, nil
 }
