@@ -53,28 +53,30 @@ func TestForget(t *testing.T) {
 	}
 }
 
-// TestForgetUnderOptIn pins the opt-in model: with no env override telemetry is
-// OFF by default and the consent invite shows for an undecided user; Forget then
-// records an explicit withdrawal, so the invite must NOT re-appear.
-func TestForgetUnderOptIn(t *testing.T) {
+// TestForgetUnderOptOut pins the opt-out model: with no env override telemetry is
+// ON by default and the one-time notice shows for an undecided (nil) user; Forget
+// records an explicit withdrawal ({enabled:false}), so telemetry goes off and
+// stays off and the notice must NOT re-appear. Only nil is ever migrated to on,
+// so this recorded "false" is what a later update must never reverse.
+func TestForgetUnderOptOut(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "telemetry-state.json"))
-	t.Setenv(envEnabled, "") // no override: exercise the opt-in default
+	t.Setenv(envEnabled, "") // no override: exercise the opt-out default
 
-	if status, err := GetStatus(); err != nil || status.Enabled {
-		t.Fatalf("precondition: telemetry must be OFF by default under opt-in (err=%v, enabled=%v)", err, status.Enabled)
+	if status, err := GetStatus(); err != nil || !status.Enabled {
+		t.Fatalf("precondition: telemetry must be ON by default under opt-out (err=%v, enabled=%v)", err, status.Enabled)
 	}
 	if !ShouldPreviewConsent() {
-		t.Fatal("an undecided user should see the consent invite")
+		t.Fatal("an undecided user should see the one-time telemetry notice")
 	}
 	if err := Forget(); err != nil {
 		t.Fatalf("Forget: %v", err)
 	}
 	if status, err := GetStatus(); err != nil || status.Enabled {
-		t.Fatalf("after Forget telemetry must stay disabled (err=%v, enabled=%v)", err, status.Enabled)
+		t.Fatalf("after Forget telemetry must be disabled and stay disabled (err=%v, enabled=%v)", err, status.Enabled)
 	}
 	if ShouldPreviewConsent() {
-		t.Fatal("after Forget (an explicit withdrawal) the invite must not re-appear")
+		t.Fatal("after Forget (an explicit withdrawal) the notice must not re-appear")
 	}
 }

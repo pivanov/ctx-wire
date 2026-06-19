@@ -15,6 +15,10 @@ func TestReportImpactSendsDeltaOnly(t *testing.T) {
 	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	// Steady state: install already reported, so impact flushes don't also backfill.
+	if err := writeConfig(Config{InstallReported: true}); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
 	var payloads []map[string]any
 	restoreSender(t, func(v any) error {
 		data, err := json.Marshal(v)
@@ -118,7 +122,9 @@ func TestReportInstallMarksOnlyAfterSuccess(t *testing.T) {
 	}
 }
 
-func TestReportInstallDisabledByDefault(t *testing.T) {
+// TestReportInstallEnabledByDefault pins the opt-out default: with no explicit
+// choice telemetry is on, so an init reports the install and latches it.
+func TestReportInstallEnabledByDefault(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(envEnabled, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
@@ -133,18 +139,54 @@ func TestReportInstallDisabledByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReportInstall: %v", err)
 	}
+	if res.Disabled {
+		t.Fatalf("ReportInstall under opt-out default = %#v, want sent (not Disabled)", res)
+	}
+	if count != 1 {
+		t.Fatalf("install reports sent by default = %d, want 1 (opt-out is on)", count)
+	}
+	status, err := GetStatus()
+	if err != nil {
+		t.Fatalf("GetStatus: %v", err)
+	}
+	if !status.InstallReported {
+		t.Fatal("a sent install report must mark InstallReported")
+	}
+}
+
+// TestReportInstallSilencedWhenDisabled verifies the explicit off-switch stops
+// the install report: nothing is sent and InstallReported stays unlatched, so a
+// later re-enable still reports the install.
+func TestReportInstallSilencedWhenDisabled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envEnabled, "")
+	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	if err := SetEnabled(false); err != nil {
+		t.Fatalf("SetEnabled(false): %v", err)
+	}
+	var count int
+	restoreSender(t, func(payload any) error {
+		count++
+		return nil
+	})
+
+	res, err := ReportInstall("claude")
+	if err != nil {
+		t.Fatalf("ReportInstall: %v", err)
+	}
 	if !res.Disabled {
-		t.Fatalf("ReportInstall default = %#v, want Disabled", res)
+		t.Fatalf("ReportInstall when disabled = %#v, want Disabled", res)
 	}
 	if count != 0 {
-		t.Fatalf("install reports sent by default = %d, want 0", count)
+		t.Fatalf("install reports sent while disabled = %d, want 0", count)
 	}
 	status, err := GetStatus()
 	if err != nil {
 		t.Fatalf("GetStatus: %v", err)
 	}
 	if status.InstallReported {
-		t.Fatal("disabled install report must not mark InstallReported")
+		t.Fatal("a disabled install report must not mark InstallReported")
 	}
 }
 
@@ -364,11 +406,289 @@ func TestRecordCommandFailureKeepsPendingAndThrottlesRetry(t *testing.T) {
 	}
 }
 
+// TestBuildImpactPayloadGatesPrograms pins the single gating point both send
+// paths use: improvements off withholds Programs but keeps the website stats;
+// on (or the default nil) includes Programs.
+func TestBuildImpactPayloadGatesPrograms(t *testing.T) {
+	t.Setenv(envImprovements, "")
+	delta := Totals{
+		Commands: 10, RawBytes: 1000, EmittedBytes: 200, BytesSaved: 800, TokensSaved: 200,
+		Programs: map[string]ProgramTotals{"rg": {Count: 10, BytesSaved: 800}},
+		Agents:   map[string]ProgramTotals{"claude": {Count: 10, BytesSaved: 800}},
+	}
+	off := false
+	pOff := buildImpactPayload(delta, Config{ShareImprovements: &off})
+	if pOff.Programs != nil {
+		t.Errorf("improvements off: Programs must be withheld, got %v", pOff.Programs)
+	}
+	if pOff.Agents == nil || pOff.Commands == 0 {
+		t.Error("improvements off: website stats (agents, totals) must still flow")
+	}
+	on := true
+	if buildImpactPayload(delta, Config{ShareImprovements: &on}).Programs == nil {
+		t.Error("improvements on: Programs must be present")
+	}
+	if buildImpactPayload(delta, Config{}).Programs == nil {
+		t.Error("improvements default (nil): Programs must be present")
+	}
+}
+
+// TestRecordCommandAutoFlushRespectsImprovementsOff is the integration guard for
+// the bug this almost shipped with: the hook auto-flush is a SEPARATE send path
+// from the manual gain flush, so it must ALSO withhold the per-command breakdown
+// when improvements is off.
+func TestRecordCommandAutoFlushRespectsImprovementsOff(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envEnabled, "1")
+	t.Setenv(envImprovements, "")
+	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	off := false
+	if err := writeConfig(Config{ShareImprovements: &off}); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	var sent []impactPayload
+	restoreSender(t, func(v any) error {
+		if p, ok := v.(impactPayload); ok {
+			sent = append(sent, p)
+		}
+		return nil
+	})
+	// One big command crosses the saved-bytes auto-flush threshold.
+	res, err := RecordCommand("rg pattern .", "claude", 11<<20, 0)
+	if err != nil {
+		t.Fatalf("RecordCommand: %v", err)
+	}
+	if !res.Sent {
+		t.Fatalf("expected auto-flush, got %#v", res)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("impact payloads = %d, want 1", len(sent))
+	}
+	if sent[0].Programs != nil {
+		t.Errorf("auto-flush with improvements off must withhold Programs, got %v", sent[0].Programs)
+	}
+	if sent[0].Agents == nil {
+		t.Error("auto-flush must still send Agents (website stat)")
+	}
+}
+
+// TestImprovementsOffPendingNotLeakedOnReenable is the state-dependent edge: per-
+// command detail accumulated while improvements are off must NOT ship when the
+// user turns them back on before the next flush. Off-period commands still count
+// toward the aggregate (a website stat), but their per-command bucket must not.
+func TestImprovementsOffPendingNotLeakedOnReenable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envEnabled, "1")
+	t.Setenv(envImprovements, "")
+	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	if err := writeConfig(Config{InstallReported: true}); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	base := time.Date(2026, 6, 19, 10, 0, 0, 0, time.UTC)
+	restoreClock(t, base)
+	var sent []impactPayload
+	restoreSender(t, func(v any) error {
+		if p, ok := v.(impactPayload); ok {
+			sent = append(sent, p)
+		}
+		return nil
+	})
+
+	if err := SetShareImprovements(false); err != nil {
+		t.Fatalf("SetShareImprovements(false): %v", err)
+	}
+	// Off period: small commands under the volume threshold, so they accumulate.
+	for i := 0; i < 3; i++ {
+		if _, err := RecordCommand("rg off-period .", "claude", 500, 100); err != nil {
+			t.Fatalf("RecordCommand off: %v", err)
+		}
+	}
+	if len(sent) != 0 {
+		t.Fatalf("no flush expected during off accumulation, got %d", len(sent))
+	}
+
+	// Re-enable, advance past the flush interval, then run one on-period command.
+	if err := SetShareImprovements(true); err != nil {
+		t.Fatalf("SetShareImprovements(true): %v", err)
+	}
+	restoreClock(t, base.Add(autoFlushInterval+time.Minute))
+	if _, err := RecordCommand("rg on-period .", "claude", 800, 100); err != nil {
+		t.Fatalf("RecordCommand flush: %v", err)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("expected one flush after re-enable, got %d", len(sent))
+	}
+	rg, ok := sent[0].Programs["rg"]
+	if !ok {
+		t.Fatalf("on-period flush should carry the rg bucket, got %v", sent[0].Programs)
+	}
+	if rg.Count != 1 {
+		t.Errorf("rg bucket count = %d, want 1 (off-period detail must not leak)", rg.Count)
+	}
+	if sent[0].Commands != 4 {
+		t.Errorf("aggregate Commands = %d, want 4 (off-period still counts as a stat)", sent[0].Commands)
+	}
+}
+
+// TestMigrationNoticeIfPending pins the one-time non-interactive notice AND the
+// separate-marker guarantee: firing it must NOT suppress the interactive notice,
+// so a swallowed line never means the human sees nothing.
+func TestMigrationNoticeIfPending(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envEnabled, "")
+	t.Setenv(envImprovements, "")
+	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir, "state.json"))
+
+	if got := MigrationNoticeIfPending(); got == "" {
+		t.Fatal("undecided user should get the one-time migration notice")
+	}
+	if got := MigrationNoticeIfPending(); got != "" {
+		t.Errorf("migration notice must not repeat, got %q", got)
+	}
+	if !ShouldPreviewConsent() {
+		t.Error("interactive notice must still fire after the migration notice (separate markers)")
+	}
+}
+
+// TestMigrationNoticeSuppressedWhenDecidedOrForced verifies the notice is silent
+// for users who already chose and when the env override decides.
+func TestMigrationNoticeSuppressedWhenDecidedOrForced(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envImprovements, "")
+	t.Setenv(envEnabled, "")
+	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	if err := SetEnabled(true); err != nil {
+		t.Fatalf("SetEnabled: %v", err)
+	}
+	if got := MigrationNoticeIfPending(); got != "" {
+		t.Errorf("explicit choice must suppress the migration notice, got %q", got)
+	}
+
+	dir2 := t.TempDir()
+	t.Setenv(envConfig, filepath.Join(dir2, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir2, "state.json"))
+	t.Setenv(envEnabled, "1")
+	if got := MigrationNoticeIfPending(); got != "" {
+		t.Errorf("env-forced telemetry must suppress the migration notice, got %q", got)
+	}
+}
+
+// TestImprovementsOffGainBackfillNotLeaked is the gain-log path of the same class:
+// ReportImpact (the `ctx-wire gain` flush) rebuilds Programs from the FULL gain
+// summary, so off-period detail can backfill via the delta after a re-enable even
+// though the hook path is gated. Off -> hook commands -> on -> gain must not ship
+// the off-period buckets.
+func TestImprovementsOffGainBackfillNotLeaked(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envEnabled, "1")
+	t.Setenv(envImprovements, "")
+	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	if err := writeConfig(Config{InstallReported: true}); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	var sent []impactPayload
+	restoreSender(t, func(v any) error {
+		if p, ok := v.(impactPayload); ok {
+			sent = append(sent, p)
+		}
+		return nil
+	})
+
+	if err := SetShareImprovements(false); err != nil {
+		t.Fatalf("SetShareImprovements(false): %v", err)
+	}
+	// Three off-period commands via the hook (the gain log would record them too).
+	for i := 0; i < 3; i++ {
+		if _, err := RecordCommand("rg off .", "claude", 500, 100); err != nil {
+			t.Fatalf("RecordCommand off: %v", err)
+		}
+	}
+
+	// Re-enable, then a gain flush whose summary includes the 3 off-period commands
+	// plus 1 on-period command (the full gain log).
+	if err := SetShareImprovements(true); err != nil {
+		t.Fatalf("SetShareImprovements(true): %v", err)
+	}
+	res, err := ReportImpact(summary(4, 1600, 400, 1200, []gain.CommandStat{
+		{Program: "rg", Count: 4, RawBytes: 1600, EmittedBytes: 400, SavedBytes: 1200},
+	}))
+	if err != nil {
+		t.Fatalf("ReportImpact: %v", err)
+	}
+	if !res.Sent {
+		t.Fatalf("expected a send, got %#v", res)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("payloads = %d, want 1", len(sent))
+	}
+	rg, ok := sent[0].Programs["rg"]
+	if !ok {
+		t.Fatalf("expected rg bucket, got %v", sent[0].Programs)
+	}
+	if rg.Count != 1 {
+		t.Errorf("rg bucket count = %d, want 1 (3 off-period commands must not backfill via gain)", rg.Count)
+	}
+	if sent[0].Commands != 4 {
+		t.Errorf("aggregate Commands = %d, want 4 (off-period still counts as a stat)", sent[0].Commands)
+	}
+}
+
+// TestReportImpactBackfillsInstall verifies the init-then-enable gap is closed:
+// when telemetry is on but no install was reported yet, the first impact flush
+// also reports the install once; later flushes do not repeat it.
+func TestReportImpactBackfillsInstall(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envEnabled, "1")
+	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
+	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	var installs, impacts int
+	restoreSender(t, func(v any) error {
+		switch v.(type) {
+		case installPayload:
+			installs++
+		case impactPayload:
+			impacts++
+		}
+		return nil
+	})
+
+	if _, err := ReportImpact(summary(5, 1000, 200, 800, []gain.CommandStat{
+		{Program: "rg", Count: 5, RawBytes: 1000, EmittedBytes: 200, SavedBytes: 800},
+	})); err != nil {
+		t.Fatalf("ReportImpact first: %v", err)
+	}
+	if installs != 1 || impacts != 1 {
+		t.Fatalf("first flush: installs=%d impacts=%d, want 1 and 1 (install backfilled)", installs, impacts)
+	}
+	if status, err := GetStatus(); err != nil || !status.InstallReported {
+		t.Fatalf("install must latch after backfill (err=%v)", err)
+	}
+	if _, err := ReportImpact(summary(8, 1600, 400, 1200, []gain.CommandStat{
+		{Program: "rg", Count: 8, RawBytes: 1600, EmittedBytes: 400, SavedBytes: 1200},
+	})); err != nil {
+		t.Fatalf("ReportImpact second: %v", err)
+	}
+	if installs != 1 {
+		t.Fatalf("install backfilled %d times total, want exactly 1", installs)
+	}
+	if impacts != 2 {
+		t.Fatalf("impacts=%d after two flushes, want 2", impacts)
+	}
+}
+
 func TestReportImpactClearsPendingAfterManualFlush(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
+	if err := writeConfig(Config{InstallReported: true}); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
 	restoreClock(t, time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC))
 	var payloads []map[string]any
 	restoreSender(t, func(v any) error {

@@ -84,6 +84,10 @@ func telemetryTempEnv(t *testing.T) {
 // must never carry a private program name.
 func TestImpactPayloadCarriesVersionAndBucketsPrivatePrograms(t *testing.T) {
 	telemetryTempEnv(t)
+	// Steady state: install already reported, so the impact flush doesn't backfill.
+	if err := writeConfig(Config{InstallReported: true}); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
 	SetBuildInfo("0.1.17-test")
 	t.Cleanup(func() { SetBuildInfo("") })
 	payloads := captureSender(t)

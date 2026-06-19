@@ -23,14 +23,15 @@ import (
 const (
 	DefaultEndpoint = "https://ctx-wire-telemetry.iweb-ivanov.workers.dev/v1/telemetry"
 
-	envEnabled = "CTX_WIRE_TELEMETRY"
-	envURL     = "CTX_WIRE_TELEMETRY_URL"
-	envConfig  = "CTX_WIRE_TELEMETRY_CONFIG"
-	envState   = "CTX_WIRE_TELEMETRY_STATE"
+	envEnabled      = "CTX_WIRE_TELEMETRY"
+	envImprovements = "CTX_WIRE_TELEMETRY_IMPROVEMENTS"
+	envURL          = "CTX_WIRE_TELEMETRY_URL"
+	envConfig       = "CTX_WIRE_TELEMETRY_CONFIG"
+	envState        = "CTX_WIRE_TELEMETRY_STATE"
 
 	requestTimeout = 900 * time.Millisecond
 
-	autoFlushInterval         = 15 * time.Minute
+	autoFlushInterval         = 30 * time.Minute
 	autoFlushCommandThreshold = int64(1000)
 	autoFlushSavedThreshold   = int64(10 << 20)
 )
@@ -54,15 +55,27 @@ type Config struct {
 	// Agent type is a category, not an identity, so it stays within the
 	// anonymous, aggregate-only model.
 	InstalledAgents []string `json:"installed_agents,omitempty"`
+	// ShareImprovements gates ONLY the granular per-program ("help improve
+	// ctx-wire") breakdown. nil means "never decided" and defaults to on; an
+	// explicit false keeps the website stats (totals, agents, country, install)
+	// flowing while withholding the per-command detail. The master Enabled switch
+	// gates everything; this is the finer, second toggle.
+	ShareImprovements *bool `json:"share_improvements,omitempty"`
+	// MigrationNoticeShown latches the one-time, non-interactive opt-out migration
+	// notice. It is SEPARATE from PreviewShown on purpose: a swallowed
+	// non-interactive notice must not suppress the reliable interactive one, so the
+	// worst case is "shown twice", never "shown zero times".
+	MigrationNoticeShown bool `json:"migration_notice_shown,omitempty"`
 }
 
 type Status struct {
-	Enabled         bool
-	ForcedByEnv     bool
-	Endpoint        string
-	ConfigPath      string
-	StatePath       string
-	InstallReported bool
+	Enabled           bool
+	ForcedByEnv       bool
+	Endpoint          string
+	ConfigPath        string
+	StatePath         string
+	InstallReported   bool
+	ShareImprovements bool
 }
 
 type Result struct {
@@ -145,12 +158,13 @@ func GetStatus() (Status, error) {
 	}
 	enabled, forced := enabled(cfg)
 	return Status{
-		Enabled:         enabled,
-		ForcedByEnv:     forced,
-		Endpoint:        endpoint(),
-		ConfigPath:      configPath,
-		StatePath:       statePath,
-		InstallReported: cfg.InstallReported,
+		Enabled:           enabled,
+		ForcedByEnv:       forced,
+		Endpoint:          endpoint(),
+		ConfigPath:        configPath,
+		StatePath:         statePath,
+		InstallReported:   cfg.InstallReported,
+		ShareImprovements: shareImprovements(cfg),
 	}, nil
 }
 
@@ -164,6 +178,51 @@ func SetEnabled(value bool) error {
 		_ = ClearState()
 	}
 	return writeConfig(cfg)
+}
+
+// shareImprovements reports whether the granular per-program ("help improve
+// ctx-wire") breakdown may ride along. It is the second, finer toggle: callers
+// gate the whole send on enabled() first, and this only decides whether the
+// per-command detail is included. Defaults ON; opting out is an explicit choice.
+func shareImprovements(cfg Config) bool {
+	if v := strings.TrimSpace(strings.ToLower(os.Getenv(envImprovements))); v != "" {
+		switch v {
+		case "0", "false", "off", "no":
+			return false
+		case "1", "true", "on", "yes":
+			return true
+		}
+	}
+	if cfg.ShareImprovements != nil {
+		return *cfg.ShareImprovements
+	}
+	return true
+}
+
+// SetShareImprovements records the user's choice for the per-program improvement
+// data. The master Enabled switch is untouched, so the website stats keep
+// flowing; this only adds or removes the granular per-command breakdown.
+func SetShareImprovements(value bool) error {
+	cfg, err := readConfig()
+	if err != nil {
+		return err
+	}
+	cfg.ShareImprovements = &value
+	if err := writeConfig(cfg); err != nil {
+		return err
+	}
+	if !value {
+		// Absorb any per-command detail already pending into the LastReported mark
+		// (accounted, never sent) and drop it from pending. This stops the pending
+		// detail from shipping AND keeps the gain-log delta correct after a later
+		// re-enable. Best-effort: a state error is not worth failing the toggle.
+		if st, err := readState(); err == nil && len(st.Pending.Programs) > 0 {
+			st.LastReported.Programs = mergeBuckets(st.LastReported.Programs, st.Pending.Programs)
+			st.Pending.Programs = nil
+			_ = writeState(st)
+		}
+	}
+	return nil
 }
 
 func ClearState() error {
@@ -183,11 +242,11 @@ func ClearState() error {
 // so there is nothing to erase server-side; this is the local equivalent of
 // withdrawal plus erasure.
 //
-// Telemetry is opt-in (off until enabled), so withdrawal is a deliberate "no":
+// Telemetry is opt-out (on by default), so withdrawal is a deliberate "no":
 // Forget persists {enabled: false} rather than deleting the config. That records
-// an explicit choice, distinct from "never decided" (nil), so the one-time
-// consent invite on `ctx-wire gain` does not re-appear after a withdrawal.
-// Missing files are not an error.
+// an explicit choice, distinct from "never decided" (nil) which an update
+// migrates to on, so a withdrawal sticks: the one-time notice does not re-appear
+// and no update reverses it. Missing files are not an error.
 func Forget() error {
 	if err := ClearState(); err != nil {
 		return err
@@ -240,6 +299,30 @@ func containsAgent(list []string, name string) bool {
 	return false
 }
 
+// buildImpactPayload constructs the wire payload from a totals delta and applies
+// the improvements sub-toggle in ONE place: when sharing is off, the per-command
+// Programs breakdown is withheld while the website stats (totals, agents) still
+// flow. EVERY send path (the manual `gain` flush, the hook auto-flush, the
+// preview) builds through here, so the gate can never be missed by one of them.
+func buildImpactPayload(delta Totals, cfg Config) impactPayload {
+	p := impactPayload{
+		Schema:       1,
+		Event:        "impact",
+		Version:      buildVersion,
+		Commands:     delta.Commands,
+		RawBytes:     delta.RawBytes,
+		EmittedBytes: delta.EmittedBytes,
+		BytesSaved:   delta.BytesSaved,
+		TokensSaved:  delta.TokensSaved,
+		Programs:     delta.Programs,
+		Agents:       delta.Agents,
+	}
+	if !shareImprovements(cfg) {
+		p.Programs = nil
+	}
+	return p
+}
+
 func ReportImpact(summary *gain.Summary) (Result, error) {
 	cfg, err := readConfig()
 	if err != nil {
@@ -248,6 +331,12 @@ func ReportImpact(summary *gain.Summary) (Result, error) {
 	isEnabled, _ := enabled(cfg)
 	if !isEnabled {
 		return Result{Disabled: true}, nil
+	}
+	// Backfill the install if it was never reported: init may have run while
+	// telemetry was off (or before opt-out), then telemetry came on. Count it from
+	// the first impact flush. Best-effort; never blocks the impact report.
+	if !cfg.InstallReported {
+		_, _ = ReportInstall("")
 	}
 	if summary == nil || summary.Commands == 0 {
 		return Result{Noop: true}, nil
@@ -263,18 +352,7 @@ func ReportImpact(summary *gain.Summary) (Result, error) {
 	}
 	sanitizeTotals(&delta) // belt-and-suspenders: nothing unsafe reaches the wire
 
-	payload := impactPayload{
-		Schema:       1,
-		Event:        "impact",
-		Version:      buildVersion,
-		Commands:     delta.Commands,
-		RawBytes:     delta.RawBytes,
-		EmittedBytes: delta.EmittedBytes,
-		BytesSaved:   delta.BytesSaved,
-		TokensSaved:  delta.TokensSaved,
-		Programs:     delta.Programs,
-		Agents:       delta.Agents,
-	}
+	payload := buildImpactPayload(delta, cfg)
 	if err := sendPayload(payload); err != nil {
 		return Result{}, err
 	}
@@ -307,7 +385,18 @@ func RecordCommand(command, agentName string, rawBytes, emittedBytes int) (Resul
 	if err != nil {
 		return Result{}, err
 	}
-	addTotals(&st.Pending, totalsFromCommand(command, agentName, rawBytes, emittedBytes))
+	rec := totalsFromCommand(command, agentName, rawBytes, emittedBytes)
+	if !shareImprovements(cfg) {
+		// Sharing is off: drop per-command detail from pending AND advance the
+		// LastReported high-water mark by it. Advancing the mark keeps it in sync
+		// with the gain log during the off period, so a later `gain` flush (where
+		// ReportImpact rebuilds Programs from the full gain summary) cannot
+		// re-include off-period detail after a re-enable. Aggregate totals and agent
+		// buckets still accumulate as website stats.
+		st.LastReported.Programs = mergeBuckets(st.LastReported.Programs, rec.Programs)
+		rec.Programs = nil
+	}
+	addTotals(&st.Pending, rec)
 	if !shouldFlushPending(st, now) {
 		if st.LastAttempt == "" {
 			st.LastAttempt = now.Format(time.RFC3339)
@@ -319,18 +408,7 @@ func RecordCommand(command, agentName string, rawBytes, emittedBytes int) (Resul
 	}
 
 	sanitizeTotals(&st.Pending) // belt-and-suspenders: nothing unsafe reaches the wire
-	payload := impactPayload{
-		Schema:       1,
-		Event:        "impact",
-		Version:      buildVersion,
-		Commands:     st.Pending.Commands,
-		RawBytes:     st.Pending.RawBytes,
-		EmittedBytes: st.Pending.EmittedBytes,
-		BytesSaved:   st.Pending.BytesSaved,
-		TokensSaved:  st.Pending.TokensSaved,
-		Programs:     st.Pending.Programs,
-		Agents:       st.Pending.Agents,
-	}
+	payload := buildImpactPayload(st.Pending, cfg)
 	st.LastAttempt = now.Format(time.RFC3339)
 	if err := writeState(st); err != nil {
 		return Result{}, err
@@ -560,9 +638,11 @@ func enabled(cfg Config) (bool, bool) {
 	if cfg.Enabled != nil {
 		return *cfg.Enabled, false
 	}
-	// Opt-in: telemetry stays OFF until the user explicitly enables it (after the
-	// one-time consent invite on `ctx-wire gain`). No choice yet means no data.
-	return false, false
+	// Opt-out: anonymous aggregate telemetry is ON by default and stays on until
+	// the user explicitly disables it. A nil choice means "never decided", treated
+	// as on. An explicit {enabled:false} (the off-switch) is honored here and is
+	// never reversed by an update: only nil is migrated to on, never false.
+	return true, false
 }
 
 func endpoint() string {

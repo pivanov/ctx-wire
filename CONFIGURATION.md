@@ -123,10 +123,12 @@ filter change improved fresh dogfood runs.
 
 ## Telemetry
 
-Anonymous aggregate telemetry is opt-in and stays off until you enable it. The
-first interactive `ctx-wire gain` for an undecided user shows a one-time invite
-with a fixed example payload; it sends nothing. To inspect your exact local
-payload before enabling, run `ctx-wire telemetry preview`.
+Anonymous aggregate telemetry is opt-out: it is on by default and stays on until
+you disable it. The first interactive `ctx-wire gain` for an undecided user shows
+a one-time notice with a fixed example payload and how to turn it off. An explicit
+disable (or `forget`) is recorded and never reversed by an update; only an
+undecided (never-chosen) state defaults to on. To inspect your exact local
+payload, run `ctx-wire telemetry preview`.
 
 When enabled, telemetry sends only counters used for the public impact page:
 
@@ -140,7 +142,7 @@ When enabled, telemetry sends only counters used for the public impact page:
 Impact counters are accumulated locally and flushed opportunistically after a
 command finishes: the first flush waits for a meaningful batch (1000 pending
 commands or 10 MB saved), and after that flushes are rate-limited to at most once
-every 15 minutes. `ctx-wire gain` also performs a best-effort full-summary flush,
+every 30 minutes. `ctx-wire gain` also performs a best-effort full-summary flush,
 while `ctx-wire gain --since ...` never reports telemetry. Network failures keep
 the pending counters locally for a later retry and never fail the command.
 
@@ -154,17 +156,19 @@ Controls:
 ctx-wire telemetry status
 ctx-wire telemetry preview
 ctx-wire telemetry enable
-ctx-wire telemetry disable
+ctx-wire telemetry disable             # turn ALL telemetry off
+ctx-wire telemetry improvements off    # keep stats; drop only the per-command detail
 ctx-wire telemetry forget   # withdraw consent + erase local data (stays disabled)
 ```
 
 `forget` erases the pending/last-reported counters and records a disabled
-consent so it stays off and the invite does not reappear. Re-enable later with
+consent so it stays off and the notice does not reappear. Re-enable later with
 `telemetry enable`.
 
-Set `CTX_WIRE_TELEMETRY=0` to disable telemetry for one process. Set
-`CTX_WIRE_TELEMETRY_URL` to override the endpoint for tests or local Worker
-development.
+Set `CTX_WIRE_TELEMETRY=0` to disable all telemetry for one process, or
+`CTX_WIRE_TELEMETRY_IMPROVEMENTS=0` to drop only the per-command breakdown while
+the aggregate stats keep flowing. Set `CTX_WIRE_TELEMETRY_URL` to override the
+endpoint for tests or local Worker development.
 
 ## Codex hook permissions
 

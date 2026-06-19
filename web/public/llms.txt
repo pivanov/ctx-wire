@@ -16,7 +16,7 @@
 - Works with Claude, Cursor, Codex, Gemini, Copilot, Cline, Windsurf, and more (14 targets).
 - Streaming-aware bypass auto-detects dev servers, watchers, and interactive commands so they never deadlock.
 - Per-agent attribution: every recorded command carries the agent that issued it, so savings can be split by agent.
-- Telemetry is anonymous, aggregate, token-only, and opt-out. Pricing/$ estimates live on the website, never in the binary.
+- Telemetry is anonymous, aggregate, and token-only, on by default with a one-command opt-out (`ctx-wire telemetry disable`); a finer `ctx-wire telemetry improvements off` keeps community stats but drops the per-command detail. No commands, args, paths, or output. Pricing/$ estimates live on the website, never in the binary.
 - License: MIT. Free and open source.
 
 ## Install

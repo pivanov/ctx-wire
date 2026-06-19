@@ -41,7 +41,7 @@ commands. For the config file and environment variables see
 | `ctx-wire tune issue [--open]` | Print or open a sanitized GitHub issue draft |
 | `ctx-wire tune draft <program>` | Scaffold a starter filter for a program from a real captured transcript sample (`--preview`/`--write`) |
 | `ctx-wire filters pull <name> \| publish <name>` | Share filters: pull a community filter (parsed and inline-tested, installed untrusted) or package a local one |
-| `ctx-wire telemetry [status\|preview\|enable\|disable\|forget]` | Show or change opt-in anonymous aggregate telemetry; `preview` prints the exact payload, and `forget` withdraws consent and erases local data |
+| `ctx-wire telemetry [status\|preview\|enable\|disable\|improvements\|forget]` | Show or change opt-out anonymous aggregate telemetry (on by default); `improvements [on\|off]` toggles only the per-command breakdown (stats stay on), `preview` prints the exact payload, and `forget` withdraws consent and erases local data |
 | `ctx-wire doctor [--all] [--recent N] [--verbose]` | Check install/hooks/MCP/storage/trust health (read-only). Optional `[off]` checks (integrations not set up) are hidden behind a one-line count; `--all` shows them. `--recent N` lists the N most recent recorded commands; `--verbose` implies `--recent 5` |
 | `ctx-wire verify [filter]` | Run the built-in filter conformance tests |
 | `ctx-wire version` | Print version and build metadata |

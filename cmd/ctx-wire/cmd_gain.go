@@ -87,11 +87,19 @@ func cmdGain(args []string) int {
 		fmt.Fprintf(os.Stderr, "ctx-wire gain: %v\n", err)
 		return 1
 	}
-	// One-time consent prompt: ask the human, once, whether to turn telemetry on.
-	// Gated on BOTH stdin and stdout being a terminal, so an agent or a pipe is
-	// never prompted (and never blocked waiting for input).
-	if ui.IsTerminal(os.Stdin) && ui.IsTerminal(os.Stdout) && telemetry.ShouldPreviewConsent() {
-		promptConsent()
+	// One-time telemetry notice: tell the human, once, that opt-out telemetry is
+	// on and how to turn it off. Gated on BOTH stdin and stdout being a terminal,
+	// so an agent or a pipe is never prompted (and never blocked waiting for input).
+	if ui.IsTerminal(os.Stdin) && ui.IsTerminal(os.Stdout) {
+		if telemetry.ShouldPreviewConsent() {
+			promptConsent()
+		}
+	} else if notice := telemetry.MigrationNoticeIfPending(); notice != "" {
+		// Non-interactive (agent) path: disclose the opt-out migration at the point
+		// of collection with a one-time stderr line. Its marker is separate from the
+		// interactive notice, so a swallowed line here never suppresses the one a
+		// human sees in a terminal.
+		fmt.Fprintln(os.Stderr, "ctx-wire: "+notice)
 	}
 	fmt.Print(gain.FormatThemed(s, themeForStdout()))
 	if opts.Since.IsZero() {
@@ -100,34 +108,35 @@ func cmdGain(args []string) int {
 	return 0
 }
 
-// promptConsent shows a fixed EXAMPLE of the anonymous payload, then asks the
-// human, once, whether to turn telemetry on, and acts on the answer. It records
-// that the prompt was shown either way so it never repeats. Telemetry stays off
-// unless the user answers yes. Only ever reached on an interactive terminal.
+// promptConsent shows a fixed EXAMPLE of the anonymous payload and informs the
+// human, once, that opt-out telemetry is ON. Pressing Enter keeps it on (the
+// opt-out default); an explicit "no" disables it, which is then honored forever.
+// It records that the notice was shown so it never repeats. Only ever reached on
+// an interactive terminal.
 func promptConsent() {
 	theme := themeForStdout()
-	fmt.Printf("%s\n\n", theme.Heading("Help improve ctx-wire's filters?"))
-	fmt.Println("ctx-wire can share an anonymous summary like the example below, so weak filters")
-	fmt.Println("get fixed for everyone. No commands, arguments, paths, output, or repo/host/user")
-	fmt.Println("names, ever, only counts like this:")
+	fmt.Printf("%s\n\n", theme.Heading("Anonymous telemetry is on"))
+	fmt.Println("ctx-wire shares an anonymous summary like the example below, so community totals")
+	fmt.Println("are real and weak filters get fixed for everyone. No commands, arguments, paths,")
+	fmt.Println("output, or repo/host/user names, ever, only counts like this:")
 	fmt.Println()
 	fmt.Println(highlightJSON(theme, telemetry.MockPayload()))
 	fmt.Println()
-	fmt.Print("Enable anonymous telemetry? [y/N]: ")
+	fmt.Print("Keep it on? [Y/n] (Enter keeps it on): ")
 
 	answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	telemetry.MarkPreviewShown() // asked once, whatever the answer
+	telemetry.MarkPreviewShown() // shown once, whatever the answer
 	switch strings.ToLower(strings.TrimSpace(answer)) {
-	case "y", "yes":
-		if err := telemetry.SetEnabled(true); err != nil {
-			fmt.Printf("\n%s could not enable: %v\n\n", theme.Warn.Render("Telemetry"), err)
+	case "n", "no":
+		if err := telemetry.SetEnabled(false); err != nil {
+			fmt.Printf("\n%s could not disable: %v\n\n", theme.Warn.Render("Telemetry"), err)
 			return
 		}
-		fmt.Printf("\n%s thanks, it's on. Turn it off anytime: %s\n\n",
-			theme.OK.Render("Telemetry"), theme.Command.Render("ctx-wire telemetry disable"))
-	default:
-		fmt.Printf("\n%s staying off. Enable anytime: %s\n\n",
+		fmt.Printf("\n%s off. Re-enable anytime: %s\n\n",
 			theme.Dim.Render("Telemetry"), theme.Command.Render("ctx-wire telemetry enable"))
+	default:
+		fmt.Printf("\n%s staying on, thanks. Disable anytime: %s · or keep stats, drop per-command detail: %s\n\n",
+			theme.OK.Render("Telemetry"), theme.Command.Render("ctx-wire telemetry disable"), theme.Command.Render("ctx-wire telemetry improvements off"))
 	}
 }
 
