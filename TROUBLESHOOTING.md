@@ -104,8 +104,9 @@ list see [COMMANDS.md](COMMANDS.md); for config and environment variables see
   default truncate level); beyond it the head and the tail of each stream are
   kept, the omitted middle is replaced by an explicit
   `[ctx-wire: N bytes omitted ...]` marker, and the full scrubbed output is
-  spooled to disk (the `[full output: ...]` hint names the file). Deterministic
-  head+tail only, never a summary. Disable with `CTX_WIRE_TRUNCATE=none` or
+  spooled to disk; recover it with `ctx-wire fetch <hash>` (printed as the
+  `[full output: ...]` hint). Deterministic head+tail only, never a summary.
+  Disable with `CTX_WIRE_TRUNCATE=none` or
   `[output] truncate = "none"`; `light`/`aggressive` scale it.
 - **Project filters require trust.** A project-local `.ctx-wire/filters.toml` is
   ignored until you approve it with `ctx-wire trust` (recorded by SHA-256). If

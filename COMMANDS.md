@@ -10,6 +10,7 @@ commands. For the config file and environment variables see
 | Command | What it does |
 |---|---|
 | `ctx-wire run <cmd> [args]` | Execute a command and filter/scrub its output |
+| `ctx-wire fetch <hash>` | Recover the full scrubbed output spooled for a truncated or failed command (the `[full output: ctx-wire fetch <hash>]` handle) |
 | `ctx-wire mcp` | Serve `run_command` and `read_file` filtering tools over MCP (stdio) |
 | `ctx-wire mcp-wrap [--compress] -- <server>` | Transparently relay a stdio MCP server and measure per-tool token cost; `--compress` also reduces verbose accessibility snapshots (chrome-devtools, Playwright), spooling the raw result locally |
 | `ctx-wire mcp-wrap install [--compress] \| uninstall <server>` | Wrap (or revert) a server in your MCP config so its tool output is measured (and with `--compress`, reduced); backs up the config, needs an agent restart |
@@ -267,6 +268,11 @@ Commands that can hide important detail, such as `cat` and `git diff`, are
 capped in the agent-facing output and keep a scrubbed full-output spool when a
 cap is hit.
 
+When a cap or failure spools one, the agent-facing output ends with a
+`[full output: ctx-wire fetch <hash>]` hint; running `ctx-wire fetch <hash>`
+streams the full scrubbed copy back. The hash addresses the spool by the
+sha256 of its scrubbed contents, so the handle is stable.
+
 Recovery spools normally live under the local data directory. If an agent
 sandbox cannot write there, ctx-wire falls back to a per-user temp directory so
-the `[full output: ...]` hint still works during dogfood.
+the hint still works during dogfood.

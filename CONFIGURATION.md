@@ -45,8 +45,9 @@ ultra_compact = true
 # The dial also scales the passthrough ceiling: output with no matching filter
 # streams unmodified up to a generous size cap (~64 KB at "default"); beyond
 # it the head and the tail of each stream are kept, the omitted middle is
-# marked explicitly, and the full scrubbed output is spooled to disk (the
-# `[full output: ...]` hint names the file). Deterministic head+tail only,
+# marked explicitly, and the full scrubbed output is spooled to disk; recover it
+# with `ctx-wire fetch <hash>` (printed as the `[full output: ...]` hint).
+# Deterministic head+tail only,
 # never a generated summary. "none" disables the ceiling entirely.
 truncate = "default"
 
