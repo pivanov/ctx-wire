@@ -278,6 +278,19 @@ func TestRunBufferedEmptyTailFallbackOnSuccessfulFilter(t *testing.T) {
 	}
 }
 
+// TestApplySafeFallsBackToRawOnPanic pins the most important safety net: if the
+// filter pipeline panics, applySafe must recover and return the RAW unfiltered
+// text, never losing the command's output. A nil *CompiledFilter triggers the
+// panic naturally (ApplyWithMetaOptions dereferences f.stripANSI first), so this
+// needs no production seam. Without the recover() in applySafe this test panics.
+func TestApplySafeFallsBackToRawOnPanic(t *testing.T) {
+	raw := "build line 1\nbuild line 2\nfatal: important error the agent must see\n"
+	got := applySafe(nil, raw, filter.ApplyOptions{})
+	if got.Output != raw {
+		t.Errorf("applySafe on filter panic = %q, want raw output %q (output must never be lost)", got.Output, raw)
+	}
+}
+
 func TestRunBufferedNoFallbackWhenFailedCommandIsGenuinelyEmpty(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)
