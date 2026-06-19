@@ -1,6 +1,6 @@
 [filters.oxlint]
-description = "Compact oxlint output - strip blank lines, keep diagnostics"
-match_command = "^oxlint\\b"
+description = "Compact oxlint output - strip blank lines, keep diagnostics. Matches direct oxlint plus npx/bunx/pnpm|yarn dlx|exec/bun x runners."
+match_command = "^(?:{{runner}})?oxlint\\b"
 strip_ansi = true
 strip_lines_matching = [
   "^\\s*$",

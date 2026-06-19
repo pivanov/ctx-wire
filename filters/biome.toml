@@ -1,6 +1,6 @@
 [filters.biome]
 description = "Compact Biome lint/format output: strip blank lines, keep diagnostics. Matches direct biome plus npx/bunx/pnpm|yarn dlx|exec/bun x runners."
-match_command = "^(?:{{runner}})?biome\\b"
+match_command = "^(?:{{runner}})?(?:@biomejs/)?biome\\b"
 strip_ansi = true
 # Biome writes its diagnostics (the ━ headers, code context, "Found N errors") to
 # STDERR, not stdout, so without this the filter only ever saw a near-empty stdout

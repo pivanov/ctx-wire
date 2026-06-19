@@ -1,6 +1,6 @@
 [filters.markdownlint]
-description = "Compact markdownlint output - strip blank lines, limit rows"
-match_command = "^markdownlint\\b"
+description = "Compact markdownlint output - strip blank lines, limit rows. Matches markdownlint and the markdownlint-cli package via npx/bunx/pnpm|yarn dlx|exec/bun x runners."
+match_command = "^(?:{{runner}})?markdownlint(?:-cli)?\\b"
 strip_ansi = true
 strip_lines_matching = [
   "^\\s*$",
