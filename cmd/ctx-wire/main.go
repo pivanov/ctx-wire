@@ -126,6 +126,8 @@ func main() {
 		os.Exit(cmdGain(os.Args[2:]))
 	case "explain":
 		os.Exit(cmdExplain(os.Args[2:]))
+	case "fetch":
+		os.Exit(cmdFetch(os.Args[2:]))
 	case "inspect":
 		os.Exit(cmdInspect(os.Args[2:]))
 	case "tune":
@@ -191,7 +193,7 @@ func stableCurrentBinaryPath() (string, bool) {
 }
 
 var knownCommands = []string{
-	"run", "mcp", "hook", "rewrite", "init", "shims", "trust", "untrust", "gain", "explain",
+	"run", "mcp", "hook", "rewrite", "init", "shims", "trust", "untrust", "gain", "explain", "fetch",
 	"uninstall", "update", "tune", "telemetry", "discover", "learn", "session", "doctor", "verify", "version", "help",
 }
 
@@ -251,6 +253,7 @@ func usage(out *os.File) {
 	fmt.Fprintln(out)
 	usageSection(out, theme, "diagnose", []usageRow{
 		{"explain <cmd>", "diagnose one command's rewrite/filter decision (read-only)"},
+		{"fetch <hash>", "recover full scrubbed output for a truncated/failed command"},
 		{"inspect [n]", "show raw-vs-filtered for a recent command (needs [retention])"},
 		{"discover", "find agent commands that escaped ctx-wire (read-only, local logs)"},
 		{"learn", "mine transcripts for failed->corrected commands into rule hints"},

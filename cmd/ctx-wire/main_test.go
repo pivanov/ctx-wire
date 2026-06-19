@@ -21,6 +21,7 @@ func TestSubcommandHelpGuards(t *testing.T) {
 		fn   func([]string) int
 	}{
 		{"explain", cmdExplain},
+		{"fetch", cmdFetch},
 		{"run", cmdRun},
 		{"mcp", cmdMCP},
 		{"hook", cmdHook},

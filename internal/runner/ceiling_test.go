@@ -79,10 +79,16 @@ func TestCeilingOverLimitKeepsHeadTailMarkerAndSpool(t *testing.T) {
 	if !strings.Contains(stderr, "[full output:") {
 		t.Errorf("expected the kept-spool hint on stderr, got %q", stderr)
 	}
-	path := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(stderr), "[full output: "), "]")
-	if strings.HasPrefix(path, "~") {
-		home, _ := os.UserHomeDir()
-		path = home + path[1:]
+	// Extract the hash from the hint: "[full output: ctx-wire fetch <hash>]"
+	const fetchPrefix = "[full output: ctx-wire fetch "
+	hint := strings.TrimSpace(stderr)
+	if !strings.HasPrefix(hint, fetchPrefix) {
+		t.Fatalf("hint not in expected form, got %q", hint)
+	}
+	hashVal := strings.TrimSuffix(strings.TrimPrefix(hint, fetchPrefix), "]")
+	path, ok := tee.Resolve(hashVal)
+	if !ok {
+		t.Fatalf("tee.Resolve(%q): not found", hashVal)
 	}
 	disk, err := os.ReadFile(path)
 	if err != nil {

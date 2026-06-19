@@ -10,7 +10,10 @@ package tee
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"hash"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,6 +31,10 @@ const (
 	envDisable   = "CTX_WIRE_TEE" // set to "0" to disable spooling
 	envDir       = "CTX_WIRE_TEE_DIR"
 	envFallback  = "CTX_WIRE_TEE_FALLBACK_DIR"
+
+	// handleLen is the number of hex characters shown in the ctx-wire fetch hint.
+	// 12 hex chars = 48 bits; with maxFiles=20 the collision probability is negligible.
+	handleLen = 12
 )
 
 // Spool streams scrubbed command output to a file. It is safe for concurrent
@@ -43,6 +50,7 @@ type Spool struct {
 	path   string
 	file   *os.File
 	sw     *scrub.Writer
+	hasher hash.Hash // sha256 of the scrubbed bytes (nil until opened)
 	err    error
 }
 
@@ -109,7 +117,8 @@ func (s *Spool) openInDir(dir string) error {
 	}
 	s.file = f
 	s.path = f.Name()
-	s.sw = scrub.NewWriter(f)
+	s.hasher = sha256.New()
+	s.sw = scrub.NewWriter(io.MultiWriter(f, s.hasher)) // scrub FIRST, then tee to file + hasher
 	s.opened = true
 	return nil
 }
@@ -140,12 +149,31 @@ func (s *Spool) Finalize(keep bool) (string, bool) {
 		_ = os.Remove(s.path)
 		return "", false
 	}
+	if s.hasher != nil {
+		sum := hex.EncodeToString(s.hasher.Sum(nil)) // full 64-hex of the scrubbed bytes
+		dst := hashedName(s.path, sum)
+		if dst != s.path {
+			if err := os.Rename(s.path, dst); err != nil {
+				// Rename failed: keep the original name. Hint falls back to the path form
+				// (hashFromName=="" handles it). Recovery still works, just without the
+				// stable handle.
+				cleanup(filepath.Dir(s.path))
+				return s.path, true
+			}
+			s.path = dst
+		}
+	}
 	cleanup(filepath.Dir(s.path))
 	return s.path, true
 }
 
-// Hint formats the recovery pointer appended to filtered output.
+// Hint formats the recovery pointer appended to filtered output. When the spool
+// file is content-addressed it renders a stable "ctx-wire fetch <hash>" handle;
+// if the hash could not be embedded (rename failure) it falls back to the path.
 func Hint(path string) string {
+	if h := hashFromName(path); h != "" {
+		return fmt.Sprintf("[full output: ctx-wire fetch %s]", h[:handleLen])
+	}
 	return fmt.Sprintf("[full output: %s]", displayPath(path))
 }
 
@@ -242,6 +270,78 @@ func cleanup(dir string) {
 	for _, name := range logs[:len(logs)-maxFiles] {
 		_ = os.Remove(filepath.Join(dir, name))
 	}
+}
+
+// hashedName turns ".../1700000000_go_test_123456.log" into
+// ".../1700000000_go_test_<sum>.log". The epoch prefix is preserved so cleanup()
+// still sorts chronologically; the trailing CreateTemp randomness is replaced by
+// the content hash so the file is resolvable by "fetch".
+func hashedName(path, sum string) string {
+	dir := filepath.Dir(path)
+	base := strings.TrimSuffix(filepath.Base(path), ".log")
+	// base is "<epoch>_<slug>_<rand>"; keep everything up to the last "_".
+	if i := strings.LastIndex(base, "_"); i >= 0 {
+		base = base[:i]
+	}
+	return filepath.Join(dir, base+"_"+sum+".log")
+}
+
+// hashFromName extracts the full 64-hex sha256 from a hashed spool filename.
+// Returns "" if the trailing segment is not exactly 64 lowercase hex characters
+// (i.e. the file was not renamed to the content-addressed form).
+func hashFromName(path string) string {
+	base := strings.TrimSuffix(filepath.Base(path), ".log")
+	i := strings.LastIndex(base, "_")
+	if i < 0 {
+		return ""
+	}
+	seg := base[i+1:]
+	if len(seg) != 64 {
+		return ""
+	}
+	for _, c := range seg {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return ""
+		}
+	}
+	return seg
+}
+
+// Resolve finds the spool file for a hash prefix across the same directories the
+// spool writes to. The prefix is AMBIGUOUS only when it matches two or more
+// DISTINCT full hashes; multiple files that share the SAME full hash are
+// equivalent recovery copies (content-addressing can leave duplicates across
+// spool dirs or before a rename), so the newest is returned, not rejected.
+// Returns ok=false when nothing matches (evicted/unknown) or the prefix spans
+// distinct full hashes.
+func Resolve(hashPrefix string) (path string, ok bool) {
+	dirs, err := spoolDirs()
+	if err != nil {
+		return "", false
+	}
+	full := "" // the single full hash the prefix has resolved to so far
+	best := "" // newest matching path (filenames start with epoch nanos)
+	for _, dir := range dirs {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			h := hashFromName(e.Name())
+			if h == "" || !strings.HasPrefix(h, hashPrefix) {
+				continue
+			}
+			if full == "" {
+				full = h
+			} else if h != full {
+				return "", false // prefix spans two distinct hashes: ambiguous
+			}
+			if best == "" || e.Name() > filepath.Base(best) {
+				best = filepath.Join(dir, e.Name()) // lexically-greater basename == newer
+			}
+		}
+	}
+	if best == "" {
+		return "", false // evicted or unknown
+	}
+	return best, true
 }
 
 func displayPath(path string) string {
