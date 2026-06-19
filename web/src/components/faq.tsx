@@ -33,7 +33,7 @@ const ITEMS = [
   },
   {
     q: "Does anything leave my machine?",
-    a: "Command output, logs, and gain history stay local. Optional telemetry sends aggregate counters only (command counts, bytes saved), never commands or output, and a single flag turns it off.",
+    a: "Command output, logs, and gain history stay local. Anonymous, aggregate telemetry is on by default (counts and bytes/tokens saved, bucketed by agent and country), never commands, arguments, paths, or output. `ctx-wire telemetry disable` turns it all off; `ctx-wire telemetry improvements off` keeps the community stats but stops sharing the per-command detail used to tune filters.",
   },
   {
     q: "Which agents does it cover?",

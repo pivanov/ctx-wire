@@ -55,8 +55,8 @@ func TestRunCleanEnvIsHealthy(t *testing.T) {
 	if c, ok := findCheck(r, "filters", "built-in registry"); !ok || c.Status != OK {
 		t.Errorf("registry check = %+v, want OK", c)
 	}
-	if c, ok := findCheck(r, "telemetry", "status"); !ok || c.Status != OK || !strings.Contains(c.Detail, "disabled") {
-		t.Errorf("telemetry check = %+v, want OK disabled (opt-in default)", c)
+	if c, ok := findCheck(r, "telemetry", "status"); !ok || c.Status != OK || !strings.Contains(c.Detail, "enabled") {
+		t.Errorf("telemetry check = %+v, want OK enabled (opt-out default)", c)
 	}
 }
 

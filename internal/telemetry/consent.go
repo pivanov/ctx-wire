@@ -13,19 +13,9 @@ import (
 // nothing else. Pretty-printed; returns "" only on an impossible marshal error.
 func PreviewPayload(summary *gain.Summary) string {
 	t := totalsFromSummary(summary)
-	sanitizeTotals(&t) // defensive; totalsFromSummary already gates at construction
-	p := impactPayload{
-		Schema:       1,
-		Event:        "impact",
-		Version:      buildVersion,
-		Commands:     t.Commands,
-		RawBytes:     t.RawBytes,
-		EmittedBytes: t.EmittedBytes,
-		BytesSaved:   t.BytesSaved,
-		TokensSaved:  t.TokensSaved,
-		Programs:     t.Programs,
-		Agents:       t.Agents,
-	}
+	sanitizeTotals(&t)     // defensive; totalsFromSummary already gates at construction
+	cfg, _ := readConfig() // preview must match the wire, including the sub-toggle
+	p := buildImpactPayload(t, cfg)
 	b, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return ""
@@ -64,11 +54,11 @@ func MockPayload() string {
 	return string(b)
 }
 
-// ShouldPreviewConsent reports whether the one-time opt-in consent invite should
-// be shown: the user has NOT made a telemetry choice yet (no env override, no
-// explicit enable/disable) and has not already seen the invite. Opt-in means the
-// invite is an offer, not a notice of something already on. Read errors read as
-// "no" so it never blocks or repeats on a broken config.
+// ShouldPreviewConsent reports whether the one-time telemetry notice should be
+// shown: the user has NOT made an explicit telemetry choice yet (no env override,
+// no explicit enable/disable) and has not already seen it. Opt-out means the
+// notice tells the user telemetry is already on and how to turn it off. Read
+// errors read as "no" so it never blocks or repeats on a broken config.
 func ShouldPreviewConsent() bool {
 	cfg, err := readConfig()
 	if err != nil {
@@ -81,6 +71,28 @@ func ShouldPreviewConsent() bool {
 		return false // already chose (enabled or disabled): no invite
 	}
 	return !cfg.PreviewShown
+}
+
+// MigrationNoticeIfPending returns the one-time opt-out migration notice (and
+// latches its own marker) for a previously-undecided user, or "" if it should not
+// show. It is the non-interactive counterpart to the interactive notice: agents
+// run `ctx-wire gain` without a terminal, so this discloses at the point of
+// collection on that path. Its marker is SEPARATE from the interactive one, so a
+// swallowed line here never suppresses the notice a human would see in a terminal.
+func MigrationNoticeIfPending() string {
+	cfg, err := readConfig()
+	if err != nil {
+		return ""
+	}
+	if _, forced := enabled(cfg); forced {
+		return "" // CTX_WIRE_TELEMETRY decides; no migration notice
+	}
+	if cfg.Enabled != nil || cfg.MigrationNoticeShown {
+		return "" // already chose, or already shown
+	}
+	cfg.MigrationNoticeShown = true
+	_ = writeConfig(cfg)
+	return "anonymous aggregate telemetry is on by default; disable with `ctx-wire telemetry disable`"
 }
 
 // MarkPreviewShown latches the one-time consent invite so it is shown once.
