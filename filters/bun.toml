@@ -2,8 +2,13 @@
 description = "Compact Bun install/build/test output"
 match_command = "^bun(?:\\s+(?:--filter|-F)\\s+\\S+)*\\s+(build-storybook|storybook|typecheck|install|remove|build|test|lint|add|run\\s+(build-storybook|storybook|typecheck|build|test|lint))\\b"
 strip_ansi = true
+# bun writes its test summary (N pass / N fail / "Ran N tests") to STDERR; stdout
+# is only the version header. Without filter_stderr the collapse patterns never saw
+# the summary, so a passing `bun test` never compacted. A failing run still survives
+# via the `unless` guard and the non-zero-exit suppression.
+filter_stderr = true
 match_output = [
-  { pattern = "(?mi)(installed .* packages?|\\d+ packages installed|Saved lockfile|\\bpass\\b|tests? passed|built in|Done in|Output directory:|=> (Manager|Preview|Storybook) built|Storybook (built|build complete|build completed)|Checked .* No fixes applied)", message = "bun: ok", unless = "(?i)(error|failed|failures?|panic|exception|TypeError|SyntaxError|\\bWARN\\b|warning)" },
+  { pattern = "(?mi)(installed .* packages?|\\d+ packages? installed|Saved lockfile|\\bpass\\b|tests? passed|built in|Done in|Output directory:|=> (Manager|Preview|Storybook) built|Storybook (built|build complete|build completed)|Checked .* No fixes applied)", message = "bun: ok", unless = "(?i)(error|failed|failures?|panic|exception|TypeError|SyntaxError|\\bWARN\\b|warning)" },
 ]
 strip_lines_matching = [
   "^\\s*$",
@@ -139,3 +144,41 @@ src/app.test.ts:
 5 tests passed (123ms)
 """
 expected = "bun test v1.1.34 (1a2b3c4d)\nsrc/app.test.ts:\n5 tests passed (123ms)"
+
+[[tests.bun]]
+name = "single-package install collapses (singular 'package installed')"
+input = """
+bun add v1.3.13 (bf2e2cec)
+
+installed left-pad@1.3.0
+
+1 package installed [12.00ms]
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "bun test pass collapses (summary is on stderr, needs filter_stderr)"
+input = """
+bun test v1.3.13 (bf2e2cec)
+"""
+stderr = """
+ 1 pass
+ 0 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [4.00ms]
+"""
+expected = "bun: ok"
+
+[[tests.bun]]
+name = "bun test failure on stderr is not collapsed (nonzero exit)"
+failed = true
+stderr = """
+ 0 pass
+ 1 fail
+error: expect(received).toBe(expected)
+Ran 1 test across 1 file. [5.00ms]
+"""
+expected = """ 0 pass
+ 1 fail
+error: expect(received).toBe(expected)
+Ran 1 test across 1 file. [5.00ms]"""
