@@ -208,8 +208,8 @@ const SNIPPETS: Record<string, TSnippet> = {
 // Filters we actually shipped, framed as a changelog (not the rotation above).
 // Only released fixes belong here, never roadmap.
 const SHIPPED = [
-  { version: "0.1.37", cmd: "uv" },
-  { version: "0.1.37", cmd: "bun" },
+  { version: "0.1.38", cmd: "uv" },
+  { version: "0.1.38", cmd: "bun" },
   { version: "0.1.36", cmd: "rubocop" },
 ];
 
