@@ -2,6 +2,12 @@
 description = "Compact uv sync/add/lock/remove/pip install output - strip downloads and venv ceremony, short-circuit when up-to-date"
 match_command = "^uv\\s+(sync|add|lock|remove|pip\\s+install)\\b"
 strip_ansi = true
+# uv writes ALL of its output (resolve/install/audit lines AND errors) to STDERR;
+# stdout is empty. Without filter_stderr the strip/collapse rules only saw the
+# (empty) stdout and never fired, so the filter was a silent no-op on every real
+# uv run. The fixtures below use `stderr =` to model the real stream split and to
+# pin this: a stderr fixture fails the moment filter_stderr is dropped.
+filter_stderr = true
 strip_lines_matching = [
   "^\\s*$",
   "^\\s+Downloading ",
@@ -16,60 +22,67 @@ match_output = [
 max_lines = 20
 
 [[tests.uv-sync]]
-name = "audited packages short-circuits to ok"
-input = """
-Resolved 42 packages in 123ms
-Audited 42 packages in 0.05ms
+name = "uv sync up-to-date short-circuits to ok (real uv writes this to stderr)"
+stderr = """
+Resolved 6 packages in 1ms
+Audited 5 packages in 0.78ms
 """
 expected = "ok (up to date)"
 
 [[tests.uv-sync]]
-name = "install strips download and cached lines"
-input = """
-  Downloading requests-2.31.0-py3-none-any.whl (62.6 kB)
-  Using cached certifi-2023.11.17-py3-none-any.whl (162 kB)
+name = "uv add strips download/cached/venv ceremony, keeps the + result lines"
+stderr = """
+Using CPython 3.14.3
+Creating virtual environment at: .venv
+  Downloading requests-2.34.2-py3-none-any.whl (62.6 kB)
+  Using cached certifi-2026.6.17-py3-none-any.whl (162 kB)
   Preparing packages...
-Installed 5 packages in 23ms
- + certifi==2023.11.17
- + charset-normalizer==3.3.2
- + idna==3.6
- + requests==2.31.0
- + urllib3==2.1.0
+Resolved 6 packages in 2ms
+Installed 5 packages in 2ms
+ + certifi==2026.6.17
+ + charset-normalizer==3.4.7
+ + idna==3.18
+ + requests==2.34.2
+ + urllib3==2.7.0
 """
-expected = "Installed 5 packages in 23ms\n + certifi==2023.11.17\n + charset-normalizer==3.3.2\n + idna==3.6\n + requests==2.31.0\n + urllib3==2.1.0"
+expected = "Resolved 6 packages in 2ms\nInstalled 5 packages in 2ms\n + certifi==2026.6.17\n + charset-normalizer==3.4.7\n + idna==3.18\n + requests==2.34.2\n + urllib3==2.7.0"
+min_saved_percent = 20
 
 [[tests.uv-sync]]
-name = "failed exit is not collapsed to ok (up to date)"
+name = "failed exit with an audited line is NOT collapsed to ok (up to date)"
 failed = true
-input = """
+stderr = """
 Resolved 5 packages in 12ms
 Audited 5 packages in 0.01ms
 """
 expected = "Resolved 5 packages in 12ms\nAudited 5 packages in 0.01ms"
 
 [[tests.uv-sync]]
-name = "uv add strips venv ceremony keeps result lines"
-input = """
-Using CPython 3.14.3
-Creating virtual environment at: .venv
-Resolved 2 packages in 57ms
-Installed 1 package in 6ms
- + idna==3.18
+name = "failed uv add: resolver error survives, never collapsed"
+failed = true
+stderr = """
+  × No solution found when resolving dependencies:
+  ╰─▶ Because this-pkg-zzz-nope was not found in the package registry and
+      your project depends on this-pkg-zzz-nope, we can conclude that your
+      project's requirements are unsatisfiable.
 """
-expected = "Resolved 2 packages in 57ms\nInstalled 1 package in 6ms\n + idna==3.18"
+expected = """  × No solution found when resolving dependencies:
+  ╰─▶ Because this-pkg-zzz-nope was not found in the package registry and
+      your project depends on this-pkg-zzz-nope, we can conclude that your
+      project's requirements are unsatisfiable."""
 
 [[tests.uv-sync]]
-name = "uv lock keeps resolve line"
-input = """
-Resolved 2 packages in 2ms
+name = "uv lock keeps the resolve line"
+stderr = """
+Resolved 6 packages in 1ms
 """
-expected = "Resolved 2 packages in 2ms"
+expected = "Resolved 6 packages in 1ms"
 
 [[tests.uv-sync]]
 name = "uv remove keeps uninstall result lines"
-input = """
-Resolved 1 package in 2ms
-Uninstalled 1 package in 0.83ms
+stderr = """
+Resolved 1 package in 1ms
+Uninstalled 5 packages in 5ms
  - idna==3.18
 """
-expected = "Resolved 1 package in 2ms\nUninstalled 1 package in 0.83ms\n - idna==3.18"
+expected = "Resolved 1 package in 1ms\nUninstalled 5 packages in 5ms\n - idna==3.18"
