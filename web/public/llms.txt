@@ -11,7 +11,7 @@
 ## Key facts
 
 - Language: Go, single static binary, no CGO. Runs on macOS, Linux, and Windows.
-- 147 built-in declarative filters, verified by 390+ conformance tests (`ctx-wire verify`).
+- 147 built-in declarative filters, verified by 400+ conformance tests (`ctx-wire verify`).
 - Integration: Bash pre-tool hook, PATH shims (catch commands nested scripts spawn), and an MCP server exposing `run_command` and `read_file`.
 - Works with Claude, Cursor, Codex, Gemini, Copilot, Cline, Windsurf, and more (14 targets).
 - Streaming-aware bypass auto-detects dev servers, watchers, and interactive commands so they never deadlock.

@@ -10,7 +10,7 @@ commands. For the config file and environment variables see
 | Command | What it does |
 |---|---|
 | `ctx-wire run <cmd> [args]` | Execute a command and filter/scrub its output |
-| `ctx-wire fetch <hash>` | Recover the full scrubbed output spooled for a truncated or failed command (the `[full output: ctx-wire fetch <hash>]` handle) |
+| `ctx-wire fetch <hash> [--lines A-B]` | Recover the full scrubbed output spooled for a truncated or failed command (the `[full output: ctx-wire fetch <hash>]` handle); `--lines A-B` returns just that 1-based, inclusive line range |
 | `ctx-wire mcp` | Serve `run_command` and `read_file` filtering tools over MCP (stdio) |
 | `ctx-wire mcp-wrap [--compress] -- <server>` | Transparently relay a stdio MCP server and measure per-tool token cost; `--compress` also reduces verbose accessibility snapshots (chrome-devtools, Playwright), spooling the raw result locally |
 | `ctx-wire mcp-wrap install [--compress] \| uninstall <server>` | Wrap (or revert) a server in your MCP config so its tool output is measured (and with `--compress`, reduced); backs up the config, needs an agent restart |
