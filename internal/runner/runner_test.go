@@ -481,7 +481,7 @@ func TestStreamLiveSlowOutput(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code, err := streamLive(context.Background(), "sh",
 		[]string{"-c", "for i in 1 2 3 4 5; do echo line$i; sleep 0.02; done"},
-		"sh -c loop", tee.NewSpool("slow"), &out, &errOut)
+		"sh -c loop", tee.NewSpool("slow"), &out, &errOut, false)
 	if err != nil {
 		t.Fatalf("streamLive: %v", err)
 	}
@@ -501,7 +501,7 @@ func TestStreamLiveSpoolsOnFailure(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code, err := streamLive(context.Background(), "sh",
 		[]string{"-c", "for i in $(seq 1 50); do echo error line with PASSWORD=hunter2 detail; done; exit 2"},
-		"sh -c fail", tee.NewSpool("fail"), &out, &errOut)
+		"sh -c fail", tee.NewSpool("fail"), &out, &errOut, false)
 	if err != nil {
 		t.Fatalf("streamLive: %v", err)
 	}
@@ -531,7 +531,7 @@ func TestStreamLiveNoFooterOnPlainFailure(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code, err := streamLive(context.Background(), "sh",
 		[]string{"-c", "echo oops; exit 1"},
-		"sh -c oops", tee.NewSpool("oops"), &out, &errOut)
+		"sh -c oops", tee.NewSpool("oops"), &out, &errOut, false)
 	if err != nil {
 		t.Fatalf("streamLive: %v", err)
 	}
@@ -543,6 +543,42 @@ func TestStreamLiveNoFooterOnPlainFailure(t *testing.T) {
 	}
 	if strings.TrimSpace(out.String()) != "oops" {
 		t.Errorf("streamed output must be unchanged, got %q", out.String())
+	}
+}
+
+// TestStreamLiveCeilingOffEmitsFull pins the full-file carve-out: with
+// ceilingOff=true streamLive emits the whole scrubbed output, where the same
+// stream with the ceiling on omits the middle. This is how a skill/instruction
+// file reaches the agent uncapped (the routing lives in Run via IsFullFileRead).
+func TestStreamLiveCeilingOffEmitsFull(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	// Shrink the ceiling so a modest output would normally be capped.
+	defer func(h, tl int) { passthroughHeadBytes, passthroughTailBytes = h, tl }(passthroughHeadBytes, passthroughTailBytes)
+	passthroughHeadBytes, passthroughTailBytes = 256, 128
+	script := "for i in $(seq 1 500); do echo full-file line $i; done"
+
+	// Control: ceiling on (ceilingOff=false) omits the middle.
+	var capped, cappedErr bytes.Buffer
+	if _, err := streamLive(context.Background(), "sh", []string{"-c", script}, "sh -c capped", tee.NewSpool("capped"), &capped, &cappedErr, false); err != nil {
+		t.Fatalf("streamLive capped: %v", err)
+	}
+	if strings.Contains(capped.String(), "full-file line 250") {
+		t.Fatal("control: the ceiling should have omitted the middle line")
+	}
+	if !strings.Contains(capped.String(), "omitted") {
+		t.Fatal("control: expected the ceiling's omission marker")
+	}
+
+	// ceilingOff=true: the whole output reaches the agent, no omission.
+	var full, fullErr bytes.Buffer
+	if _, err := streamLive(context.Background(), "sh", []string{"-c", script}, "sh -c full", tee.NewSpool("full"), &full, &fullErr, true); err != nil {
+		t.Fatalf("streamLive full: %v", err)
+	}
+	if !strings.Contains(full.String(), "full-file line 250") {
+		t.Error("ceilingOff=true must emit the whole output, including the middle")
+	}
+	if strings.Contains(full.String(), "omitted") {
+		t.Error("ceilingOff=true must not emit a ceiling omission marker")
 	}
 }
 

@@ -56,6 +56,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ctx-wire: %v\n", err)
 	} else {
 		commandpolicy.SetExcludedCommands(cfg.Hooks.ExcludeCommands)
+		commandpolicy.SetFullFiles(cfg.Hooks.FullFiles)
 		commandpolicy.SetTransparentPrefixes(cfg.Hooks.TransparentPrefixes)
 		filter.SetUltraCompact(cfg.Output.UltraCompact)
 		stripstack.SetEnabled(cfg.Output.StripStacktraces)

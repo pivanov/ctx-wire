@@ -30,7 +30,7 @@ func runStream(t *testing.T, script string) (stdout, stderr string, code int) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	var out, errBuf bytes.Buffer
 	spool := tee.NewSpool("ceiling-test")
-	code, err := streamLive(context.Background(), "sh", []string{"-c", script}, "sh -c test", spool, &out, &errBuf)
+	code, err := streamLive(context.Background(), "sh", []string{"-c", script}, "sh -c test", spool, &out, &errBuf, false)
 	if err != nil {
 		t.Fatalf("streamLive: %v", err)
 	}

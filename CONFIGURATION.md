@@ -30,6 +30,13 @@ transparent_prefixes = ["docker exec web", "direnv exec ."]
 # `ctx-wire init claude --capture-files | --no-capture-files`.
 capture_file_tools = false
 
+# Files that must reach the agent whole: a `cat`/`nl` read of a file whose
+# basename matches one of these globs skips output capping (the per-filter line
+# cap and the passthrough ceiling), so an instruction or skill file is never
+# truncated. Output is still secret-scrubbed. These EXTEND the built-in defaults
+# (SKILL.md, AGENTS.md, CLAUDE.md), they do not replace them.
+full_files = ["*.skill", "PLAYBOOK.md"]
+
 [output]
 # Extra compaction of filtered output (trim trailing whitespace, collapse
 # blank-line runs) for a few more tokens.

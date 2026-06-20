@@ -57,6 +57,69 @@ func IsExcluded(name string) bool {
 	return excludedCommands[filepath.Base(name)]
 }
 
+// fullReadCommands are commands that emit a file's entire contents. For these, a
+// path argument matching a full-file pattern bypasses output capping so an
+// instruction or skill file reaches the agent whole (still scrubbed). head/tail
+// are excluded on purpose: they are partial reads by intent.
+var fullReadCommands = map[string]bool{"cat": true, "nl": true, "bat": true}
+
+// defaultFullFilePatterns protect agent-instruction files that must be read
+// whole. Skill files are named SKILL.md by convention (including under a
+// skills/<name>/ directory), so a basename match covers them anywhere.
+var defaultFullFilePatterns = []string{"SKILL.md", "AGENTS.md", "CLAUDE.md"}
+
+// fullFilePatterns is the active set: the defaults plus any configured globs.
+var fullFilePatterns = defaultFullFilePatterns
+
+// SetFullFiles extends the built-in full-file patterns with the user globs from
+// [hooks] full_files. The defaults always apply; user patterns are added, not
+// replaced. Blank entries are ignored.
+func SetFullFiles(patterns []string) {
+	out := append([]string{}, defaultFullFilePatterns...)
+	for _, p := range patterns {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	fullFilePatterns = out
+}
+
+// IsFullFileRead reports whether name+args is a whole-file read of files that
+// must not be capped (instruction or skill files). True only when the command is
+// a full-content reader (cat/nl/bat) and EVERY file operand matches a full-file
+// pattern (with at least one operand). The all-operands rule is the guard against
+// a context flood: `cat SKILL.md huge.log` must NOT uncap, because cat emits one
+// concatenated stream and we cannot keep only the skill half. Read the skill file
+// on its own to get it whole.
+func IsFullFileRead(name string, args []string) bool {
+	if !fullReadCommands[filepath.Base(name)] {
+		return false
+	}
+	operands := 0
+	for _, a := range args {
+		if a == "" || strings.HasPrefix(a, "-") {
+			continue // a flag (or the `--` separator), not a file operand
+		}
+		operands++
+		if !matchesFullFilePattern(a) {
+			return false // a non-full-file operand would be flooded too: do not uncap
+		}
+	}
+	return operands > 0
+}
+
+// matchesFullFilePattern reports whether path's basename matches any active
+// full-file pattern, using filepath.Match glob syntax (*, ?, [..]).
+func matchesFullFilePattern(path string) bool {
+	base := filepath.Base(path)
+	for _, pat := range fullFilePatterns {
+		if ok, _ := filepath.Match(pat, base); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // transparentPrefixes are wrapper command prefixes (from config) that the hook
 // peels before routing the inner command. Set once at startup; read-only after.
 var transparentPrefixes []string

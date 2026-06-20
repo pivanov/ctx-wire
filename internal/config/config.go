@@ -149,6 +149,14 @@ type Hooks struct {
 	// translate exactly, suggesting the equivalent filtered shell command.
 	// Toggle with `ctx-wire init claude --capture-files|--no-capture-files`.
 	CaptureFileTools bool `toml:"capture_file_tools"`
+
+	// FullFiles are filename globs (matched against the read file's basename) for
+	// files that must reach the agent whole. A `cat`/`nl` read of a matching file
+	// skips output capping (the per-filter line cap and the passthrough ceiling)
+	// so an instruction or skill file is never truncated. The output is still
+	// secret-scrubbed. These extend the built-in defaults (SKILL.md, AGENTS.md,
+	// CLAUDE.md); they do not replace them.
+	FullFiles []string `toml:"full_files"`
 }
 
 // Path returns the config file location: CTX_WIRE_CONFIG, else

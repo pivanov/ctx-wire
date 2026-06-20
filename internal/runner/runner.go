@@ -69,12 +69,20 @@ func Run(ctx context.Context, reg *filter.Registry, name string, args []string) 
 	scrubbedCmd := scrub.Command(name, args)
 	spool := tee.NewSpool(scrubbedCmd)
 
+	// A configured full-context file (skill / instruction doc) must reach the
+	// agent whole: stream it scrubbed but skip both the filter cap and the
+	// passthrough ceiling. Scrubbing is preserved (streamLive still wraps
+	// scrub.NewWriter); only capping is bypassed.
+	if commandpolicy.IsFullFileRead(name, args) {
+		return streamLive(ctx, execName, args, scrubbedCmd, spool, os.Stdout, os.Stderr, true)
+	}
+
 	matched := reg.Find(cmdline)
 
 	// No filter: stream output live (line-buffered, scrubbed) so long-running
 	// commands surface progress instead of buffering until exit.
 	if matched == nil {
-		return streamLive(ctx, execName, args, scrubbedCmd, spool, os.Stdout, os.Stderr)
+		return streamLive(ctx, execName, args, scrubbedCmd, spool, os.Stdout, os.Stderr, false)
 	}
 
 	// A filter needs the whole output, so buffer (bounded), then emit.
@@ -102,7 +110,7 @@ func commandLine(name string, args []string) string {
 // scrubbing in-flight (line-buffered, with multi-line secrets held back). The
 // full scrubbed output is spooled to disk and kept if the command fails. Used
 // for the passthrough path, where there is no filter that needs whole output.
-func streamLive(ctx context.Context, name string, args []string, scrubbedCmd string, spool *tee.Spool, stdout, stderr io.Writer) (int, error) {
+func streamLive(ctx context.Context, name string, args []string, scrubbedCmd string, spool *tee.Spool, stdout, stderr io.Writer, ceilingOff bool) (int, error) {
 	emitOut := &countWriter{w: stdout}
 	emitErr := &countWriter{w: stderr}
 	// The passthrough ceiling sits between the scrubber and the agent: the head
@@ -111,7 +119,7 @@ func streamLive(ctx context.Context, name string, args []string, scrubbedCmd str
 	// the full scrubbed output stays recoverable whenever the ceiling fires.
 	var outLim, errLim *ceilWriter
 	outDst, errDst := io.Writer(emitOut), io.Writer(emitErr)
-	if head, tail, enabled := passthroughCeiling(); enabled {
+	if head, tail, enabled := passthroughCeiling(); enabled && !ceilingOff {
 		ceil := newStreamCeiling(head, tail)
 		outLim, errLim = ceil.writer(emitOut), ceil.writer(emitErr)
 		outDst, errDst = outLim, errLim
