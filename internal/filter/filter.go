@@ -200,6 +200,14 @@ type ApplyOptions struct {
 	// always at the end, so the head-keep default would truncate exactly what
 	// the agent needs.
 	KeepTailOnTruncate bool
+
+	// MaxLinesOverride, when non-nil, replaces the filter's max_lines cap for
+	// this one invocation. Runners set it when the command itself carries an
+	// explicit, bounded line request (sed -n 'A,Bp', head -n N, tail -n N) up to
+	// a ceiling, so an agent that already self-limited its read is not re-capped.
+	// Every other stage (scrub, truncate_lines_at) still applies; only the line
+	// count cap is lifted to the agent's own bound.
+	MaxLinesOverride *int
 }
 
 // compile turns a TOML filter definition into a CompiledFilter, compiling all
@@ -484,8 +492,13 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 		lines = grouped
 	}
 
-	// 7. max_lines (absolute cap, counts omit messages)
-	if m := scaledCap(f.maxLines, opts.TruncateLevel); m != nil {
+	// 7. max_lines (absolute cap, counts omit messages). An explicit bounded read
+	// (sed -n 'A,Bp', head/tail -n N) replaces the cap with the agent's own bound.
+	lineCap := scaledCap(f.maxLines, opts.TruncateLevel)
+	if opts.MaxLinesOverride != nil {
+		lineCap = opts.MaxLinesOverride
+	}
+	if m := lineCap; m != nil {
 		max := *m
 		if len(lines) > max {
 			truncated = true

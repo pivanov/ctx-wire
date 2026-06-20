@@ -37,6 +37,13 @@ import (
 // to disk. It is a var so tests can shrink it. The on-disk spool is unaffected.
 var maxCapture = 10 << 20 // 10 MiB
 
+// explicitRangeCeiling bounds how many lines an explicit, bounded read
+// (sed -n 'A,Bp', head/tail -n N) may carry past the per-filter line cap. A
+// deliberate slice up to this size honors the agent's own bound; beyond it the
+// normal cap + spool applies, so a huge "explicit" range (sed -n '1,99999p')
+// still cannot flood context.
+const explicitRangeCeiling = 300
+
 // EnvSource is set to "hook" by `ctx-wire run --agent ...` (how a rewrite hook or
 // plugin invokes us), so gain can record the true entry point. Process-tree
 // agent detection is not a reliable hook signal on its own.
@@ -195,11 +202,18 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 			text = out + errOut
 		}
 		failed := code != 0
-		applied := applySafe(f, text, filter.ApplyOptions{
+		opts := filter.ApplyOptions{
 			SuppressSyntheticSuccess: failed,
 			KeepTailOnTruncate:       failed,
 			TruncateLevel:            filter.ResolveTruncateLevel(),
-		})
+		}
+		// An explicit, bounded line request (sed -n 'A,Bp', head/tail -n N) up to
+		// the ceiling honors the agent's own bound instead of the filter's cap, so
+		// a deliberate slice is not re-capped. Scrub and truncate_lines_at still apply.
+		if span, ok := commandpolicy.ExplicitLineSpan(name, args); ok && span <= explicitRangeCeiling {
+			opts.MaxLinesOverride = &span
+		}
+		applied := applySafe(f, text, opts)
 		if jsonText, jsonMode, ok := jsonGuard(out, applied.Truncated, f.FilterStderr, f.ReducesJSON()); ok {
 			mode = jsonMode
 			stdoutText = jsonText
