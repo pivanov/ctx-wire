@@ -27,13 +27,15 @@ import (
 
 const (
 	minSpoolSize = 500            // below this, output needs no recovery file
-	maxFiles     = 20             // keep at most this many spool files
+	maxFiles     = 200            // keep at most this many spool files (raised from 20; SpoolReader enables frequent spooling)
+	maxBytes     = 50 << 20       // 50 MiB total spool budget; evict oldest-first when exceeded
 	envDisable   = "CTX_WIRE_TEE" // set to "0" to disable spooling
 	envDir       = "CTX_WIRE_TEE_DIR"
 	envFallback  = "CTX_WIRE_TEE_FALLBACK_DIR"
 
 	// handleLen is the number of hex characters shown in the ctx-wire fetch hint.
-	// 12 hex chars = 48 bits; with maxFiles=20 the collision probability is negligible.
+	// 12 hex chars = 48 bits; the bytes budget (maxBytes=50MiB) is far below the
+	// collision threshold for a 48-bit space, so the handle length is correct as-is.
 	handleLen = 12
 )
 
@@ -58,6 +60,31 @@ type Spool struct {
 // if spooling is disabled via CTX_WIRE_TEE=0.
 func NewSpool(slug string) *Spool {
 	return &Spool{slug: slug, disabled: os.Getenv(envDisable) == "0"}
+}
+
+// SpoolReader content-addresses an arbitrary reader through the same scrub
+// boundary as runner stdout. The reader is streamed through scrub.Writer into a
+// new Spool; the spool is always kept (keep=true). On success it returns the
+// 12-hex handle (matching the length shown in Hint) and ok=true. On any error
+// (storage unavailable, CTX_WIRE_TEE=0) it returns ("", false) silently.
+//
+// SpoolReader MUST be used whenever a file's contents need to be spool-and-fetch
+// addressable, because it guarantees secrets are scrubbed before touching disk,
+// identically to how runner stdout is scrubbed.
+func SpoolReader(slug string, r io.Reader) (handle string, ok bool) {
+	s := NewSpool(slug)
+	if _, err := io.Copy(s, r); err != nil {
+		return "", false
+	}
+	path, kept := s.Finalize(true)
+	if !kept {
+		return "", false
+	}
+	h := hashFromName(path)
+	if h == "" {
+		return "", false
+	}
+	return h[:handleLen], true
 }
 
 // Write streams bytes into the spool, scrubbing them in-flight. It always
@@ -251,24 +278,41 @@ func sanitizeSlug(s string) string {
 	return out
 }
 
-// cleanup keeps only the newest maxFiles .log files in dir.
+// cleanup enforces the count cap (maxFiles) and the total-bytes budget (maxBytes)
+// by evicting the oldest spool files. Filenames begin with an epoch-nanos prefix,
+// so sort.Strings already produces chronological order; oldest files come first.
 func cleanup(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	var logs []string
+	type logEntry struct {
+		name string
+		size int64
+	}
+	var logs []logEntry
+	var totalBytes int64
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
-			logs = append(logs, e.Name())
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
+			continue
 		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		logs = append(logs, logEntry{name: e.Name(), size: info.Size()})
+		totalBytes += info.Size()
 	}
-	if len(logs) <= maxFiles {
-		return
-	}
-	sort.Strings(logs) // filenames begin with epoch seconds => chronological
-	for _, name := range logs[:len(logs)-maxFiles] {
-		_ = os.Remove(filepath.Join(dir, name))
+	sort.Slice(logs, func(i, j int) bool { return logs[i].name < logs[j].name }) // oldest first
+	// Evict oldest-first, but never the newest file: a single spool larger than
+	// maxBytes (e.g. a huge failing-command log) must survive, or the handle we
+	// just minted would be dead on arrival. The byte budget is therefore a
+	// best-effort cap that always keeps at least the most recent entry.
+	for len(logs) > 1 && (len(logs) > maxFiles || totalBytes > maxBytes) {
+		oldest := logs[0]
+		_ = os.Remove(filepath.Join(dir, oldest.name))
+		totalBytes -= oldest.size
+		logs = logs[1:]
 	}
 }
 

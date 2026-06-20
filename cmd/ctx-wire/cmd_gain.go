@@ -10,6 +10,7 @@ import (
 
 	"ctx-wire/internal/config"
 	"ctx-wire/internal/gain"
+	"ctx-wire/internal/tee"
 	"ctx-wire/internal/telemetry"
 	"ctx-wire/internal/ui"
 
@@ -102,10 +103,39 @@ func cmdGain(args []string) int {
 		fmt.Fprintln(os.Stderr, "ctx-wire: "+notice)
 	}
 	fmt.Print(gain.FormatThemed(s, themeForStdout()))
+	printFetchStats()
 	if opts.Since.IsZero() {
 		_, _ = telemetry.ReportImpact(s)
 	}
 	return 0
+}
+
+// printFetchStats appends the aggregate fetch-redemption counter to gain output
+// when at least one fetch has been recorded. Errors loading the stats are silently
+// ignored (the counter is informational).
+func printFetchStats() {
+	fs, err := tee.ReadFetchStats()
+	if err != nil {
+		return
+	}
+	total := fs.Full + fs.Ranged + fs.Miss
+	if total == 0 {
+		return
+	}
+	theme := themeForStdout()
+	fmt.Printf("\n%s\n", theme.Section.Render("Fetch redemptions (all-time)"))
+	if fs.Full > 0 {
+		fmt.Printf("  %-22s %s\n", "Full fetches:", fmt.Sprintf("%d", fs.Full))
+	}
+	if fs.Ranged > 0 {
+		fmt.Printf("  %-22s %s  (%s lines)\n", "Ranged fetches:", fmt.Sprintf("%d", fs.Ranged), fmt.Sprintf("%d", fs.LinesReturned))
+	}
+	if fs.Miss > 0 {
+		fmt.Printf("  %-22s %s\n", "Misses/evicted:", fmt.Sprintf("%d", fs.Miss))
+	}
+	if fs.BytesReturned > 0 {
+		fmt.Printf("  %-22s %s\n", "Bytes returned:", ui.HumanBytes(fs.BytesReturned))
+	}
 }
 
 // promptConsent shows a fixed EXAMPLE of the anonymous payload and informs the

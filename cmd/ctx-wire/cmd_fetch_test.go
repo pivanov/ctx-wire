@@ -156,3 +156,93 @@ func TestCmdFetchWritesSpoolToStdout(t *testing.T) {
 		t.Errorf("stdout does not contain expected spool content: %q", buf.String())
 	}
 }
+
+// TestParseLineRange exercises the production --lines parser directly (the tee
+// gate test only mirrors the slicing; this pins the real validation).
+func TestParseLineRange(t *testing.T) {
+	ok := []struct {
+		in   string
+		a, b int
+	}{
+		{"10-20", 10, 20},
+		{"5-5", 5, 5},
+		{"1-2", 1, 2},
+	}
+	for _, c := range ok {
+		a, b, err := parseLineRange(c.in)
+		if err != nil || a != c.a || b != c.b {
+			t.Errorf("parseLineRange(%q) = (%d,%d,%v), want (%d,%d,nil)", c.in, a, b, err, c.a, c.b)
+		}
+	}
+	for _, in := range []string{"abc", "10", "", "0-5", "20-10", "-5", "10-", "1-0", "x-3"} {
+		if _, _, err := parseLineRange(in); err == nil {
+			t.Errorf("parseLineRange(%q): want error, got nil", in)
+		}
+	}
+}
+
+// TestCmdFetchRangedLines exercises cmdFetch --lines end to end (parse -> resolve
+// -> emitLines), covering the window, clamping, beyond-EOF, the --lines= form,
+// and invalid input.
+func TestCmdFetchRangedLines(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CTX_WIRE_TEE_DIR", dir)
+	var sb strings.Builder
+	for i := 1; i <= 30; i++ {
+		fmt.Fprintf(&sb, "line %02d\n", i)
+	}
+	_, hash := spoolPayload(t, dir, "ranged-cmd", sb.String())
+	h := hash[:12]
+
+	capture := func(args []string) (string, int) {
+		t.Helper()
+		orig := os.Stdout
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("pipe: %v", err)
+		}
+		os.Stdout = w
+		code := cmdFetch(args)
+		_ = w.Close()
+		os.Stdout = orig
+		var buf bytes.Buffer
+		if _, err := buf.ReadFrom(r); err != nil {
+			t.Fatalf("read pipe: %v", err)
+		}
+		_ = r.Close()
+		return buf.String(), code
+	}
+
+	// Window 5-10 = 6 lines, exactly that window.
+	out, code := capture([]string{h, "--lines", "5-10"})
+	if code != 0 || strings.Count(out, "\n") != 6 {
+		t.Fatalf("--lines 5-10: exit=%d lines=%d, want 0/6: %q", code, strings.Count(out, "\n"), out)
+	}
+	if !strings.Contains(out, "line 05") || !strings.Contains(out, "line 10") ||
+		strings.Contains(out, "line 04") || strings.Contains(out, "line 11") {
+		t.Errorf("--lines 5-10 wrong window: %q", out)
+	}
+
+	// Clamp: 25-40 -> 25-30 = 6 lines.
+	if out, code := capture([]string{h, "--lines", "25-40"}); code != 0 || strings.Count(out, "\n") != 6 {
+		t.Errorf("--lines 25-40 clamp: exit=%d lines=%d, want 0/6", code, strings.Count(out, "\n"))
+	}
+
+	// A beyond EOF: empty stdout, exit 0 (note goes to stderr).
+	if out, code := capture([]string{h, "--lines", "100-110"}); code != 0 || strings.TrimSpace(out) != "" {
+		t.Errorf("--lines 100-110 beyond EOF: exit=%d out=%q, want 0/empty", code, out)
+	}
+
+	// --lines= form.
+	if out, code := capture([]string{h, "--lines=1-3"}); code != 0 || strings.Count(out, "\n") != 3 {
+		t.Errorf("--lines=1-3: exit=%d lines=%d, want 0/3", code, strings.Count(out, "\n"))
+	}
+
+	// Invalid range and missing value both exit 2.
+	if _, code := capture([]string{h, "--lines", "0-5"}); code != 2 {
+		t.Errorf("--lines 0-5 invalid: exit=%d, want 2", code)
+	}
+	if _, code := capture([]string{h, "--lines"}); code != 2 {
+		t.Errorf("--lines (no value): exit=%d, want 2", code)
+	}
+}

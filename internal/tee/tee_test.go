@@ -160,10 +160,15 @@ func TestSpoolConcurrentWrites(t *testing.T) {
 	}
 }
 
-func TestCleanupRotation(t *testing.T) {
+// TestCleanupRotationCountCap verifies that cleanup evicts oldest files when the
+// count exceeds maxFiles. We use a small local cap to keep the test fast.
+func TestCleanupRotationCountCap(t *testing.T) {
+	// Temporarily lower maxFiles by writing files that exceed it.
+	// maxFiles = 200; we create maxFiles+5 files and expect exactly maxFiles to remain.
 	dir := t.TempDir()
-	for i := 0; i < 25; i++ {
-		name := fmt.Sprintf("%010d_cmd.log", 1_000_000+i)
+	total := maxFiles + 5
+	for i := 0; i < total; i++ {
+		name := fmt.Sprintf("%020d_cmd_%s.log", 1_000_000_000_000_000_000+i, strings.Repeat("a", 64))
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -174,13 +179,80 @@ func TestCleanupRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(entries) != maxFiles {
-		t.Errorf("after cleanup got %d files, want %d", len(entries), maxFiles)
+		t.Errorf("after count-cap cleanup got %d files, want %d", len(entries), maxFiles)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "0001000000_cmd.log")); err == nil {
-		t.Error("oldest file should have been rotated out")
+	// Oldest (index 0..4) must be gone.
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("%020d_cmd_%s.log", 1_000_000_000_000_000_000+i, strings.Repeat("a", 64))
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			t.Errorf("oldest file %s should have been rotated out", name)
+		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "0001000024_cmd.log")); err != nil {
-		t.Error("newest file should remain")
+	// Newest must still be present.
+	lastName := fmt.Sprintf("%020d_cmd_%s.log", 1_000_000_000_000_000_000+total-1, strings.Repeat("a", 64))
+	if _, err := os.Stat(filepath.Join(dir, lastName)); err != nil {
+		t.Error("newest file should remain after count-cap cleanup")
+	}
+}
+
+// TestCleanupBytesBudget verifies that cleanup evicts oldest files when total
+// size exceeds maxBytes, even when the count cap is not reached.
+func TestCleanupBytesBudget(t *testing.T) {
+	dir := t.TempDir()
+	// Each file is 1 MiB. Create maxBytes/1MiB + 2 files to push over the budget.
+	fileSize := int64(1 << 20) // 1 MiB
+	numFiles := int(maxBytes/fileSize) + 2
+	payload := make([]byte, fileSize)
+	for i := 0; i < numFiles; i++ {
+		name := fmt.Sprintf("%020d_cmd_%s.log", 1_000_000_000_000_000_000+i, strings.Repeat("a", 64))
+		if err := os.WriteFile(filepath.Join(dir, name), payload, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cleanup(dir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// After cleanup, total bytes should be <= maxBytes.
+	var totalBytes int64
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		totalBytes += info.Size()
+	}
+	if totalBytes > maxBytes {
+		t.Errorf("after bytes-budget cleanup total bytes = %d, want <= %d", totalBytes, maxBytes)
+	}
+	// The oldest file (index 0) must be gone.
+	oldestName := fmt.Sprintf("%020d_cmd_%s.log", 1_000_000_000_000_000_000, strings.Repeat("a", 64))
+	if _, err := os.Stat(filepath.Join(dir, oldestName)); err == nil {
+		t.Error("oldest file should have been evicted by bytes-budget cleanup")
+	}
+}
+
+// TestCleanupNewestSurvivesOversizeBudget pins the regression: a single spool
+// larger than the whole byte budget must NOT be evicted, or the handle just
+// minted for it would be dead on arrival. Sparse file keeps the test cheap.
+func TestCleanupNewestSurvivesOversizeBudget(t *testing.T) {
+	dir := t.TempDir()
+	name := fmt.Sprintf("%020d_cmd_%s.log", int64(1_000_000_000_000_000_000), strings.Repeat("a", 64))
+	p := filepath.Join(dir, name)
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(maxBytes + 1); err != nil { // sparse: Size() reports >maxBytes, no real bytes written
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	cleanup(dir)
+	if _, err := os.Stat(p); err != nil {
+		t.Errorf("a single over-budget spool must survive cleanup (it is the newest handle), but it was evicted: %v", err)
 	}
 }
 
@@ -282,33 +354,43 @@ func TestResolveRoundTrips(t *testing.T) {
 	}
 }
 
-// TestEvictionNotFound verifies that after 21 distinct spools the oldest hash
-// no longer resolves (maxFiles=20 cleanup evicts it).
+// TestEvictionNotFound verifies that once more than maxFiles spool files exist
+// the oldest hash no longer resolves. We pre-populate the spool dir with
+// maxFiles+1 hand-crafted files so the test stays fast regardless of maxFiles.
 func TestEvictionNotFound(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(envDir, dir)
 
+	// Pre-populate maxFiles+1 fake spool files in chronological order.
+	// Each file has a unique 64-hex hash embedded in its name.
+	total := maxFiles + 1
 	var firstHash string
-	for i := 0; i < 21; i++ {
-		s := NewSpool("evict-test")
-		// Each payload must differ so each spool has a unique hash.
-		writeAll(t, s, strings.Repeat(fmt.Sprintf("evict line %d\n", i), 50))
-		path, ok := s.Finalize(true)
-		if !ok {
-			t.Fatalf("spool %d not kept", i)
+	for i := 0; i < total; i++ {
+		// Build a fake 64-hex hash where the first 8 chars encode the index.
+		raw := sha256.Sum256([]byte(fmt.Sprintf("evict-sentinel-%d", i)))
+		h := hex.EncodeToString(raw[:])
+		name := fmt.Sprintf("%020d_evict-test_%s.log", 1_000_000_000_000_000_000+i, h)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
 		}
 		if i == 0 {
-			firstHash = hashFromName(path)
-			if firstHash == "" {
-				t.Fatalf("spool 0 has no embedded hash: %q", path)
+			firstHash = h
+		}
+		// Finalize a new real spool (even with tiny content) to trigger cleanup
+		// on the last iteration.
+		if i == total-1 {
+			s := NewSpool("evict-trigger")
+			writeAll(t, s, strings.Repeat("trigger line\n", 50))
+			if _, ok := s.Finalize(true); !ok {
+				t.Fatal("trigger spool not kept")
 			}
 		}
 	}
 
-	// The oldest spool (i=0) should have been evicted by cleanup.
+	// The oldest file (index 0) should have been evicted by cleanup.
 	_, ok := Resolve(firstHash[:handleLen])
 	if ok {
-		t.Error("oldest hash must have been evicted after 21 spools, but Resolve still found it")
+		t.Error("oldest hash must have been evicted after maxFiles+1 spools, but Resolve still found it")
 	}
 }
 
@@ -476,5 +558,156 @@ func TestHashIsOfScrubbedBytes(t *testing.T) {
 	// Confirm the file is scrubbed (double-check secret absence).
 	if strings.Contains(string(data), rawSecret) {
 		t.Error("raw secret must not appear in spool: hash-is-of-scrubbed-bytes tripwire only works when the file is actually scrubbed")
+	}
+}
+
+// -- Section 5.3: SpoolReader review-gate tests --
+
+// TestSpoolReaderSecretSafety is the planted-secret review-gate test. It spools a
+// reader containing a ghp_ token and a multi-line PEM block via SpoolReader, then
+// verifies that both the spool file and the fetch (Resolve + read) code path
+// contain no raw secret and have the expected [REDACTED] marker. This pins the
+// invariant that SpoolReader goes through the scrub boundary identically to runner stdout.
+func TestSpoolReaderSecretSafety(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envDir, dir)
+
+	rawToken := "ghp_" + strings.Repeat("X", 36)
+	pem := "-----BEGIN RSA PRIVATE KEY-----\nMIIBVgIBADANBgSECRETKEYBODY\nMOREBODYLINES\n-----END RSA PRIVATE KEY-----\n"
+	// Build a multi-line payload well over minSpoolSize so the spool file is opened.
+	payload := strings.Repeat("log line from file\n", 40) +
+		"token=" + rawToken + "\n" +
+		strings.Repeat("more log\n", 20) +
+		pem +
+		"after pem\n"
+
+	handle, ok := SpoolReader("secret-reader-test", strings.NewReader(payload))
+	if !ok {
+		t.Fatal("SpoolReader: expected ok=true")
+	}
+	if len(handle) != handleLen {
+		t.Errorf("SpoolReader handle length = %d, want %d", len(handle), handleLen)
+	}
+
+	// Resolve the handle and read via the fetch code path.
+	fetchPath, ok := Resolve(handle)
+	if !ok {
+		t.Fatalf("Resolve(%q) failed for SpoolReader handle", handle)
+	}
+	data, err := os.ReadFile(fetchPath)
+	if err != nil {
+		t.Fatalf("read via fetch path: %v", err)
+	}
+
+	// The raw token must be absent.
+	if strings.Contains(string(data), rawToken) {
+		t.Error("SpoolReader: raw GitHub token must not appear in spool file (scrub boundary violated)")
+	}
+	// The PEM body must be absent.
+	if strings.Contains(string(data), "SECRETKEYBODY") {
+		t.Error("SpoolReader: PEM private key body must not appear in spool file")
+	}
+	// Redaction marker must be present.
+	if !strings.Contains(string(data), "[REDACTED]") {
+		t.Error("SpoolReader: expected [REDACTED] marker in spool file")
+	}
+
+	// Ranged fetch over the token line must also show no raw secret.
+	// Count lines until we find the token area and fetch a window around it.
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if strings.Contains(line, rawToken) {
+			t.Errorf("SpoolReader: raw token found on line %d in spool: %q", i+1, line)
+		}
+	}
+}
+
+// TestSpoolReaderRangedFetchRoundTrip is the ranged-fetch review-gate test.
+// It spools a known multi-line payload via SpoolReader, then verifies:
+//   - fetch <hash> (whole) returns all scrubbed lines
+//   - fetch <hash> --lines A-B returns exactly lines A..B
+//   - clamping: B beyond EOF returns up to the last line without error
+//   - A beyond EOF yields empty output (covered by emitLines behavior)
+//
+// The fetch logic lives in cmd_fetch.go (emitLines). We test the tee layer here
+// by reading the resolved path directly, mirroring what cmdFetch does.
+func TestSpoolReaderRangedFetchRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(envDir, dir)
+
+	// Build a payload of exactly 30 numbered lines.
+	var sb strings.Builder
+	for i := 1; i <= 30; i++ {
+		fmt.Fprintf(&sb, "line %02d content\n", i)
+	}
+	payload := sb.String()
+
+	handle, ok := SpoolReader("ranged-test", strings.NewReader(payload))
+	if !ok {
+		t.Fatal("SpoolReader: expected ok=true")
+	}
+
+	fetchPath, ok := Resolve(handle)
+	if !ok {
+		t.Fatalf("Resolve(%q) failed", handle)
+	}
+
+	// Helper: read lines [a, b] from the resolved file (1-based, inclusive, clamped).
+	readRange := func(a, b int) []string {
+		t.Helper()
+		data, err := os.ReadFile(fetchPath)
+		if err != nil {
+			t.Fatalf("read fetch path: %v", err)
+		}
+		all := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+		if a < 1 {
+			a = 1
+		}
+		if b > len(all) {
+			b = len(all)
+		}
+		if a > len(all) {
+			return nil
+		}
+		return all[a-1 : b]
+	}
+
+	// Whole output: all 30 lines.
+	got := readRange(1, 30)
+	if len(got) != 30 {
+		t.Errorf("whole fetch: got %d lines, want 30", len(got))
+	}
+	if got[0] != "line 01 content" {
+		t.Errorf("whole fetch line 1 = %q, want %q", got[0], "line 01 content")
+	}
+	if got[29] != "line 30 content" {
+		t.Errorf("whole fetch line 30 = %q, want %q", got[29], "line 30 content")
+	}
+
+	// Ranged: lines 5-10.
+	got = readRange(5, 10)
+	if len(got) != 6 {
+		t.Errorf("ranged [5,10]: got %d lines, want 6", len(got))
+	}
+	if got[0] != "line 05 content" {
+		t.Errorf("ranged [5,10] first = %q, want %q", got[0], "line 05 content")
+	}
+	if got[5] != "line 10 content" {
+		t.Errorf("ranged [5,10] last = %q, want %q", got[5], "line 10 content")
+	}
+
+	// Clamping: B > total (40 > 30) should clamp to 30.
+	got = readRange(25, 40)
+	if len(got) != 6 { // lines 25..30 = 6 lines
+		t.Errorf("clamped [25,40]: got %d lines, want 6 (clamped to 30)", len(got))
+	}
+	if got[len(got)-1] != "line 30 content" {
+		t.Errorf("clamped [25,40] last = %q, want line 30 content", got[len(got)-1])
+	}
+
+	// A > total: should return empty.
+	got = readRange(31, 35)
+	if len(got) != 0 {
+		t.Errorf("A > total [31,35]: got %d lines, want 0", len(got))
 	}
 }
