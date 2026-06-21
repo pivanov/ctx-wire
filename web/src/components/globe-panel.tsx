@@ -256,7 +256,7 @@ const CountryPills = ({
     <motion.ul
       variants={reduce ? undefined : fadeUp}
       aria-label="Countries by context saved"
-      className="m-0 flex list-none flex-wrap gap-2 p-0"
+      className="m-0 grid list-none grid-cols-2 gap-2 p-0 sm:grid-cols-3"
     >
       {rows.map((row) => {
         const active = row.code === activeCode;
@@ -265,13 +265,8 @@ const CountryPills = ({
             <button
               type="button"
               onClick={() => onSelect(active ? null : row)}
-              title={
-                active
-                  ? `Release ${row.name} and resume rotation`
-                  : `Rotate the globe to ${row.name}`
-              }
               aria-pressed={active}
-              className={`inline-flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 font-mono text-2xs ring-1 ring-inset transition-[background-color,transform] duration-150 ease-out motion-safe:active:scale-[0.97] ${
+              className={`flex w-full cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 font-mono text-[0.625rem] whitespace-nowrap ring-1 ring-inset sm:text-2xs transition-[background-color,transform] duration-150 ease-out motion-safe:active:scale-[0.97] ${
                 active
                   ? "bg-green/10 ring-green/40"
                   : "bg-white/3 ring-line hover:bg-white/6"
@@ -286,7 +281,7 @@ const CountryPills = ({
               <span className="tabular-nums text-cyan">
                 {formatTokens(row.tokens)}
               </span>
-              <span className="tabular-nums text-label">
+              <span className="ml-auto tabular-nums text-label">
                 {formatBytes(row.saved)}
               </span>
             </button>

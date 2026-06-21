@@ -38,7 +38,7 @@ const Row = ({
           reduce ? { duration: 0 } : { duration: 0.85, ease: EASE_OUT }
         }
       />
-      <div className="relative flex items-center gap-3 px-4 py-3 sm:gap-4">
+      <div className="relative flex items-center gap-3 pl-0.5 pr-4 py-3 sm:gap-4 md:pl-2">
         <span className="w-5 shrink-0 text-right font-mono text-xs font-bold tabular-nums text-label">
           {rank}
         </span>
