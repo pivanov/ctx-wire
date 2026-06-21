@@ -1,0 +1,79 @@
+[filters.wrangler]
+description = "Compact wrangler (Cloudflare Workers) output: strip the version banner, the divider, and the redundant --remote hints; keep upload size, bindings, the executed-on line, status, and the result JSON. Matches wrangler and bunx/npx wrangler."
+match_command = "^(?:{{runner}})?wrangler\\b"
+strip_ansi = true
+strip_lines_matching = [
+  "^\\s*⛅",                       # the "⛅️ wrangler X.Y.Z" version banner
+  "^─{3,}",                        # the box-drawing divider under the banner
+  "^Use --remote if you want",     # redundant hint
+  "^🌀 To execute on your remote",  # redundant hint (the "Executing on local" line is kept)
+  "^\\s*$",                        # blank lines
+]
+truncate_lines_at = 500
+
+[[tests.wrangler]]
+name = "deploy dry-run strips banner/divider/blanks, keeps upload + bindings"
+input = """
+ ⛅️ wrangler 4.103.0
+────────────────────
+Total Upload: 397.98 KiB / gzip: 69.97 KiB
+Your Worker has access to the following bindings:
+Binding                          Resource
+env.DB (relaykit)                D1 Database
+env.ARTIFACTS (relaykit)         R2 Bucket
+
+--dry-run: exiting now.
+"""
+expected = """
+Total Upload: 397.98 KiB / gzip: 69.97 KiB
+Your Worker has access to the following bindings:
+Binding                          Resource
+env.DB (relaykit)                D1 Database
+env.ARTIFACTS (relaykit)         R2 Bucket
+--dry-run: exiting now."""
+
+[[tests.wrangler]]
+name = "d1 execute strips banner + remote hints, keeps the executed-on line, status, and result JSON"
+input = """
+ ⛅️ wrangler 4.103.0
+────────────────────
+Resource location: local
+Use --remote if you want to access the remote instance.
+🌀 Executing on local database relaykit (0000) from ./apps/worker/.wrangler:
+🌀 To execute on your remote database, add a --remote flag to your wrangler command.
+🚣 1 command executed successfully.
+[
+  {
+    "results": [
+      { "name": "tasks", "type": "table" }
+    ],
+    "success": true
+  }
+]
+"""
+expected = """
+Resource location: local
+🌀 Executing on local database relaykit (0000) from ./apps/worker/.wrangler:
+🚣 1 command executed successfully.
+[
+  {
+    "results": [
+      { "name": "tasks", "type": "table" }
+    ],
+    "success": true
+  }
+]"""
+
+[[tests.wrangler]]
+name = "deploy error is preserved (never hide a failure)"
+failed = true
+input = """
+ ⛅️ wrangler 4.103.0
+────────────────────
+✘ [ERROR] A request to the Cloudflare API (/accounts/x/workers/scripts/y) failed.
+
+  workers.api.error.script_too_large [code: 10027]
+"""
+expected = """
+✘ [ERROR] A request to the Cloudflare API (/accounts/x/workers/scripts/y) failed.
+  workers.api.error.script_too_large [code: 10027]"""
