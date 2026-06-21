@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ctx-wire/internal/commandpolicy"
+	"ctx-wire/internal/filter"
 )
 
 const (
@@ -653,6 +654,14 @@ func hasTopLevelPipeOrRedirect(s string) bool {
 }
 
 func programName(s string) string {
+	// Peel a package-runner prefix so the real tool is attributed instead of the
+	// wrapper (e.g. "bunx prettier" -> "prettier"). Keep the wrapper when the inner
+	// token is a flag ("npx -y create-foo") or absent (a bare "bunx").
+	if inner := filter.StripRunnerPrefix(s); inner != s {
+		if t := firstToken(inner); t != "(none)" && t != "" && !strings.HasPrefix(t, "-") {
+			s = inner
+		}
+	}
 	token := firstToken(s)
 	if token == "(none)" {
 		return token

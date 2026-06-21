@@ -241,6 +241,25 @@ func expandRunnerToken(pattern string) string {
 	return pattern
 }
 
+// runnerPrefixRe matches a single leading package-runner prefix , the same
+// {{runner}} and {{py-runner}} sets filters match , anchored at the start of a
+// command line.
+var runnerPrefixRe = regexp.MustCompile(`^(?:` + runnerPrefix + `|` + pyRunnerPrefix + `)`)
+
+// StripRunnerPrefix removes one leading package-runner prefix (npx/bunx/pnpm|yarn
+// dlx|exec/bun x, or a Python `<mgr> run`/uvx/`uv tool run`/`python -m`) from a
+// command line and returns the inner command, so callers can recover the real
+// program behind a runner (e.g. "bunx prettier ..." -> "prettier ..."). It strips
+// at most one prefix and leaves a non-runner command untouched. The runner set is
+// the one filters match via {{runner}}/{{py-runner}}, so the two never drift.
+func StripRunnerPrefix(s string) string {
+	trimmed := strings.TrimLeft(s, " \t")
+	if loc := runnerPrefixRe.FindStringIndex(trimmed); loc != nil {
+		return trimmed[loc[1]:]
+	}
+	return s
+}
+
 // regexes up front. Returns an error if any regex is invalid or if strip and
 // keep are both set (mutually exclusive).
 func compile(name string, def tomlFilter) (*CompiledFilter, error) {
