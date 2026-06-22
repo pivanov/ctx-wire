@@ -59,7 +59,7 @@ func main() {
 		commandpolicy.SetFullFiles(cfg.Hooks.FullFiles)
 		commandpolicy.SetTransparentPrefixes(cfg.Hooks.TransparentPrefixes)
 		filter.SetUltraCompact(cfg.Output.UltraCompact)
-		stripstack.SetEnabled(cfg.Output.StripStacktraces)
+		stripstack.SetEnabled(cfg.Output.StripStacktracesOn())
 		if cfg.Output.Truncate != "" {
 			if lvl, ok := filter.ParseTruncateLevel(cfg.Output.Truncate); ok {
 				filter.SetConfiguredTruncateLevel(lvl)

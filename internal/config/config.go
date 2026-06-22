@@ -47,6 +47,12 @@ type Dedup struct {
 // `enabled = false`.
 func (d Dedup) On() bool { return d.Enabled == nil || *d.Enabled }
 
+// StripStacktracesOn reports whether stack-trace stripping is enabled: ON by
+// default (nil), honoring an explicit `strip_stacktraces = false`.
+func (o Output) StripStacktracesOn() bool {
+	return o.StripStacktraces == nil || *o.StripStacktraces
+}
+
 // Recency returns the configured dedup recency window, or the 60-minute default.
 func (d Dedup) Recency() time.Duration {
 	if d.RecencyMinutes <= 0 {
@@ -115,14 +121,16 @@ type Output struct {
 	// invocation.
 	Truncate string `toml:"truncate"`
 
-	// StripStacktraces, when true, collapses runs of third-party / language-runtime
-	// stack frames (node_modules, site-packages, JDK runtime packages, ...) into a
+	// StripStacktraces collapses runs of third-party / language-runtime stack
+	// frames (node_modules, site-packages, JDK runtime packages, ...) into a
 	// "... (+N library frames hidden)" marker, keeping the exception header, every
-	// application frame, and "caused by" links. Opt-in (off by default): a stack
-	// trace is often the answer, so this only hides frames whose source path is
-	// provably a library. The full raw trace is still spooled to disk.
-	// CTX_WIRE_STRIP_STACKTRACES overrides this per invocation.
-	StripStacktraces bool `toml:"strip_stacktraces"`
+	// application frame, and "caused by" links. ON by default (nil): it only hides
+	// frames whose source path is provably a library, so it can never hide the app
+	// frame where the bug is, and the full raw trace is still spooled (recoverable
+	// via fetch). A transcript measurement gated the default-on flip (see the dated
+	// stripstack-measurement note). Set `strip_stacktraces = false` to opt a
+	// machine out; CTX_WIRE_STRIP_STACKTRACES overrides per invocation.
+	StripStacktraces *bool `toml:"strip_stacktraces"`
 
 	// MonthlyTokenBudget frames `gain --quota`: the tokens you aim to save (or
 	// are allotted) per month. 0 leaves quota in its budget-free framing, where
