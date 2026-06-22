@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 
-	"ctx-wire/internal/config"
 	"ctx-wire/internal/filter"
 	"ctx-wire/internal/gain"
 	"ctx-wire/internal/install"
@@ -327,7 +326,7 @@ func missingSystemPathDirs() []string {
 // hooksSection diagnoses each agent's ctx-wire wiring. The per-agent marker and
 // path come from install.AgentProbes (the same registry that drives init and
 // uninstall), so adding an agent needs no edit here. Two agents keep bespoke
-// rendering: claude (multiple config dirs, plus the file-tools capture row) and
+// rendering: claude (multiple config dirs) and
 // codex (extra permission/feature/attribution rows). vscode and visualstudio
 // carry a WiringMCP probe, which this loop skips because they are diagnosed in
 // mcpSection instead.
@@ -371,11 +370,9 @@ func probeCheck(p install.AgentProbe, workdir string) (Check, bool) {
 	}
 }
 
-// claudeHookChecks renders one hook check per detected Claude config dir plus the
-// file-tools capture row. A real config that is not hooked is Warn (commands from
-// that Claude instance escape ctx-wire entirely); Off means the dir does not
-// exist yet. The capture row is config-present only; runtime proof is Read/Grep
-// counts falling in `ctx-wire session`.
+// claudeHookChecks renders one hook check per detected Claude config dir. A real
+// config that is not hooked is Warn (commands from that Claude instance escape
+// ctx-wire entirely); Off means the dir does not exist yet.
 func claudeHookChecks(p install.AgentProbe, opts Options) []Check {
 	var checks []Check
 	paths := p.Paths(opts.Workdir)
@@ -385,15 +382,6 @@ func claudeHookChecks(p install.AgentProbe, opts Options) []Check {
 			label = "claude config " + display(filepath.Dir(path))
 		}
 		checks = append(checks, hookCheckMulti(label, path, p.Needle))
-	}
-	if cfg, cerr := config.Load(); cerr == nil {
-		if cfg.Hooks.CaptureFileTools {
-			checks = append(checks, Check{"claude file-tools capture", OK,
-				"experiment on: Read/Grep redirect to filtered shell commands; see the Captured column in `ctx-wire session`"})
-		} else {
-			checks = append(checks, Check{"claude file-tools capture", Off,
-				"off; opt in with `ctx-wire init claude --capture-files`"})
-		}
 	}
 	return checks
 }

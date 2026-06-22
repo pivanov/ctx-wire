@@ -130,35 +130,31 @@ func InstallClaudeMemory(path string) (bool, error) {
 	return upsertInstructionBlock(path, ctxWireRulesBlock)
 }
 
-// claudeFileToolsMatcher is the PreToolUse matcher for the file-tools capture
-// experiment (the Bash matcher stays a separate entry, always installed).
-const claudeFileToolsMatcher = "Read|Grep"
-
 // InstallClaude merges the ctx-wire PreToolUse hook (Bash matcher) into the
 // settings file at path. It returns changed=false when the hook is already
 // present. Existing settings and other hooks are preserved.
 func InstallClaude(path string) (changed bool, err error) {
-	return ensureClaudeMatcherEntry(path, "Bash", true)
+	return ensureClaudeMatcherEntry(path, "PreToolUse", "Bash", true)
 }
 
-// InstallClaudeFileTools adds the Read|Grep matcher entry for the file-tools
-// capture experiment. Matcher-aware: an existing Bash-only install gains the
-// second entry (the command string alone is not presence).
-func InstallClaudeFileTools(path string) (bool, error) {
-	return ensureClaudeMatcherEntry(path, claudeFileToolsMatcher, true)
+// InstallClaudeReadCeiling adds a PostToolUse/Read matcher (the read-ceiling
+// spike). PostToolUse is the only event that can REPLACE a built-in tool's
+// output via updatedToolOutput, so it is the mechanism for reshaping native
+// Read output without the PreToolUse deny footgun.
+func InstallClaudeReadCeiling(path string) (bool, error) {
+	return ensureClaudeMatcherEntry(path, "PostToolUse", "Read", true)
 }
 
-// UninstallClaudeFileTools removes exactly ctx-wire's Read|Grep matcher entry,
-// leaving the Bash entry and all foreign hooks untouched.
-func UninstallClaudeFileTools(path string) (bool, error) {
-	return ensureClaudeMatcherEntry(path, claudeFileToolsMatcher, false)
+// UninstallClaudeReadCeiling removes exactly ctx-wire's PostToolUse/Read entry.
+func UninstallClaudeReadCeiling(path string) (bool, error) {
+	return ensureClaudeMatcherEntry(path, "PostToolUse", "Read", false)
 }
 
 // ensureClaudeMatcherEntry adds (want=true) or removes (want=false) ctx-wire's
-// PreToolUse entry for one specific matcher. Presence is (matcher, command)
+// hook entry for one specific (event, matcher). Presence is (matcher, command)
 // aware so multiple ctx-wire entries with different matchers coexist; foreign
 // entries are never touched. Atomic write with .bak.
-func ensureClaudeMatcherEntry(path, matcher string, want bool) (changed bool, err error) {
+func ensureClaudeMatcherEntry(path, event, matcher string, want bool) (changed bool, err error) {
 	root := map[string]any{}
 	data, readErr := os.ReadFile(path)
 	switch {
@@ -184,7 +180,7 @@ func ensureClaudeMatcherEntry(path, matcher string, want bool) (changed bool, er
 	if err != nil {
 		return false, err
 	}
-	pre, err := optionalJSONArray(hooks, "PreToolUse", path)
+	pre, err := optionalJSONArray(hooks, event, path)
 	if err != nil {
 		return false, err
 	}
@@ -212,7 +208,7 @@ func ensureClaudeMatcherEntry(path, matcher string, want bool) (changed bool, er
 		}
 		pre = kept
 	}
-	hooks["PreToolUse"] = pre
+	hooks[event] = pre
 
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {

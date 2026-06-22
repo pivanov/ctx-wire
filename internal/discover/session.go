@@ -55,11 +55,11 @@ func Sessions(opts Options) ([]SessionStat, error) {
 				st.FileTools = ft
 				stats = append(stats, st)
 			case ft.Reads+ft.Greps+ft.EditRefusals > 0:
-				// A session with ONLY built-in file-tool traffic is exactly the
-				// gap the capture experiment measures; hiding it would bias the
-				// baseline toward shell-heavy sessions. Shell adoption columns
-				// stay zero (no coverable commands), the file-tool columns carry
-				// the signal.
+				// A session with ONLY built-in file-tool traffic still matters: it
+				// is exactly the bypass gap (native Read/Grep escape ctx-wire);
+				// hiding it would bias the baseline toward shell-heavy sessions.
+				// Shell adoption columns stay zero (no coverable commands), the
+				// file-tool columns carry the signal.
 				var mt time.Time
 				if info, ierr := d.Info(); ierr == nil {
 					mt = info.ModTime()
@@ -146,6 +146,6 @@ func FormatSessionsThemed(stats []SessionStat, theme ui.Theme) string {
 		return b.String()
 	}
 	b.WriteString(sessionTable(stats, theme))
-	b.WriteString("\n" + theme.Dim.Render("Reads/Greps = built-in file-tool uses (bypass ctx-wire) · Captured = redirected to a filtered shell read (capture experiment) · EditRef = Edit refused, file not Read first") + "\n")
+	b.WriteString("\n" + theme.Dim.Render("Reads/Greps = built-in file-tool uses (bypass ctx-wire) · EditRef = Edit refused, file not Read first") + "\n")
 	return b.String()
 }

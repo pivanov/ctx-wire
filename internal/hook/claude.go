@@ -14,9 +14,11 @@ import (
 )
 
 type claudeInput struct {
-	SessionID string          `json:"session_id"`
-	ToolName  string          `json:"tool_name"`
-	ToolInput json.RawMessage `json:"tool_input"`
+	SessionID     string          `json:"session_id"`
+	ToolName      string          `json:"tool_name"`
+	ToolInput     json.RawMessage `json:"tool_input"`
+	ToolResponse  json.RawMessage `json:"tool_response"`
+	HookEventName string          `json:"hook_event_name"`
 }
 
 type claudeOutput struct {
@@ -36,10 +38,8 @@ type claudeUpdatedInput struct {
 
 // Claude handles a Claude Code PreToolUse payload. For Bash: if the command is
 // rewritable, it writes an allow decision with the updatedInput rewrite JSON
-// to w; otherwise it writes nothing (no-op passthrough). For Read/Grep, when
-// the file-tools capture experiment is on, it may deny with the exact
-// equivalent shell command as the suggestion (see claude_filetools.go). It
-// never returns a blocking error.
+// to w; otherwise it writes nothing (no-op passthrough). It never returns a
+// blocking error.
 func Claude(r io.Reader, w io.Writer) error {
 	data, err := readHookInput(r)
 	if err != nil {
@@ -49,11 +49,15 @@ func Claude(r io.Reader, w io.Writer) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return nil
 	}
+	// PostToolUse fires AFTER a tool produces output. The read-ceiling spike uses
+	// it to reshape native Read output (the only event that can replace, not just
+	// gate, a built-in tool's result). Everything else is PreToolUse.
+	if in.HookEventName == "PostToolUse" {
+		return claudePostToolUse(in, w)
+	}
 	switch in.ToolName {
 	case "Bash":
 		return claudeBash(in, w)
-	case "Read", "Grep":
-		return claudeFileTool(in, w)
 	default:
 		return nil
 	}

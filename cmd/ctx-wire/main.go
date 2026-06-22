@@ -67,7 +67,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "ctx-wire: unknown [output] truncate level %q; using default\n", cfg.Output.Truncate)
 			}
 		}
-		hook.SetCaptureFileTools(cfg.Hooks.CaptureFileTools)
+		hook.SetReadCeilingMode(cfg.Hooks.ReadCeiling)
 		ret := recent.Options{
 			Enabled:    cfg.Retention.Enabled,
 			RawBodies:  cfg.Retention.RawBodies,
@@ -78,11 +78,12 @@ func main() {
 		// enabled. ApplyEnv runs last so the CTX_WIRE_RETENTION=0 kill switch still
 		// wins: it clears retentionOpts.Enabled, and maybeDedup is gated on that,
 		// so the kill switch disables dedup too.
-		if cfg.Dedup.Enabled {
+		dedupOn := cfg.Dedup.On()
+		if dedupOn {
 			ret.Enabled = true
 		}
 		runner.SetRetention(recent.ApplyEnv(ret))
-		runner.SetDedup(runner.DedupOptions{Enabled: cfg.Dedup.Enabled, Recency: cfg.Dedup.Recency()})
+		runner.SetDedup(runner.DedupOptions{Enabled: dedupOn, Recency: cfg.Dedup.Recency()})
 	}
 	// Auto-update is opt-out and runs only on human-facing commands, never on the
 	// run/hook/rewrite/mcp hot paths (per-command, machine-facing). It is fully

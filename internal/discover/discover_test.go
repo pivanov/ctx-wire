@@ -136,7 +136,7 @@ func TestAnalyzeClassifies(t *testing.T) {
 		t.Fatalf("total = %d, want 6 (%+v)", rep.Total, rep.ByCategory)
 	}
 	checks := map[Category]int{
-		CatCaptured:    2, // git status, git log --oneline
+		CatCovered:     2, // git status, git log --oneline
 		CatEscaped:     2, // frobnicate, rtk git status
 		CatHookLimited: 1, // vim
 		CatPassthrough: 1, // cat log > out.txt
@@ -174,8 +174,8 @@ func TestQuotedAndPipedCommandsMatchGain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
-	if rep.ByCategory[CatCaptured] != 2 {
-		t.Fatalf("captured = %d, want 2 (%+v)", rep.ByCategory[CatCaptured], rep.ByCategory)
+	if rep.ByCategory[CatCovered] != 2 {
+		t.Fatalf("covered = %d, want 2 (%+v)", rep.ByCategory[CatCovered], rep.ByCategory)
 	}
 	if rep.ByCategory[CatEscaped] != 0 {
 		t.Errorf("escaped = %d, want 0 (quoted/piped must not be false escapes)", rep.ByCategory[CatEscaped])

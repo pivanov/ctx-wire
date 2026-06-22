@@ -27,7 +27,6 @@ import (
 	"ctx-wire/internal/explain"
 	"ctx-wire/internal/filter"
 	"ctx-wire/internal/gain"
-	"ctx-wire/internal/hook"
 	"ctx-wire/internal/scrub"
 	"ctx-wire/internal/transcript"
 )
@@ -36,9 +35,9 @@ import (
 type Category string
 
 const (
-	// CatCaptured: ctx-wire would filter this and a matching gain record exists
-	// (reported as "possibly captured" given imperfect correlation).
-	CatCaptured Category = "captured"
+	// CatCovered: ctx-wire would filter this and a matching gain record exists
+	// (reported as "possibly covered" given imperfect correlation).
+	CatCovered Category = "covered"
 	// CatEscaped: ctx-wire would have filtered this, but no gain record matched.
 	// The actionable blind spot: hook missed, ran raw, or via another tool.
 	CatEscaped Category = "escaped"
@@ -56,7 +55,7 @@ const (
 )
 
 // catOrder fixes the report order: the actionable escaped class first.
-var catOrder = []Category{CatEscaped, CatCaptured, CatPassthrough, CatHookLimited, CatPredatesLedger, CatUnknown}
+var catOrder = []Category{CatEscaped, CatCovered, CatPassthrough, CatHookLimited, CatPredatesLedger, CatUnknown}
 
 // ledgerGrace is how far before the earliest gain record a command may sit and
 // still be correlated. gain records are written when a command finishes, so a
@@ -236,7 +235,7 @@ func classify(reg *filter.Registry, raw string, gainIndex map[string]int) Catego
 	case filterable == 0:
 		return CatPassthrough
 	case matched == filterable:
-		return CatCaptured
+		return CatCovered
 	default:
 		// One or more filterable segments had no gain record: conservatively the
 		// command escaped ctx-wire (in whole or in part).
@@ -352,18 +351,11 @@ func appendClaudeLine(out []exec, line string, since time.Time) []exec {
 
 // FileToolStat counts one transcript's built-in file-tool activity: Read and
 // Grep tool uses (which bypass ctx-wire entirely) and Edit refusals caused by
-// the harness's read-before-edit gate. It is the measurement side of the
-// file-tools capture experiment: redirected traffic shows up as these counts
-// falling while shell adoption rises.
+// the harness's read-before-edit gate.
 type FileToolStat struct {
 	Reads        int
 	Greps        int
 	EditRefusals int
-	// Captures is how many Read/Grep tool calls the file-tools capture redirected
-	// to a filtered shell command (a deny carrying captureMarker). It is a count
-	// of redirects, not a token estimate: the tokens actually saved show up in
-	// `ctx-wire gain` as the substituted nl/rg runs.
-	Captures int
 }
 
 // claudeToolLine is the lean decode for file-tool counting. tool_result
@@ -379,7 +371,7 @@ type claudeToolLine struct {
 			Content json.RawMessage `json:"content"`
 			// IsError distinguishes a real error tool_result (a deny or refusal)
 			// from a successful one that merely ECHOES a marker string (e.g. a
-			// Bash run that cats claude_filetools.go or prints the deny JSON). A
+			// Bash run that prints a file or log containing the marker). A
 			// substring probe alone over-counts badly when dogfooding ctx-wire on
 			// itself, so the deny/refusal cases also require IsError.
 			IsError bool `json:"is_error"`
@@ -390,11 +382,6 @@ type claudeToolLine struct {
 // editRefusalMarker is the harness's read-before-edit refusal. Substring, not
 // equality: the surrounding wording varies across Claude Code versions.
 const editRefusalMarker = "has not been read yet"
-
-// captureMarker is the lead-in of the file-tools capture deny reason. It IS the
-// hook's exported constant (single source of truth), so the parser and the hook
-// cannot drift apart and silently zero the metric.
-const captureMarker = hook.CaptureDenyPrefix
 
 // parseClaudeFileTools counts Read/Grep tool uses (assistant lines) and
 // read-before-edit refusals (user-line tool results) in one transcript. It is
@@ -442,8 +429,6 @@ func countClaudeToolLine(st *FileToolStat, line string, since time.Time) {
 			st.Greps++
 		case l.Type == "user" && c.Type == "tool_result" && c.IsError && strings.Contains(string(c.Content), editRefusalMarker):
 			st.EditRefusals++
-		case l.Type == "user" && c.Type == "tool_result" && c.IsError && strings.Contains(string(c.Content), captureMarker):
-			st.Captures++
 		}
 	}
 }

@@ -84,7 +84,7 @@ var agentRegistry = []agentDescriptor{
 	{
 		Name: "claude",
 		// Install nil: claude's init wires every detected config dir plus MCP
-		// auto-wrap and the capture experiment, a bespoke command-layer flow.
+		// auto-wrap and the native-Read ceiling, a bespoke command-layer flow.
 		Uninstall: func(workdir string, r *IntegrationUninstallReport) error {
 			dirs, err := ClaudeConfigDirs()
 			if err != nil {

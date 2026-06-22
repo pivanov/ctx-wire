@@ -29,12 +29,6 @@ func TestUninstallIntegrationsPreservesUnrelatedConfig(t *testing.T) {
 	if _, err := InstallClaude(claudePath); err != nil {
 		t.Fatalf("InstallClaude: %v", err)
 	}
-	// Enable the file-tools experiment too, so the full uninstall is proven to
-	// strip its Read|Grep matcher (the assertNoCtxWireAndKeeps below now guards
-	// it). Without removal, a dead ctx-wire hook survives the binary removal.
-	if _, err := InstallClaudeFileTools(claudePath); err != nil {
-		t.Fatalf("InstallClaudeFileTools: %v", err)
-	}
 
 	cursorPath, err := CursorHooksPath()
 	if err != nil {
@@ -294,51 +288,6 @@ func TestUninstallAgentRemovesOnlyTheNamedAgent(t *testing.T) {
 	if !strings.Contains(string(cursorData), cursorHookCommand) {
 		t.Error("cursor's ctx-wire hook must survive a claude-only uninstall")
 	}
-}
-
-// TestUninstallAgentRemovesClaudeFileToolsMatcher is the round-trip guard: after
-// init claude + the file-tools experiment, uninstalling claude must strip BOTH
-// the Bash hook and the Read|Grep file-tools matcher, leaving no ctx-wire entry
-// (an orphan would become a dead hook once the binary is gone). UninstallClaude
-// removes by command, so it already covers both matchers; this pins that, and
-// would fail if hook removal were ever narrowed to the Bash matcher.
-func TestUninstallAgentRemovesClaudeFileToolsMatcher(t *testing.T) {
-	home := t.TempDir()
-	workdir := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
-
-	path, err := ClaudeSettingsPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, path, `{"hooks":{"PreToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"other-edit"}]}]}}`)
-	if _, err := InstallClaude(path); err != nil {
-		t.Fatalf("InstallClaude: %v", err)
-	}
-	if _, err := InstallClaudeFileTools(path); err != nil {
-		t.Fatalf("InstallClaudeFileTools: %v", err)
-	}
-	pre, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read settings: %v", err)
-	}
-	if !strings.Contains(string(pre), claudeFileToolsMatcher) {
-		t.Fatalf("setup: file-tools matcher %q not installed:\n%s", claudeFileToolsMatcher, pre)
-	}
-
-	if _, err := UninstallAgent(workdir, "claude"); err != nil {
-		t.Fatalf("UninstallAgent claude: %v", err)
-	}
-
-	after, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read settings: %v", err)
-	}
-	if strings.Contains(string(after), claudeFileToolsMatcher) {
-		t.Errorf("file-tools Read|Grep matcher orphaned after uninstall:\n%s", after)
-	}
-	assertNoCtxWireAndKeeps(t, path, "other-edit")
 }
 
 // TestUninstallIntegrationsMultiConfig verifies that a full uninstall removes

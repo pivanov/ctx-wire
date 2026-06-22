@@ -10,7 +10,7 @@ import (
 
 var catLabel = map[Category]string{
 	CatEscaped:        "Escaped (ctx-wire never filtered these)",
-	CatCaptured:       "Captured (possibly filtered by ctx-wire)",
+	CatCovered:        "Covered (possibly filtered by ctx-wire)",
 	CatPassthrough:    "Passthrough by design (pipeline/redirect/builtin)",
 	CatHookLimited:    "Hook-limited (interactive/streaming)",
 	CatPredatesLedger: "Predates gain ledger (can't correlate)",

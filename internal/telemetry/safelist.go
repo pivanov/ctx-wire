@@ -64,6 +64,10 @@ var safePrograms = newStringSet(
 	"mv", "touch", "chmod", "od", "cmp", "comm", "strings", "pgrep", "ss",
 	"perl", "php", "helm", "gcloud", "glab", "ansible-playbook", "magick",
 	"ffprobe", "pixi",
+	// "read" is the program key the native-Read ceiling records its reclaim under
+	// (internal/hook/claude_readceiling.go); allowlisted so that saving shows as a
+	// "read" program in telemetry instead of folding into (other).
+	"read",
 )
 
 // knownAgents allowlists agent labels. agent.Normalize only validates a slug's

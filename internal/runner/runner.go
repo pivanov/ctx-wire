@@ -430,7 +430,7 @@ func maybeDedup(name string, args []string, scrubbedCmd, emitted string, code in
 	if t, err := time.Parse(time.RFC3339Nano, prev.TS); err == nil {
 		when = t.Local().Format("15:04:05")
 	}
-	return fmt.Sprintf("[ctx-wire: unchanged since %s (%d lines); run `ctx-wire inspect` to see it, or re-run with --no-dedup]\n", when, lines), true
+	return fmt.Sprintf("[ctx-wire: unchanged since %s (%d lines); `ctx-wire inspect --list` then `ctx-wire inspect <n>` to recover it, or re-run with --no-dedup]\n", when, lines), true
 }
 
 func dedupDisabledByEnv() bool {

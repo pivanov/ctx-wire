@@ -29,18 +29,23 @@ type Config struct {
 
 // Dedup controls repeat-command dedup: when a read-only command re-runs with
 // byte-identical output, ctx-wire emits a short recoverable reference instead of
-// the body. Off by default. The command still runs; only the re-emission is
-// saved.
+// the body. ON by default. The command still runs; only the re-emission is saved.
 type Dedup struct {
-	// Enabled turns dedup on. It implies the recent-outputs store is recording
-	// (so a reference can be compared and recovered via inspect).
-	Enabled bool `toml:"enabled"`
+	// Enabled turns dedup on/off. nil (unset) means ON by default; set
+	// `enabled = false` to opt a machine out (CTX_WIRE_NO_DEDUP / `run --no-dedup`
+	// also disable per run). On implies the recent-outputs store records, so a
+	// reference can be compared and recovered via `ctx-wire inspect`.
+	Enabled *bool `toml:"enabled"`
 
 	// RecencyMinutes bounds how recent a prior run must be to dedup against it,
 	// the dead-pointer mitigation (default 60). A reference is only emitted when
 	// the unchanged body is likely still in the agent's context.
 	RecencyMinutes int `toml:"recency_minutes"`
 }
+
+// On reports whether dedup is enabled: ON by default (nil), honoring an explicit
+// `enabled = false`.
+func (d Dedup) On() bool { return d.Enabled == nil || *d.Enabled }
 
 // Recency returns the configured dedup recency window, or the 60-minute default.
 func (d Dedup) Recency() time.Duration {
@@ -144,11 +149,13 @@ type Hooks struct {
 	// `docker exec web ctx-wire run git status`.
 	TransparentPrefixes []string `toml:"transparent_prefixes"`
 
-	// CaptureFileTools is the file-tools capture experiment (Claude only,
-	// default off): the PreToolUse hook denies built-in Read/Grep calls it can
-	// translate exactly, suggesting the equivalent filtered shell command.
-	// Toggle with `ctx-wire init claude --capture-files|--no-capture-files`.
-	CaptureFileTools bool `toml:"capture_file_tools"`
+	// ReadCeiling controls the native-Read ceiling (Claude only, ON by default):
+	// a PostToolUse hook reshapes large unranged Read output to head+tail with a
+	// recoverable `ctx-wire fetch <hash>` handle. Values: "" or "on" (default,
+	// rewrite), "measure" (log would-be reclaim, do not rewrite), "off" (disable).
+	// The env CTX_WIRE_READ_CEILING overrides per invocation. No init flag, it is
+	// wired automatically; set "off" here only to opt a machine out.
+	ReadCeiling string `toml:"read_ceiling"`
 
 	// FullFiles are filename globs (matched against the read file's basename) for
 	// files that must reach the agent whole. A `cat`/`nl` read of a matching file

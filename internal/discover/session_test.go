@@ -57,18 +57,12 @@ func TestSessionsCountsFileTools(t *testing.T) {
 		// Two Reads and one Grep (built-in tools, no command field).
 		`{"type":"assistant","timestamp":"2026-06-04T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Read","input":{}},{"type":"tool_use","name":"Read","input":{}}]}}`,
 		`{"type":"assistant","timestamp":"2026-06-04T10:02:00Z","message":{"content":[{"type":"tool_use","name":"Grep","input":{}}]}}`,
-		// Edit refusal as a plain-string tool_result (user line) , real errors carry is_error.
+		// Edit refusal as a plain-string tool_result (user line), real errors carry is_error.
 		`{"type":"user","timestamp":"2026-06-04T10:03:00Z","message":{"content":[{"type":"tool_result","is_error":true,"content":"File has not been read yet. Read it first before writing to it."}]}}`,
 		// Edit refusal as a text-block array tool_result.
 		`{"type":"user","timestamp":"2026-06-04T10:04:00Z","message":{"content":[{"type":"tool_result","is_error":true,"content":[{"type":"text","text":"Error: file has not been read yet."}]}]}}`,
 		// A normal tool_result must NOT count.
 		`{"type":"user","timestamp":"2026-06-04T10:05:00Z","message":{"content":[{"type":"tool_result","content":"ok"}]}}`,
-		// A file-tools capture deny: a Read redirected to a filtered shell read (is_error).
-		`{"type":"user","timestamp":"2026-06-04T10:06:00Z","message":{"content":[{"type":"tool_result","is_error":true,"content":"Token savings: run nl -ba /work/proj/big.go in Bash instead (the output is filtered, capped, and secrets-scrubbed by ctx-wire; the built-in tool bypasses that)."}]}}`,
-		// FALSE-POSITIVE GUARDS: a successful Bash tool_result that merely ECHOES a
-		// marker (cat of the source, or the deny JSON) must NOT count, only is_error
-		// results are real denies/refusals.
-		`{"type":"user","timestamp":"2026-06-04T10:07:00Z","message":{"content":[{"type":"tool_result","content":"const captureMarker = \"Token savings: run \" // has not been read yet"}]}}`,
 	}
 	var b []byte
 	for _, l := range lines {
@@ -87,8 +81,8 @@ func TestSessionsCountsFileTools(t *testing.T) {
 		t.Fatalf("want 1 session, got %d", len(stats))
 	}
 	ft := stats[0].FileTools
-	if ft.Reads != 2 || ft.Greps != 1 || ft.EditRefusals != 2 || ft.Captures != 1 {
-		t.Errorf("FileTools = %+v, want Reads=2 Greps=1 EditRefusals=2 Captures=1", ft)
+	if ft.Reads != 2 || ft.Greps != 1 || ft.EditRefusals != 2 {
+		t.Errorf("FileTools = %+v, want Reads=2 Greps=1 EditRefusals=2", ft)
 	}
 	if stats[0].Coverable != 1 || stats[0].Covered != 0 {
 		t.Errorf("shell adoption semantics moved: %+v", stats[0])
@@ -142,8 +136,8 @@ func TestSessionsSkipsNonRoutable(t *testing.T) {
 
 // TestSessionsIncludesFileToolOnlySessions pins the baseline fix: a transcript
 // with ONLY built-in Read/Grep traffic (zero coverable shell commands) is
-// exactly the gap the capture experiment measures and must appear in the
-// session table, with shell adoption columns at zero.
+// exactly the bypass gap (native file tools escape ctx-wire) and must appear in
+// the session table, with shell adoption columns at zero.
 func TestSessionsIncludesFileToolOnlySessions(t *testing.T) {
 	base := t.TempDir()
 	project := "/tmp/ftonly"

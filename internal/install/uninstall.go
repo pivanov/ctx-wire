@@ -71,10 +71,19 @@ func removeFileIfContent(path, want string) bool {
 	return os.Remove(path) == nil
 }
 
-// UninstallClaude removes ctx-wire's Claude PreToolUse hook and preserves
-// unrelated Claude settings/hooks.
+// UninstallClaude removes ctx-wire's Claude PreToolUse and PostToolUse hooks
+// (the read-ceiling spike installs a PostToolUse entry) and preserves unrelated
+// Claude settings/hooks.
 func UninstallClaude(path string) (bool, error) {
-	return removeNestedCommandHook(path, "hooks", "PreToolUse", claudeHookCommand)
+	pre, err := removeNestedCommandHook(path, "hooks", "PreToolUse", claudeHookCommand)
+	if err != nil {
+		return false, err
+	}
+	post, err := removeNestedCommandHook(path, "hooks", "PostToolUse", claudeHookCommand)
+	if err != nil {
+		return false, err
+	}
+	return pre || post, nil
 }
 
 // UninstallCursor removes ctx-wire's Cursor preToolUse hook and preserves

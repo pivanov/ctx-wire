@@ -16,6 +16,7 @@ func TestSafeProgramName(t *testing.T) {
 		{"nl", "nl"},                         // file-read steer in AGENTS.md must stay visible
 		{"gh", "gh"},                         // GitHub CLI, ubiquitous in agent workflows
 		{"just", "just"},                     // task runner (this repo uses it)
+		{"Read", "read"},                     // native-Read ceiling key -> visible as "read", not (other)
 		{"powershell", "powershell"},         // Windows shell, public by definition
 		{"agent-browser", otherBucket},       // user script -> (other): the privacy boundary
 		{"project-zeus-deploy", otherBucket}, // private codename -> (other)

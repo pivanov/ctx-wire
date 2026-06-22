@@ -21,14 +21,16 @@ exclude_commands = ["curl", "playwright"]
 # `docker exec web ctx-wire run git status`.
 transparent_prefixes = ["docker exec web", "direnv exec ."]
 
-# File-tools capture experiment (Claude only, default off): the PreToolUse
-# hook denies built-in Read/Grep calls that map EXACTLY to a shell command,
-# suggesting the filtered equivalent (large unranged reads -> `nl -ba`, Grep ->
-# the matching `rg` form). Anything uncertain passes through untouched, a
-# denied request retried within 60s is allowed (loop-breaker), and a deny is
-# only ever issued after it is recorded. Toggle with
-# `ctx-wire init claude --capture-files | --no-capture-files`.
-capture_file_tools = false
+# Native-Read ceiling (Claude only, ON by default, wired automatically by
+# `ctx-wire init claude`): a PostToolUse hook reshapes LARGE UNRANGED built-in
+# Read output to its head + tail with a recoverable `ctx-wire fetch <hash>`
+# handle, so the middle is elided from context but kept on disk. Emitted bytes
+# are secret-scrubbed (the native Read tool bypasses scrubbing, so this is a net
+# gain). A ranged Read (offset/limit) is the agent's own bound and is never
+# reshaped. Savings record in `ctx-wire gain` under a "Read" program. Values:
+# "on" (default), "measure" (log the would-be reclaim without rewriting), "off"
+# (opt this machine out). Env CTX_WIRE_READ_CEILING overrides per run.
+read_ceiling = "on"
 
 # Files that must reach the agent whole: a `cat`/`nl` read of a file whose
 # basename matches one of these globs skips output capping (the per-filter line
@@ -99,9 +101,10 @@ max_entries = 0
 [dedup]
 # When a read-only command re-runs with byte-identical output, emit a short
 # recoverable reference instead of the body (the command still runs; only the
-# re-emission is saved). Off by default; enabling it implies the retention store
-# above is recording, so the reference can be recovered via `inspect`.
-enabled = false
+# re-emission is saved). ON by default; it implies the retention store above is
+# recording, so the reference can be recovered via `inspect`. Opt a machine out
+# by uncommenting `enabled = false`.
+# enabled = false
 # How recent the prior run must be to dedup against it (default 60), so a
 # reference is only emitted while the unchanged body is likely still in context.
 # Disable dedup for a single run with CTX_WIRE_NO_DEDUP=1 or `ctx-wire run
