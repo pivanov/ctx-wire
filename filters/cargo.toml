@@ -1,6 +1,12 @@
 [filters.cargo]
-description = "Compact cargo build/test/check/clippy output"
-match_command = "^cargo\\s+(?:\\+\\S+\\s+)?(build|test|check|clippy)\\b"
+description = "Compact cargo build/test/check/clippy/doc/update output"
+# build/test/check/clippy carry diagnostics; doc/update are progress-only and
+# collapse to "cargo: ok" on success (both always print progress, so on_empty never
+# fires on already-empty output). run/bench/install are excluded on purpose: their
+# output is the program's own (or benchmark results) and must pass through untouched.
+# fetch is excluded too: it is silent when everything is cached, which would let
+# on_empty emit "cargo: ok" over genuinely-empty output (a small net-negative).
+match_command = "^cargo\\s+(?:\\+\\S+\\s+)?(build|test|check|clippy|doc|update)\\b"
 strip_ansi = true
 # cargo build/check write "Finished ... target(s)" to STDERR (stdout is empty on a
 # clean check). Without this, on_empty fired "cargo: ok" on the empty stdout while
@@ -14,8 +20,15 @@ strip_lines_matching = [
   "^\\s*$",
   "^\\s*Compiling ",
   "^\\s*Checking ",
+  "^\\s*Documenting ",
   "^\\s*Downloading ",
   "^\\s*Downloaded ",
+  # Registry/lock progress that precedes cold builds and updates. The per-package
+  # "Updating <crate> vX -> vY" lines an update prints are the answer and are NOT
+  # matched here: only the literal "crates.io index" summary is.
+  "^\\s*Updating crates\\.io index\\b",
+  "^\\s*Locking \\d+ packages? to latest",
+  "^\\s*Blocking waiting for file lock",
   "^\\s*Fresh ",
 ]
 max_lines = 120
@@ -70,3 +83,73 @@ warning: `app` generated 1 warning
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
 """
 expected = "warning: unused variable: `x`\n  --> src/main.rs:2:9\n   |\n2  |     let x = 1;\n   |         ^ help: if this is intentional, prefix it with an underscore: `_x`\n   |\n   = note: `#[warn(unused_variables)]` on by default\nwarning: `app` generated 1 warning\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s"
+
+[[tests.cargo]]
+name = "clean cargo doc collapses (real sample, stderr)"
+stderr = """
+ Documenting sample v0.1.0 (/repo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s
+   Generated /repo/target/doc/sample/index.html
+"""
+expected = "cargo: ok"
+
+[[tests.cargo]]
+name = "no-op cargo update collapses (real sample, stderr)"
+stderr = """
+    Updating crates.io index
+     Locking 0 packages to latest compatible versions
+"""
+expected = "cargo: ok"
+
+[[tests.cargo]]
+name = "cargo update keeps per-package changes, strips index/lock noise"
+stderr = """
+    Updating crates.io index
+     Locking 1 package to latest compatible version
+    Updating serde v1.0.227 -> v1.0.228
+"""
+expected = "    Updating serde v1.0.227 -> v1.0.228"
+
+[[tests.cargo]]
+name = "cold build strips registry/compile noise, keeps the warning (real sample)"
+# Conservative floor: this sample has only 3 Compiling lines; a real multi-crate
+# cold build strips dozens and saves far more. The floor guards against a future
+# edit that stops stripping the registry/compile progress.
+min_saved_percent = 30
+stderr = """
+    Updating crates.io index
+     Locking 12 packages to latest compatible versions
+ Downloading crates ...
+  Downloaded anyhow v1.0.102
+   Compiling proc-macro2 v1.0.106
+   Compiling serde v1.0.228
+   Compiling sample v0.1.0 (/repo)
+warning: unused variable: `unused`
+ --> src/main.rs:7:9
+  |
+7 |     let unused = 42;
+  |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_unused`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sample` (bin "sample") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.46s
+"""
+expected = """warning: unused variable: `unused`
+ --> src/main.rs:7:9
+  |
+7 |     let unused = 42;
+  |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_unused`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+warning: `sample` (bin "sample") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.46s"""
+
+[[tests.cargo]]
+name = "failed cargo update is not faked to ok"
+failed = true
+stderr = """
+    Updating crates.io index
+error: failed to select a version for the requirement `serde = "^9.9"`
+"""
+expected = "error: failed to select a version for the requirement `serde = \"^9.9\"`"
