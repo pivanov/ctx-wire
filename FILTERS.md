@@ -201,6 +201,14 @@ and the test fails, which is the proof the flag is doing real work. A test whose
 input still has a leftover line after stripping would pass with or without the
 flag, so it asserts the rules, not the failure path.
 
+**This is enforced, not just recommended.** `TestAnswerDroppableFiltersHaveFailurePathFixture`
+requires every built-in that can synthesize success or drop the answer , one with
+`on_empty`, `match_output`, or `keep_lines_matching` , to ship a `failed = true`
+fixture, so a new answer-droppable filter without one fails CI. If the tool cannot
+be run here to capture a real failure, grandfather it in `failurePathFixtureGrandfather`
+(`internal/filter/failurepath_test.go`) with the tool name and reason, then burn the
+entry down later by adding the fixture from a real failed run. Never invent one.
+
 ## A complete example
 
 ```toml
@@ -244,7 +252,8 @@ failed   = true
    Preview with `--preview`, write it with `--write`.
 2. **Refine and test.** Edit the rules, fill in the draft tests' `expected`, drop
    the `draft` marker, and run `ctx-wire verify --file <path>` until green. Add a
-   `failed = true` case so the failure path is covered.
+   `failed = true` case so the failure path is covered (required, and CI-enforced,
+   for any filter with `on_empty`, `match_output`, or `keep_lines_matching`).
 3. **Use it locally.** Put it in `.ctx-wire/filters.toml` and run `ctx-wire trust`,
    or in `~/.config/ctx-wire/filters.toml` for all your projects.
 4. **Share it.** `ctx-wire filters publish <name>` packages a local filter (with
