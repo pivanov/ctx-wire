@@ -2,6 +2,12 @@
 description = "Compact go mod tidy: strip pure download noise but preserve added/upgraded/removed reports and errors"
 match_command = "^go\\s+mod\\s+tidy\\b"
 strip_ansi = true
+# `go mod tidy` writes ALL of its output (downloading/added/error lines) to STDERR;
+# stdout is empty. Without filter_stderr the strip rules below never saw the real
+# stream and on_empty stacked "go mod: ok" on top of the raw stderr = MORE than raw
+# (the same net-negative cargo had). Filtering the combined stream makes the strips
+# fire and the collapse correct. A non-zero exit suppresses on_empty (errors survive).
+filter_stderr = true
 strip_lines_matching = [
   "^\\s*$",
   "^go: downloading ",
@@ -11,9 +17,11 @@ strip_lines_matching = [
 max_lines = 80
 on_empty = "go mod: ok"
 
+# Tests use `stderr` because that is the stream `go mod tidy` actually writes to
+# (verified against a real run); filter_stderr feeds it through the pipeline.
 [[tests.go-mod-tidy]]
-name = "only download noise collapses to ok"
-input = '''
+name = "only download noise collapses to ok (on stderr, where go writes it)"
+stderr = '''
 go: downloading github.com/foo/bar v1.2.3
 go: downloading golang.org/x/sys v0.1.0
 '''
@@ -21,7 +29,7 @@ expected = "go mod: ok"
 
 [[tests.go-mod-tidy]]
 name = "added/upgraded reports preserved"
-input = '''
+stderr = '''
 go: downloading github.com/foo/bar v1.2.3
 go: added github.com/foo/bar v1.2.3
 go: upgraded golang.org/x/sys v0.0.9 => v0.1.0
@@ -30,8 +38,19 @@ expected = "go: added github.com/foo/bar v1.2.3\ngo: upgraded golang.org/x/sys v
 
 [[tests.go-mod-tidy]]
 name = "errors preserved"
-input = '''
+stderr = '''
 go: downloading github.com/foo/bar v1.2.3
 go: github.com/foo/bar@v1.2.3: missing go.sum entry; to add it: go mod download
 '''
 expected = "go: github.com/foo/bar@v1.2.3: missing go.sum entry; to add it: go mod download"
+
+# Failure path (real captured output): a non-zero exit must NOT be faked to
+# "go mod: ok" - on_empty is suppressed and the error survives verbatim.
+[[tests.go-mod-tidy]]
+name = "failed tidy is not faked to ok (real relative-import error)"
+failed = true
+stderr = '''
+go: example.com/app imports
+	./bad: "./bad" is relative, but relative import paths are not supported in module mode
+'''
+expected = "go: example.com/app imports\n\t./bad: \"./bad\" is relative, but relative import paths are not supported in module mode"
