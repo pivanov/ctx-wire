@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -913,5 +914,45 @@ func TestCaptureRecordsMCPSource(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"source":"mcp"`) {
 		t.Fatalf("run_command path did not record source=mcp; ledger=%q", data)
+	}
+}
+
+// failAfterWriter succeeds for the first `allow` bytes then fails every write.
+// This lets the ceiling absorb the live head (which is written during streaming)
+// and then fail at flush time when the tail is written back to the same writer.
+type failAfterWriter struct {
+	allow   int
+	written int
+}
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if w.written >= w.allow {
+		return 0, errors.New("pipe broken")
+	}
+	take := len(p)
+	if w.written+take > w.allow {
+		take = w.allow - w.written
+	}
+	w.written += take
+	// Return the full len(p) so the caller does not see a short write;
+	// the bytes beyond `allow` are silently dropped until the budget is spent.
+	return len(p), nil
+}
+
+func TestStreamLiveFlushErrorSurfaced(t *testing.T) {
+	defer func(h, tl int) { passthroughHeadBytes, passthroughTailBytes = h, tl }(passthroughHeadBytes, passthroughTailBytes)
+	passthroughHeadBytes, passthroughTailBytes = 256, 128 // tiny ceiling so the middle is omitted and the tail is flushed
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	// Allow exactly the head budget so the tail flush write fails.
+	fw := &failAfterWriter{allow: passthroughHeadBytes}
+	var errBuf bytes.Buffer
+	_, err := streamLive(context.Background(), "sh",
+		[]string{"-c", "for i in $(seq 1 2000); do echo some output line; done"},
+		"sh -c big", tee.NewSpool("big"), fw, &errBuf, false)
+	if err != nil {
+		t.Fatalf("streamLive returned err=%v (it should LOG, not return, the flush write failure)", err)
+	}
+	if !strings.Contains(errBuf.String(), "ceiling flush write failed") {
+		t.Fatalf("expected the flush write failure logged to stderr; got %q", errBuf.String())
 	}
 }

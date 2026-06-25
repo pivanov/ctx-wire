@@ -145,9 +145,15 @@ func streamLive(ctx context.Context, name string, args []string, scrubbedCmd str
 	_ = errScrub.Close()
 	truncated := false
 	if outLim != nil {
-		ot, _ := outLim.flush()
-		et, _ := errLim.flush()
+		ot, outErr := outLim.flush()
+		et, errErr := errLim.flush()
 		truncated = ot || et
+		if outErr != nil || errErr != nil {
+			// A broken stdout/stderr pipe loses the tail from the live stream, but the
+			// full scrubbed output is in the spool and the fetch hint below goes to
+			// stderr. Surface the failure instead of swallowing it.
+			fmt.Fprintf(stderr, "ctx-wire: ceiling flush write failed (output spooled, recover via fetch): out=%v err=%v\n", outErr, errErr)
+		}
 	}
 
 	if err != nil {
