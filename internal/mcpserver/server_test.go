@@ -264,3 +264,36 @@ func TestReadFileJSONIntegrity(t *testing.T) {
 		t.Errorf("oversize JSON must not emit a mid-structure cut:\n%s", out)
 	}
 }
+
+// TestReadFileRecordsMCPGain pins Phase-1 attribution: the MCP read_file tool
+// filters/caps like `cat` but used to record no gain. It must now write a gain
+// entry tagged source="mcp" (TestMain disables gain, so re-enable it here and
+// redirect the ledger to a temp file).
+func TestReadFileRecordsMCPGain(t *testing.T) {
+	gf := filepath.Join(t.TempDir(), "gain.jsonl")
+	t.Setenv("CTX_WIRE_GAIN_FILE", gf)
+	t.Setenv("CTX_WIRE_GAIN", "1")
+
+	reg, err := filter.LoadBuiltin()
+	if err != nil {
+		t.Fatalf("LoadBuiltin: %v", err)
+	}
+	p := filepath.Join(t.TempDir(), "noisy.txt")
+	var sb strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	if err := os.WriteFile(p, []byte(sb.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readFile(reg, p, 10); err != nil {
+		t.Fatalf("readFile: %v", err)
+	}
+	data, err := os.ReadFile(gf)
+	if err != nil {
+		t.Fatalf("read gain ledger: %v", err)
+	}
+	if !strings.Contains(string(data), `"source":"mcp"`) {
+		t.Fatalf("read_file did not record an mcp gain entry; ledger=%q", data)
+	}
+}

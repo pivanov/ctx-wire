@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -232,5 +233,55 @@ func TestOpenSpoolUniquePerSession(t *testing.T) {
 	}
 	if a.spoolPath == b.spoolPath {
 		t.Errorf("two sessions share one spool: %s", a.spoolPath)
+	}
+}
+
+// TestServerMsgRecordsMCPGain pins the Phase-1 fix: the --compress relay used to
+// reduce a snapshot but record NOTHING, so the savings were invisible to
+// `ctx-wire gain`. serverMsg must now write a gain entry with source="mcp" once
+// the raw is spooled for recovery.
+func TestServerMsgRecordsMCPGain(t *testing.T) {
+	gainFile := filepath.Join(t.TempDir(), "gain.jsonl")
+	t.Setenv("CTX_WIRE_GAIN_FILE", gainFile)
+	t.Setenv("CTX_WIRE_GAIN", "") // ensure recording is enabled
+
+	snap := strings.Join([]string{
+		"## Page snapshot",
+		`uid=1_1 RootWebArea "Test"`,
+		`  uid=1_2 banner "Site header"`,
+		`    uid=1_3 link "Logo"`,
+		`    uid=1_4 navigation "Main"`,
+		`      uid=1_5 link "Home"`,
+		`  uid=1_6 main "Content"`,
+		`    uid=1_7 heading "Title"`,
+		`      uid=1_8 StaticText "Title"`,
+		`  uid=1_9 contentinfo "Footer"`,
+		`    uid=1_10 link "Privacy"`,
+	}, "\n")
+
+	spool, err := os.CreateTemp(t.TempDir(), "spool-*.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer spool.Close()
+	m := &mcpMeasure{
+		tools: map[string]*toolStat{}, pending: map[string]string{},
+		compress: true, spool: spool, spoolCap: 1 << 20, spoolPath: spool.Name(),
+	}
+
+	out := m.serverMsg(snapshotResultLine(t, 7, snap))
+	if !strings.Contains(string(out), "ctx-wire: snapshot compressed") {
+		t.Fatalf("expected the snapshot to be compressed; got %q", out)
+	}
+
+	data, err := os.ReadFile(gainFile)
+	if err != nil {
+		t.Fatalf("read gain ledger: %v", err)
+	}
+	if !strings.Contains(string(data), `"source":"mcp"`) {
+		t.Fatalf("compress relay did not record an mcp gain entry; ledger=%q", data)
+	}
+	if !strings.Contains(string(data), `"mode":"mcp-compress"`) {
+		t.Fatalf("expected mode=mcp-compress in the gain entry; ledger=%q", data)
 	}
 }

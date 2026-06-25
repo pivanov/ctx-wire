@@ -893,3 +893,25 @@ func mustRegistry(t *testing.T) *filter.Registry {
 	}
 	return reg
 }
+
+// TestCaptureRecordsMCPSource pins Phase-1 attribution for the MCP run_command
+// path: mcpserver.Serve sets CTX_WIRE_SOURCE=mcp, so a command captured through
+// the MCP server records gain with source="mcp", not the generic "run".
+func TestCaptureRecordsMCPSource(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	gf := filepath.Join(t.TempDir(), "gain.jsonl")
+	t.Setenv("CTX_WIRE_GAIN_FILE", gf)
+	t.Setenv("CTX_WIRE_GAIN", "1")
+	t.Setenv(EnvSource, "mcp") // how mcpserver.Serve marks the MCP reach-path
+	reg := mustRegistry(t)
+	if _, _, err := Capture(context.Background(), reg, "sh", []string{"-c", "echo mcp-attribution-probe"}); err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+	data, err := os.ReadFile(gf)
+	if err != nil {
+		t.Fatalf("read gain ledger: %v", err)
+	}
+	if !strings.Contains(string(data), `"source":"mcp"`) {
+		t.Fatalf("run_command path did not record source=mcp; ledger=%q", data)
+	}
+}

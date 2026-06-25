@@ -20,6 +20,7 @@ func TestGainSource(t *testing.T) {
 	}{
 		{"shim wins", "git", "hook", "claude", "shim"},
 		{"explicit hook marker", "", "hook", "claude", "hook"},
+		{"explicit mcp marker (the MCP server sets this)", "", "mcp", "claude", "mcp"},
 		{"manual run inside agent session is not hook", "", "", "claude", "run"},
 		{"plain run", "", "", "", "run"},
 	}

@@ -356,6 +356,10 @@ func gainSource() string {
 		return "shim"
 	case os.Getenv(EnvSource) == "hook":
 		return "hook"
+	case os.Getenv(EnvSource) == "mcp":
+		// The MCP server sets EnvSource=mcp so run_command savings are attributed
+		// to the MCP reach-path instead of a generic "run".
+		return "mcp"
 	default:
 		return "run"
 	}

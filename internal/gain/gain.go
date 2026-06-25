@@ -61,7 +61,7 @@ type Entry struct {
 	Filter       string `json:"filter,omitempty"`
 	Mode         string `json:"mode,omitempty"`
 	Agent        string `json:"agent,omitempty"`  // invoking agent, "" when unattributed
-	Source       string `json:"source,omitempty"` // "hook" | "shim" | "run": how ctx-wire was reached
+	Source       string `json:"source,omitempty"` // "hook" | "shim" | "run" | "mcp": how ctx-wire was reached
 	RawBytes     int    `json:"raw_bytes"`
 	EmittedBytes int    `json:"emitted_bytes"`
 	SavedBytes   int    `json:"saved_bytes"`
@@ -221,11 +221,21 @@ func Record(command string, rawBytes, emittedBytes, exitCode int) error {
 	return RecordWithMeta(command, "", "", "", "", rawBytes, emittedBytes, exitCode)
 }
 
+// RecordMCP records a gain entry for the MCP surface: source="mcp". The MCP
+// server's run_command/read_file tools and the `mcp-wrap --compress` relay all
+// reduce output but are reached via MCP, not the shell hook, so they belong on
+// the source axis as a 4th reach-path (parallel to hook/shim/run); source always
+// coincides with the MCP surface here. agentName is the caller's agent.Current()
+// (gain stays decoupled from agent). Best-effort; never breaks a run.
+func RecordMCP(command, filterName, mode, agentName string, rawBytes, emittedBytes int) {
+	_ = RecordWithMeta(command, filterName, mode, agentName, "mcp", rawBytes, emittedBytes, 0)
+}
+
 // RecordWithMeta appends a gain entry with filter-path metadata. filterName is
 // the matched filter, when any. mode is usually "filtered" or "passthrough".
 // agentName attributes the command to the invoking agent (already normalized;
 // "" when unattributed). source is how ctx-wire was reached ("hook" | "shim" |
-// "run"), so hook-vs-shim savings can be compared.
+// "run" | "mcp"), so entry-point savings can be compared.
 func RecordWithMeta(command, filterName, mode, agentName, source string, rawBytes, emittedBytes, exitCode int) error {
 	if !Enabled() {
 		return nil

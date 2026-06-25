@@ -17,7 +17,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"ctx-wire/internal/agent"
 	"ctx-wire/internal/filter"
+	"ctx-wire/internal/gain"
 	"ctx-wire/internal/runner"
 	"ctx-wire/internal/scrub"
 )
@@ -128,6 +130,7 @@ func readFile(reg *filter.Registry, path string, maxLines int) (string, bool, er
 		truncated = true
 	}
 	content := scrub.Scrub(string(data))
+	rawLen := len(content)
 
 	// Complete JSON is never reduced: the cat filter's line/length caps or the
 	// maxLines split would cut it mid-structure and hand the agent invalid JSON
@@ -154,11 +157,17 @@ func readFile(reg *filter.Registry, path string, maxLines int) (string, bool, er
 			truncated = true
 		}
 	}
+	// Record the read_file savings on the MCP surface (this path filters/caps like
+	// `cat` but never went through the runner's gain recording).
+	gain.RecordMCP("read_file", "cat", "mcp-read", agent.Current(), rawLen, len(content))
 	return content, truncated, nil
 }
 
 // Serve runs the MCP server over stdio until the client disconnects or ctx is
-// cancelled.
+// cancelled. It marks the process as the MCP reach-path so run_command savings
+// are attributed to source="mcp" in the gain ledger (this process only serves
+// MCP, so the env is unambiguous).
 func Serve(ctx context.Context, reg *filter.Registry, version string) error {
+	_ = os.Setenv(runner.EnvSource, "mcp")
 	return New(reg, version).Run(ctx, &mcp.StdioTransport{})
 }

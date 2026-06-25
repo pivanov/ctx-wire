@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"ctx-wire/internal/agent"
+	"ctx-wire/internal/gain"
 	"ctx-wire/internal/mcpcompress"
 	"ctx-wire/internal/paths"
 	"ctx-wire/internal/scrub"
@@ -329,6 +331,12 @@ func (m *mcpMeasure) serverMsg(line []byte) []byte {
 	m.compOut += outN
 	m.compCalls++
 	m.mu.Unlock()
+	// Surface the compression savings in the gain ledger (source="mcp"). Until now
+	// the --compress relay reduced output but recorded nothing, so these savings
+	// were invisible to `ctx-wire gain` and the local ledger , the read-ceiling
+	// gain-gap, applied to the MCP surface. Recorded only after the raw is spooled,
+	// so a recorded saving is always recoverable.
+	gain.RecordMCP("mcp snapshot", "snapshot", "mcp-compress", agent.Current(), rawN, outN)
 	return red
 }
 
