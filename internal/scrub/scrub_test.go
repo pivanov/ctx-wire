@@ -340,12 +340,7 @@ func TestScrubFailClosedRecoversPanic(t *testing.T) {
 //     silently skip a string that Scrub would redact, leaking the secret).
 func TestMightContainSecret(t *testing.T) {
 	t.Run("literal anchors trigger", func(t *testing.T) {
-		localAnchors := []string{
-			"eyJ", "AKIA", "ASIA", "AIza", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
-			"github_pat_", "xox", "sk_", "rk_", "sk-", "-----BEGIN", "://",
-			"hvs.", "hvb.", "hvr.", "pypi-",
-		}
-		for _, anchor := range localAnchors {
+		for _, anchor := range literalAnchors {
 			s := "noise " + anchor + " noise"
 			if !mightContainSecret(s) {
 				t.Errorf("literalAnchor %q: mightContainSecret(%q) = false, want true", anchor, s)
@@ -354,10 +349,7 @@ func TestMightContainSecret(t *testing.T) {
 	})
 
 	t.Run("keyword roots trigger lower and upper", func(t *testing.T) {
-		localRoots := []string{
-			"passw", "pwd", "secret", "token", "api", "key", "auth", "client", "access", "private",
-		}
-		for _, root := range localRoots {
+		for _, root := range keywordRoots {
 			lower := root + "=x"
 			if !mightContainSecret(lower) {
 				t.Errorf("keywordRoot %q (lower): mightContainSecret(%q) = false, want true", root, lower)

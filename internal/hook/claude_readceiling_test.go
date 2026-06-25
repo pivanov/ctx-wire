@@ -202,3 +202,23 @@ func TestClaudePostToolUse_IgnoresNonRead(t *testing.T) {
 		t.Fatalf("non-Read PostToolUse should be a no-op: err=%v bytes=%d", err, buf.Len())
 	}
 }
+
+func TestClaudePostToolUse_FailClosedEmitsNothing(t *testing.T) {
+	t.Setenv("CTX_WIRE_SPIKE_DIR", t.TempDir())
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	t.Setenv("CTX_WIRE_READ_CEILING", "on")
+
+	// Override the seam to force a scrub failure (fail-closed).
+	orig := scrubFailClosed
+	scrubFailClosed = func(string) (string, bool) { return "", false }
+	t.Cleanup(func() { scrubFailClosed = orig })
+
+	// Build a large unranged Read input that would otherwise be reshaped.
+	var buf bytes.Buffer
+	if err := claudePostToolUse(postPayload(t, bigText(300)), &buf); err != nil {
+		t.Fatalf("fail-closed should not return an error, got: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("fail-closed should emit nothing, got %d bytes: %s", buf.Len(), buf.String())
+	}
+}

@@ -80,7 +80,7 @@ func claudePostToolUse(in claudeInput, w io.Writer) error {
 	// honor ctx-wire's scrub guarantee (native Read bypasses scrubbing entirely;
 	// this is a net gain). If scrubbing cannot be guaranteed, do NOT rewrite,
 	// leave the native output (no worse than today).
-	scrubbed, sok := scrub.ScrubFailClosed(text)
+	scrubbed, sok := scrubFailClosed(text)
 	if !sok {
 		logSpikeMeasure(path, rawBytes, rawBytes, "scrub-failopen")
 		return nil
@@ -167,6 +167,9 @@ type claudePostHookOutput struct {
 // readCeilingMode is the configured mode ("off"/"measure"/"on"), wired by main
 // from config. The env CTX_WIRE_READ_CEILING overrides it per invocation.
 var readCeilingMode = "off"
+
+// scrubFailClosed is a seam so the fail-closed branch can be tested.
+var scrubFailClosed = scrub.ScrubFailClosed
 
 // SetReadCeilingMode sets the configured read-ceiling mode.
 func SetReadCeilingMode(m string) { readCeilingMode = normalizeCeilingMode(m) }

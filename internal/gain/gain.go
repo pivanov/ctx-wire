@@ -250,11 +250,17 @@ func RecordWithMeta(command, filterName, mode, agentName, source string, rawByte
 	if saved < 0 {
 		saved = 0
 	}
+	cmd, ok1 := scrub.ScrubFailClosed(command)
+	fname, ok2 := scrub.ScrubFailClosed(filterName)
+	md, ok3 := scrub.ScrubFailClosed(mode)
+	if !ok1 || !ok2 || !ok3 {
+		return fmt.Errorf("gain: scrub failed closed, entry withheld")
+	}
 	line, err := json.Marshal(Entry{
 		TS:           time.Now().UTC().Format(time.RFC3339),
-		Command:      truncateCommandSample(scrub.Scrub(command)),
-		Filter:       scrub.Scrub(filterName),
-		Mode:         scrub.Scrub(mode),
+		Command:      truncateCommandSample(cmd),
+		Filter:       fname,
+		Mode:         md,
 		Agent:        agentName,
 		Source:       source,
 		RawBytes:     rawBytes,
