@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"ctx-wire/internal/paths"
 )
@@ -272,10 +273,15 @@ func writeEntries(p string, entries []Entry) {
 }
 
 func clip(s string) string {
-	if len(s) > perBodyCap {
-		return s[:perBodyCap]
+	if len(s) <= perBodyCap {
+		return s
 	}
-	return s
+	cut := perBodyCap
+	// Back up over UTF-8 continuation bytes so we never split a rune at the cap.
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 func hashString(s string) string {

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // TestConcurrentRecordNoLostWrites pins the cross-process safety of the
@@ -173,5 +174,23 @@ func TestStaleLockOldMtime(t *testing.T) {
 	}
 	if !staleLock(p) {
 		t.Error("staleLock returned false for an old lock; want true")
+	}
+}
+
+func TestClipCutsOnRuneBoundary(t *testing.T) {
+	// Place a 3-byte rune so its 2nd/3rd bytes sit at/after the cap.
+	s := strings.Repeat("a", perBodyCap-1) + "世" + strings.Repeat("b", 16)
+	out := clip(s)
+	if !utf8.ValidString(out) {
+		t.Fatalf("clip produced invalid UTF-8 (split rune at the cap)")
+	}
+	if len(out) > perBodyCap {
+		t.Fatalf("clip exceeded cap: %d > %d", len(out), perBodyCap)
+	}
+	if !strings.HasPrefix(s, out) {
+		t.Fatalf("clip result is not a byte-prefix of the input")
+	}
+	if got := clip("hello"); got != "hello" {
+		t.Fatalf("clip(short) = %q, want unchanged", got)
 	}
 }
