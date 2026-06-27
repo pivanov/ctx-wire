@@ -136,13 +136,25 @@ func TestReduceLineWireLevel(t *testing.T) {
 // path); (3) past the per-session cap it is likewise forwarded raw.
 func TestCompressSpoolScrubbedAndGated(t *testing.T) {
 	secret := "ghp_" + strings.Repeat("A", 36) // a shape the scrubber redacts
+	// Enough droppable chrome (banner + navigation + contentinfo subtrees) that the
+	// reduction net-shrinks past the recovery note, so the never-worse guard in
+	// serverMsg lets it compress. A tinier snapshot would (correctly) net-expand and
+	// be forwarded raw, which is what TestServerMsgNeverWorseGuard covers.
 	snap := strings.Join([]string{
 		"## Page snapshot",
 		`uid=1_1 RootWebArea "Repo"`,
-		`  uid=1_2 banner "Site header"`, // dropped subtree -> guarantees reduction
+		`  uid=1_2 banner "Site header"`, // dropped chrome subtree
 		`    uid=1_3 link "Logo"`,
-		`  uid=1_4 main "Content"`,
-		`    uid=1_5 link "Token" url="https://x.test/?t=` + secret + `"`,
+		`    uid=1_4 navigation "Global"`,
+		`      uid=1_5 link "Home page"`,
+		`      uid=1_6 link "Pull requests"`,
+		`      uid=1_7 link "Issues list"`,
+		`      uid=1_8 link "Marketplace and explore"`,
+		`  uid=1_9 main "Content"`,
+		`    uid=1_10 link "Token" url="https://x.test/?t=` + secret + `"`,
+		`  uid=1_11 contentinfo "Footer"`, // dropped chrome subtree
+		`    uid=1_12 link "Terms of service"`,
+		`    uid=1_13 link "Privacy and cookies"`,
 	}, "\n")
 	line := snapshotResultLine(t, 5, snap)
 
@@ -283,5 +295,63 @@ func TestServerMsgRecordsMCPGain(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"mode":"mcp-compress"`) {
 		t.Fatalf("expected mode=mcp-compress in the gain entry; ledger=%q", data)
+	}
+}
+
+// TestServerMsgNeverWorseGuard pins the never-worse guard, parity with the
+// runner's recovery-footer guard ("the recovery footer earns its bytes only when
+// content was actually omitted"). Reducing a tiny snapshot can net-expand once
+// the recovery note (which embeds the spool path) is appended. When the reduced
+// form is not strictly smaller, serverMsg must forward the RAW line verbatim (no
+// "compressed" note) and record NO gain entry, so the agent never gets a larger
+// "compressed" payload and the ledger gets no phantom 0-saved row.
+func TestServerMsgNeverWorseGuard(t *testing.T) {
+	gainFile := filepath.Join(t.TempDir(), "gain.jsonl")
+	t.Setenv("CTX_WIRE_GAIN_FILE", gainFile)
+	t.Setenv("CTX_WIRE_GAIN", "") // ensure recording is enabled (not vacuous)
+
+	// Tiny snapshot: the droppable banner subtree guarantees a reduction (same
+	// pattern as TestCompressSpoolScrubbedAndGated), but the few bytes it drops
+	// are dwarfed by the appended recovery note, so the reduced form is larger.
+	snap := strings.Join([]string{
+		"## Page snapshot",
+		`uid=1_1 RootWebArea "P"`,
+		`  uid=1_2 banner "Site header"`, // dropped subtree -> guarantees reduction
+		`    uid=1_3 link "Logo"`,
+		`  uid=1_4 main "Content"`,
+	}, "\n")
+	line := snapshotResultLine(t, 7, snap)
+
+	spool, err := os.CreateTemp(t.TempDir(), "spool-*.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer spool.Close()
+	m := &mcpMeasure{
+		tools: map[string]*toolStat{}, pending: map[string]string{},
+		compress: true, spool: spool, spoolCap: 1 << 20, spoolPath: spool.Name(),
+	}
+
+	// Precondition: the reduction itself fires and net-expands, so it is the guard
+	// (not a missing reduction) that forwards raw below. This is the state the old
+	// unguarded code would have shipped: a bigger line plus a phantom gain entry.
+	if red, rawN, outN, ok := m.reduceLine(line); !ok || (outN < rawN && len(red) < len(line)) {
+		t.Fatalf("fixture must reduce and net-expand: ok=%v rawN=%d outN=%d lenRed=%d lenLine=%d", ok, rawN, outN, len(red), len(line))
+	}
+
+	out := m.serverMsg(line)
+
+	// Never-worse: the raw line is forwarded byte-verbatim.
+	if !bytes.Equal(out, line) {
+		t.Errorf("net-expanding reduction must forward raw verbatim:\n got %q\nwant %q", out, line)
+	}
+	// No "compressed" note slapped on a result that did not shrink.
+	if strings.Contains(string(out), "ctx-wire: snapshot compressed") {
+		t.Error("forwarded-raw result must not carry the compression note")
+	}
+	// No phantom 0-saved ledger row (the guard must skip recording, not just emit).
+	recorded, _ := os.ReadFile(gainFile)
+	if strings.Contains(string(recorded), `"source":"mcp"`) {
+		t.Errorf("guard fired but a phantom mcp gain entry was recorded:\n%s", recorded)
 	}
 }

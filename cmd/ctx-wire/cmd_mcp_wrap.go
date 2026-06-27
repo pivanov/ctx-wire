@@ -320,6 +320,17 @@ func (m *mcpMeasure) serverMsg(line []byte) []byte {
 	if !ok {
 		return line
 	}
+	// Never-worse guard, parity with the runner's recovery-footer guard
+	// (runner.go: "the recovery footer earns its bytes only when content was
+	// actually omitted"). Reducing a tiny snapshot can net-expand once the
+	// recovery note (which embeds the spool path) is appended, so if the reduced
+	// form is not strictly smaller, forward the raw line untouched and record
+	// nothing. The agent never gets a larger "compressed" payload, and the ledger
+	// gets no phantom 0-saved entry. len(red) vs len(line) is the authoritative
+	// byte check (what the agent receives); outN vs rawN guards the inner text.
+	if outN >= rawN || len(red) >= len(line) {
+		return line
+	}
 	// Only hand the agent the compressed form once the untouched (secret-scrubbed)
 	// raw is recorded for recovery. If the spool is unavailable or full, forward the
 	// raw result: never give the agent a compressed snapshot it cannot recover.

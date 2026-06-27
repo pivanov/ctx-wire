@@ -161,12 +161,23 @@ func TestRelayChildNotFound(t *testing.T) {
 // must come back reduced with the recovery note, proving compression is live
 // (so byte-validity above is not vacuously passing with compression off).
 func TestRelaySnapshotStillCompressesEndToEnd(t *testing.T) {
+	// Enough droppable chrome that the reduction net-shrinks past the recovery
+	// note, so the never-worse guard in serverMsg lets it compress (a tinier
+	// snapshot would correctly net-expand and be forwarded raw).
 	snap := strings.Join([]string{
 		"## Page snapshot",
 		`uid=1_1 RootWebArea "Repo"`,
 		`  uid=1_2 banner "Site header"`,
 		`    uid=1_3 link "Logo"`,
-		`  uid=1_4 main "Content"`,
+		`    uid=1_4 navigation "Global"`,
+		`      uid=1_5 link "Home page"`,
+		`      uid=1_6 link "Pull requests"`,
+		`      uid=1_7 link "Issues list"`,
+		`      uid=1_8 link "Marketplace and explore"`,
+		`  uid=1_9 main "Content"`,
+		`  uid=1_10 contentinfo "Footer"`,
+		`    uid=1_11 link "Terms of service"`,
+		`    uid=1_12 link "Privacy and cookies"`,
 	}, "\n")
 	// Build the frame with json.Marshal so the snapshot's inner quotes are
 	// escaped properly; a hand-rolled sprintf here produces invalid JSON, which
