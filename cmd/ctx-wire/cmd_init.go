@@ -263,9 +263,12 @@ func cmdInitGemini() int {
 	return 0
 }
 
-// installSelfAndShims installs the running ctx-wire binary into ~/.local/bin and
-// adds managed shims. Every `init <agent>` runs this first, so wiring an agent
-// always lands the binary and shims; agentName attributes the install per agent.
+// installSelfAndShims installs the running ctx-wire binary into ~/.local/bin and,
+// for steering-only agents, adds managed PATH shims. Every `init <agent>` runs
+// this first, so wiring an agent always lands the binary; shims are added only
+// when the agent is not hook/plugin-capable (see the IsHookCapable gate below),
+// since a hook/plugin already covers model-visible commands. agentName attributes
+// the install per agent.
 func installSelfAndShims(theme ui.Theme, agentName string) int {
 	source, err := os.Executable()
 	if err != nil {
