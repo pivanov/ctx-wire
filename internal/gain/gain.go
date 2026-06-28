@@ -49,6 +49,9 @@ const (
 
 var gainWriteMu sync.Mutex
 
+// scrubFailClosed is a seam so the fail-closed (entry-withheld) branch is testable.
+var scrubFailClosed = scrub.ScrubFailClosed
+
 // Enabled reports whether gain recording is enabled for this process.
 func Enabled() bool {
 	return os.Getenv(envDisable) != "0"
@@ -250,9 +253,9 @@ func RecordWithMeta(command, filterName, mode, agentName, source string, rawByte
 	if saved < 0 {
 		saved = 0
 	}
-	cmd, ok1 := scrub.ScrubFailClosed(command)
-	fname, ok2 := scrub.ScrubFailClosed(filterName)
-	md, ok3 := scrub.ScrubFailClosed(mode)
+	cmd, ok1 := scrubFailClosed(command)
+	fname, ok2 := scrubFailClosed(filterName)
+	md, ok3 := scrubFailClosed(mode)
 	if !ok1 || !ok2 || !ok3 {
 		return fmt.Errorf("gain: scrub failed closed, entry withheld")
 	}

@@ -860,6 +860,28 @@ func mustRecordMeta(t *testing.T, cmd, filterName, mode string, raw, emitted, co
 	}
 }
 
+func TestRecordWithMetaFailClosedWithholds(t *testing.T) {
+	path := useTempLog(t)
+
+	orig := scrubFailClosed
+	defer func() { scrubFailClosed = orig }()
+	scrubFailClosed = func(string) (string, bool) { return "", false }
+
+	err := RecordWithMeta("some cmd", "filter", "mode", "claude", "run", 100, 10, 0)
+	if err == nil {
+		t.Fatal("expected non-nil error when scrub fails closed, got nil")
+	}
+	if !strings.Contains(err.Error(), "entry withheld") {
+		t.Fatalf("error message %q does not contain 'entry withheld'", err.Error())
+	}
+
+	// The gain log must not have been written (either absent or empty).
+	data, readErr := os.ReadFile(path)
+	if readErr == nil && len(strings.TrimSpace(string(data))) > 0 {
+		t.Fatalf("expected no entries in gain log after scrub failure, got: %q", string(data))
+	}
+}
+
 func writeEntry(t *testing.T, path string, e Entry) {
 	t.Helper()
 	line, err := json.Marshal(e)
