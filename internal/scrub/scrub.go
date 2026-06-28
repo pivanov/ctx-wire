@@ -61,6 +61,9 @@ var rules = []rule{
 	// contain spaces and backslash-escaped quotes), or bare tokens, so the whole
 	// secret is redacted rather than stopping at the first escaped quote.
 	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret|pass|credential[s]?)\s*[:=]\s*)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s=>][^\s]*)`), replacement: "${1}" + redacted},
+	// JSON-style "key": "value" where the key is a quoted secret keyword.
+	// secret-assignment misses this because a `"` separates the keyword from `:`.
+	{name: "quoted-secret-key", re: regexp.MustCompile(`(?i)("(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret|pass|credential[s]?)"\s*:\s*)("(?:[^"\\]|\\.)*")`), replacement: "${1}" + redacted},
 }
 
 // Scrub redacts known secret shapes from s. It never returns an error and is
