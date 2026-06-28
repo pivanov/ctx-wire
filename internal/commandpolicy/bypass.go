@@ -315,6 +315,48 @@ func IsMCPServer(name string, args []string) bool {
 	return false
 }
 
+// interpreters are the interpreter basenames whose invocations may be finite
+// (one-shot) rather than interactive. When interpreterIsFinite returns true for
+// the args, the command falls through to normal capture+scrub instead of
+// inheriting stdio unchanged.
+var interpreters = map[string]bool{
+	"python": true, "python3": true, "node": true, "ipython": true, "irb": true,
+}
+
+// interpreterLongRunningModules are python -m <module> values that start a
+// long-lived server; these must NOT be captured (they would block or deadlock).
+var interpreterLongRunningModules = map[string]bool{
+	"http.server": true, "https.server": true, "uvicorn": true, "gunicorn": true,
+	"flask": true, "fastapi": true, "celery": true,
+}
+
+// interpreterIsFinite returns true when the interpreter invocation is a finite,
+// non-interactive one-shot command (capture it). Bare invocations,
+// interactive flags (-i), and known long-running -m modules are NOT finite
+// (keep inherited stdio).
+func interpreterIsFinite(args []string) bool {
+	runsCode := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-c" || a == "-e" || a == "--eval":
+			return true
+		case a == "-m":
+			if i+1 < len(args) && interpreterLongRunningModules[args[i+1]] {
+				return false
+			}
+			runsCode = true
+		case a == "-i":
+			return false
+		case strings.HasPrefix(a, "-"):
+			continue
+		default:
+			runsCode = true
+		}
+	}
+	return runsCode
+}
+
 // ClassifyBypass reports whether a command should bypass capture and, if so,
 // returns a human-readable reason.
 func ClassifyBypass(name string, args []string) (bool, string) {
@@ -328,7 +370,11 @@ func ClassifyBypass(name string, args []string) (bool, string) {
 		return true, "long-running dev script"
 	}
 	if base := filepath.Base(name); InteractivePrograms[base] {
-		return true, "interactive program " + base
+		if interpreters[base] && interpreterIsFinite(args) {
+			// finite one-shot interpreter command -> fall through to capture+scrub
+		} else {
+			return true, "interactive program " + base
+		}
 	}
 	if flags := streamingFlagsByCommand[filepath.Base(name)]; flags != nil {
 		for _, a := range args {

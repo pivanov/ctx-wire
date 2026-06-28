@@ -91,3 +91,38 @@ func TestClassifyBypassStreamingScoped(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifyBypassInterpreters(t *testing.T) {
+	tests := []struct {
+		name       string
+		cmd        string
+		args       []string
+		wantBypass bool
+	}{
+		// MUST bypass: bare invocation (REPL) or explicitly interactive
+		{"python bare", "python", nil, true},
+		{"python3 bare", "python3", nil, true},
+		{"node bare", "node", nil, true},
+		{"ipython bare", "ipython", nil, true},
+		{"irb bare", "irb", nil, true},
+		{"python -i explicit interactive", "python", []string{"-i", "x.py"}, true},
+		{"python -m http.server long-running", "python", []string{"-m", "http.server"}, true},
+		{"python3 -m uvicorn long-running", "python3", []string{"-m", "uvicorn", "app:app"}, true},
+
+		// MUST NOT bypass: finite one-shot invocations (capture+scrub)
+		{"python -c inline code", "python", []string{"-c", "print(1)"}, false},
+		{"node -e inline code", "node", []string{"-e", "console.log(1)"}, false},
+		{"python script.py", "python", []string{"script.py"}, false},
+		{"node scripts/seed.js", "node", []string{"scripts/seed.js"}, false},
+		{"python -m pytest", "python", []string{"-m", "pytest"}, false},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := ClassifyBypass(tt.cmd, tt.args)
+			if got != tt.wantBypass {
+				t.Fatalf("ClassifyBypass(%q, %v) bypass = %v, want %v", tt.cmd, tt.args, got, tt.wantBypass)
+			}
+		})
+	}
+}
