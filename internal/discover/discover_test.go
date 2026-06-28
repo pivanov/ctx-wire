@@ -156,6 +156,27 @@ func TestAnalyzeClassifies(t *testing.T) {
 	}
 }
 
+func TestWrappedTranscriptCommandsDoNotEscape(t *testing.T) {
+	project := "/work/myproj"
+	codexHome := t.TempDir()
+	setGain(t) // no matching gain record; the transcript wrapper is the evidence.
+	writeCodexSession(t, codexHome, project,
+		"ctx-wire run --agent codex git status --short --branch",
+		"ctx-wire run --agent=codex sed -n '1,12p' internal/discover/discover.go",
+	)
+
+	rep, err := Analyze(mustReg(t), Options{CodexDir: codexHome, Project: project})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if rep.ByCategory[CatCovered] != 2 {
+		t.Fatalf("covered = %d, want 2 (%+v)", rep.ByCategory[CatCovered], rep.ByCategory)
+	}
+	if rep.ByCategory[CatEscaped] != 0 || len(rep.Escaped) != 0 {
+		t.Fatalf("wrapped ctx-wire commands must not be reported as escaped: counts=%+v rows=%+v", rep.ByCategory, rep.Escaped)
+	}
+}
+
 // TestQuotedAndPipedCommandsMatchGain guards the matching fix: a quoted command
 // and a pipeline whose last stage was wrapped must correlate to their gain
 // records, which store the de-quoted argv of the inner command.

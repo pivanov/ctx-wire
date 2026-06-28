@@ -150,6 +150,32 @@ func TestRecordOmitsEmptyAgent(t *testing.T) {
 	}
 }
 
+func TestStripRunPrefixHandlesRunFlags(t *testing.T) {
+	cases := map[string]string{
+		"ctx-wire run git status":                                    "git status",
+		"  ctx-wire run --agent codex git status --short --branch  ": "git status --short --branch",
+		"ctx-wire run --agent=claude sed -n '1,3p' internal/foo.go":  "sed -n '1,3p' internal/foo.go",
+		"ctx-wire run --no-dedup --agent cursor cat /tmp/notes.txt":  "cat /tmp/notes.txt",
+		"ctx-wire run --no-dedup --no-dedup git diff --check":        "git diff --check",
+		"ctx-wire run --shim rg TODO .":                              "rg TODO .",
+		"not ctx-wire run --agent codex git status":                  "not ctx-wire run --agent codex git status",
+	}
+	for in, want := range cases {
+		if got := StripRunPrefix(in); got != want {
+			t.Errorf("StripRunPrefix(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestHasRunPrefix(t *testing.T) {
+	if !HasRunPrefix("ctx-wire run --agent codex git status") {
+		t.Fatal("expected ctx-wire run wrapper to be detected")
+	}
+	if HasRunPrefix("echo ctx-wire run git status") {
+		t.Fatal("non-leading ctx-wire run text must not count as a wrapper")
+	}
+}
+
 func TestAgentTotals(t *testing.T) {
 	entries := []Entry{
 		{Agent: "claude", RawBytes: 1000, EmittedBytes: 400, SavedBytes: 600},

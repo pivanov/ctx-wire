@@ -35,10 +35,12 @@ import (
 type Category string
 
 const (
-	// CatCovered: ctx-wire would filter this and a matching gain record exists
-	// (reported as "possibly covered" given imperfect correlation).
+	// CatCovered: ctx-wire would filter this and a matching gain record exists,
+	// or the transcript already shows an explicit ctx-wire run wrapper.
+	// Reported as "possibly covered" given imperfect correlation.
 	CatCovered Category = "covered"
-	// CatEscaped: ctx-wire would have filtered this, but no gain record matched.
+	// CatEscaped: ctx-wire would have filtered this, but no gain record matched
+	// and the transcript did not already show an explicit ctx-wire run wrapper.
 	// The actionable blind spot: hook missed, ran raw, or via another tool.
 	CatEscaped Category = "escaped"
 	// CatPassthrough: a command ctx-wire passes through by design (pipeline,
@@ -194,6 +196,7 @@ func Analyze(reg *filter.Registry, opts Options) (*Report, error) {
 // record from gainIndex when a filterable segment matches. It reuses
 // explain.Command so the expected handling can never drift from runtime.
 func classify(reg *filter.Registry, raw string, gainIndex map[string]int) Category {
+	explicitRun := gain.HasRunPrefix(raw)
 	raw = gain.StripRunPrefix(raw)
 	if strings.TrimSpace(raw) == "" {
 		return CatUnknown
@@ -234,6 +237,10 @@ func classify(reg *filter.Registry, raw string, gainIndex map[string]int) Catego
 		return CatHookLimited
 	case filterable == 0:
 		return CatPassthrough
+	case explicitRun:
+		// The transcript already contains `ctx-wire run ...`; even if the gain
+		// record is unavailable, this is not an escaped command.
+		return CatCovered
 	case matched == filterable:
 		return CatCovered
 	default:

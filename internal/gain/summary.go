@@ -169,14 +169,61 @@ func awkScript(sample string) string {
 	return m[2]
 }
 
-// StripRunPrefix removes a leading "ctx-wire run " wrapper so the underlying
-// command shape can be inspected.
+// StripRunPrefix removes a leading "ctx-wire run" wrapper so the underlying
+// command shape can be inspected. It understands ctx-wire run's wrapper flags
+// because hooks/plugins usually emit "ctx-wire run --agent <agent> <cmd>" while
+// gain records only the inner command.
 func StripRunPrefix(s string) string {
-	const p = "ctx-wire run "
-	if strings.HasPrefix(s, p) {
-		return strings.TrimSpace(s[len(p):])
+	inner, ok := runPrefixInner(s)
+	if !ok {
+		return s
 	}
-	return s
+	return inner
+}
+
+// HasRunPrefix reports whether s starts with a ctx-wire run wrapper.
+func HasRunPrefix(s string) bool {
+	_, ok := runPrefixInner(s)
+	return ok
+}
+
+func runPrefixInner(s string) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	const p = "ctx-wire run"
+	if trimmed != p && !strings.HasPrefix(trimmed, p+" ") && !strings.HasPrefix(trimmed, p+"\t") {
+		return s, false
+	}
+	rest := strings.TrimLeft(trimmed[len(p):], " \t")
+	for {
+		switch {
+		case rest == "":
+			return "", true
+		case rest == "--no-dedup" || strings.HasPrefix(rest, "--no-dedup ") || strings.HasPrefix(rest, "--no-dedup\t"):
+			rest = strings.TrimLeft(rest[len("--no-dedup"):], " \t")
+		case rest == "--agent" || strings.HasPrefix(rest, "--agent ") || strings.HasPrefix(rest, "--agent\t"):
+			rest = strings.TrimLeft(rest[len("--agent"):], " \t")
+			rest = dropFirstToken(rest)
+		case strings.HasPrefix(rest, "--agent="):
+			rest = dropFirstToken(rest)
+		case rest == "--shim" || strings.HasPrefix(rest, "--shim ") || strings.HasPrefix(rest, "--shim\t"):
+			rest = strings.TrimLeft(rest[len("--shim"):], " \t")
+		default:
+			return strings.TrimSpace(rest), true
+		}
+	}
+}
+
+func dropFirstToken(s string) string {
+	s = strings.TrimLeft(s, " \t")
+	if s == "" {
+		return ""
+	}
+	for i, r := range s {
+		if r == ' ' || r == '\t' {
+			return strings.TrimLeft(s[i:], " \t")
+		}
+	}
+	return ""
 }
 
 // CommandStat aggregates entries grouped by program (first token of command).
