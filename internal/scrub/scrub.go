@@ -55,12 +55,12 @@ var rules = []rule{
 	// records are scrubbed argv-aware by Command before they reach disk.
 	{name: "secret-flag-value", re: regexp.MustCompile(`(?i)(--(?:password|passwd|pwd|secret|token|auth[_-]?token|access[_-]?token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|client[_-]?secret|credential|credentials)\s+)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s]+)`), replacement: "${1}" + redacted},
 	// scheme://user:password@host -> redact only the password, keep the rest
-	{name: "url-userinfo", re: regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+:)[^\s@/]+(@)`), replacement: "${1}" + redacted + "${2}"},
+	{name: "url-userinfo", re: regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]*:)[^\s@/]+(@)`), replacement: "${1}" + redacted + "${2}"},
 	// secret-ish key = value (and key: value). Keep the key, redact the value.
 	// The value alternation captures single-quoted, double-quoted (which may
 	// contain spaces and backslash-escaped quotes), or bare tokens, so the whole
 	// secret is redacted rather than stopping at the first escaped quote.
-	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret)\s*[:=]\s*)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s=>][^\s]*)`), replacement: "${1}" + redacted},
+	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret|pass|credential[s]?)\s*[:=]\s*)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s=>][^\s]*)`), replacement: "${1}" + redacted},
 }
 
 // Scrub redacts known secret shapes from s. It never returns an error and is
@@ -85,7 +85,7 @@ var (
 		"hvs.", "hvb.", "hvr.", "pypi-",
 	}
 	keywordRoots = []string{
-		"passw", "pwd", "secret", "token", "api", "key", "auth", "client", "access", "private",
+		"pass", "pwd", "secret", "token", "api", "key", "auth", "client", "access", "private", "cred",
 	}
 )
 

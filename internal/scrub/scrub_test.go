@@ -163,6 +163,12 @@ var scrubCases = []struct {
 		mustKeep:  []string{"here"},
 		mustDrop:  []string{"ghp_realsecret123"},
 	},
+	{name: "db_pass assignment", in: "DB_PASS=fakeval123 ok", wantRedac: true, mustKeep: []string{"DB_PASS=", "ok"}, mustDrop: []string{"fakeval123"}},
+	{name: "redis_pass assignment", in: "REDIS_PASS=fakeval123", wantRedac: true, mustDrop: []string{"fakeval123"}},
+	{name: "pgpass assignment", in: "PGPASS=fakeval123", wantRedac: true, mustDrop: []string{"fakeval123"}},
+	{name: "credential assignment", in: "credential=fakeopaque999", wantRedac: true, mustKeep: []string{"credential="}, mustDrop: []string{"fakeopaque999"}},
+	{name: "credentials assignment", in: "credentials=fakeopaque999", wantRedac: true, mustDrop: []string{"fakeopaque999"}},
+	{name: "redis url empty user", in: "redis://:fakepass@host:6379/0", wantRedac: true, mustKeep: []string{"redis://", "host:6379"}, mustDrop: []string{"fakepass"}},
 }
 
 func TestScrub(t *testing.T) {
