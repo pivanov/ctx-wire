@@ -672,16 +672,17 @@ func splitLines(s string) []string {
 	return parts
 }
 
-// truncate counts runes, appends "..." past maxLen, and returns "..." if
-// maxLen < 3. The cut path locates the (maxLen-3)th rune's byte offset with a
-// single range scan instead of materializing a []rune copy of the whole string,
-// so a truncated line allocates only its result, not a full rune slice.
+// truncate counts runes, appends "..." past maxLen, and returns the leading
+// maxLen runes (rune-safe) if maxLen < 3. The cut path locates the
+// (maxLen-3)th rune's byte offset with a single range scan instead of
+// materializing a []rune copy of the whole string, so a truncated line
+// allocates only its result, not a full rune slice.
 func truncate(s string, maxLen int) string {
 	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
 	if maxLen < 3 {
-		return "..."
+		return string([]rune(s)[:maxLen])
 	}
 	cut := len(s)
 	n := 0

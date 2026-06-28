@@ -43,7 +43,7 @@ func cmdMCP(args []string) int {
 func cmdRun(args []string) int {
 	if isHelpArg(args) {
 		printHelp(os.Stdout, helpDoc{
-			usage:   []string{"ctx-wire run [--agent <agent>] <cmd> [args]"},
+			usage:   []string{"ctx-wire run [--no-dedup] [--agent <agent>] <cmd> [args]"},
 			summary: "Run a command, then filter and scrub its output before printing it.",
 			examples: []string{
 				"ctx-wire run git status",

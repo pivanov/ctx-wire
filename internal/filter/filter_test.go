@@ -3,6 +3,7 @@ package filter
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // builtinFilterCount is the number of built-in filter definitions.
@@ -367,7 +368,7 @@ func TestTruncate(t *testing.T) {
 		{"under limit unchanged", "hello", 5, "hello"},
 		{"ascii truncated", "hello world", 8, "hello..."},
 		{"unicode rune-counted", "日本語xyz", 5, "日本..."},
-		{"maxLen below 3", "abcdef", 2, "..."},
+		{"maxLen below 3", "abcdef", 2, "ab"},
 		{"empty stays empty", "", 5, ""},
 	}
 	for _, tt := range tests {
@@ -627,4 +628,19 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestTruncateBelowEllipsis asserts that truncate respects maxLen when
+// maxLen < 3, returning at most maxLen runes instead of the old "..." (which
+// would exceed maxLen for 0, 1, and 2).
+func TestTruncateBelowEllipsis(t *testing.T) {
+	if got := truncate("hello", 0); got != "" {
+		t.Errorf("truncate(%q, 0) = %q; want %q", "hello", got, "")
+	}
+	if got := truncate("héllo", 1); utf8.RuneCountInString(got) > 1 {
+		t.Errorf("truncate(%q, 1) = %q (%d runes); want <= 1 rune", "héllo", got, utf8.RuneCountInString(got))
+	}
+	if got := truncate("héllo", 2); utf8.RuneCountInString(got) > 2 {
+		t.Errorf("truncate(%q, 2) = %q (%d runes); want <= 2 runes", "héllo", got, utf8.RuneCountInString(got))
+	}
 }

@@ -9,6 +9,25 @@ import (
 	"ctx-wire/internal/ui"
 )
 
+// writeFileAtomic writes data to path via a temp file + rename so a crash
+// mid-write never leaves a partial file at path.
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".rules-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
+}
+
 // RulesFileRelPath is where WriteRulesFile persists the rules, relative to the
 // project root. It matches the convention agents read project rules from.
 const RulesFileRelPath = ".claude/rules/cli-corrections.md"
@@ -74,7 +93,7 @@ func WriteRulesFile(rep *Report, projectRoot string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, []byte(RulesMarkdown(rep)), 0o644); err != nil {
+	if err := writeFileAtomic(path, []byte(RulesMarkdown(rep))); err != nil {
 		return "", err
 	}
 	return path, nil
