@@ -20,7 +20,8 @@ import (
 // REPLACE the tool result the model sees via hookSpecificOutput.updatedToolOutput,
 // so this is the only mechanism that shrinks a native Read's output without the
 // deny footgun (the native Read still runs, so Edit's read-before-edit cache stays
-// valid). Wired by `ctx-wire init claude --read-ceiling[=measure]`.
+// valid). Installed by `ctx-wire init claude`; on by default, controlled by
+// config/env (modes below).
 //
 // Modes (config [hooks] read_ceiling, env CTX_WIRE_READ_CEILING overrides):
 //   - "off"     : no-op.
