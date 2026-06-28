@@ -225,6 +225,25 @@ func IsLongRunningDevScript(name string, args []string) bool {
 	return isLongRunningScriptName(script)
 }
 
+// streamingFlagsByCommand lists, per command, the flags that mean "stream
+// unbounded live output" and so must bypass capture. Bare -f/-F/-w collide
+// with non-streaming flags (grep -F, ls -F, sort -f, git commit -F, pnpm -F),
+// so streaming is recognized only for these (command, flag) pairs. The risk is
+// asymmetric: omitting a real streaming pair makes ctx-wire capture an endless
+// stream and hang, so this list errs toward inclusion.
+var streamingFlagsByCommand = map[string][]string{
+	"tail":       {"-f", "-F", "--follow", "--retry"},
+	"kubectl":    {"-f", "--follow", "-w", "--watch"},
+	"oc":         {"-f", "--follow", "-w", "--watch"},
+	"docker":     {"-f", "--follow"},
+	"podman":     {"-f", "--follow"},
+	"journalctl": {"-f", "--follow"},
+	"vagrant":    {"-f", "--follow"},
+	"heroku":     {"-f", "--follow"},
+	"pm2":        {"-f", "--follow"},
+	"wrangler":   {"-f", "--follow"},
+}
+
 // IsStreamingArg reports whether an argument usually means unbounded live
 // output, which should bypass capture.
 func IsStreamingArg(arg string) bool {
@@ -311,9 +330,13 @@ func ClassifyBypass(name string, args []string) (bool, string) {
 	if base := filepath.Base(name); InteractivePrograms[base] {
 		return true, "interactive program " + base
 	}
-	for _, a := range args {
-		if IsStreamingArg(a) {
-			return true, "streaming flag " + a
+	if flags := streamingFlagsByCommand[filepath.Base(name)]; flags != nil {
+		for _, a := range args {
+			for _, sf := range flags {
+				if a == sf {
+					return true, "streaming flag " + a
+				}
+			}
 		}
 	}
 	return false, ""
