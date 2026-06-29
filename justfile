@@ -83,8 +83,9 @@ lint:
 verify:
     {{go}} run ./cmd/ctx-wire verify
 
-# Scan for reachable known vulnerabilities (Go stdlib + module graph). Run in CI;
-# not in `check` to keep the local pre-commit loop fast and offline.
+# Scan for reachable known vulnerabilities (Go stdlib + module graph). Run as part
+# of the release gate (`just release`); kept out of `check` to keep the local
+# pre-commit loop fast and offline.
 vuln:
     {{go}} run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
@@ -113,11 +114,24 @@ release release_version:
       echo "error: use a non-v version tag, e.g. 'just release 0.1.0' (GitHub blocks v* tags here)" >&2
       exit 2
     fi
-    if [ -n "$(git status --porcelain)" ]; then
+    # Untracked private planning dirs (plans/, advisor-plans/ from /improve) are
+    # not gitignored, so plain `git status --porcelain` would flag them and abort
+    # the release. Drop only those untracked entries; keep catching tracked
+    # changes and any OTHER untracked file (e.g. a forgotten source file).
+    dirty="$(git status --porcelain | awk '!($1 == "??" && $2 ~ /^(plans|advisor-plans)\//)')"
+    if [ -n "$dirty" ]; then
       echo "error: working tree is dirty; commit or stash changes before releasing" >&2
-      git status --short >&2
+      printf '%s\n' "$dirty" >&2
       exit 1
     fi
+    # Release gate: verify the EXACT tree being tagged before any tag is created
+    # or pushed. check = fmt/vet/lint/test/race/verify; vuln = govulncheck
+    # (reachable-vuln scan, which otherwise runs nowhere). A failure here aborts
+    # under `set -e` before any tag exists, so a bad release leaves no dangling tag.
+    echo "release gate: running 'just check'..." >&2
+    just check
+    echo "release gate: running 'just vuln'..." >&2
+    just vuln
     if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
       tag_commit="$(git rev-list -n 1 "$version")"
       head_commit="$(git rev-parse HEAD)"
