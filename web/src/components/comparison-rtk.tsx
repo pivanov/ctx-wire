@@ -64,6 +64,17 @@ export const ComparisonRtk = () => {
     >
       <SectionEyebrow>inspired by rtk</SectionEyebrow>
 
+      <motion.h2
+        variants={v(fadeUp)}
+        className="m-0 mt-4 max-w-3xl font-display text-h2 font-extrabold text-head"
+      >
+        rtk proved it. ctx-wire takes it{" "}
+        <span className="bg-linear-to-r from-green to-teal bg-clip-text text-transparent">
+          further
+        </span>
+        .
+      </motion.h2>
+
       <motion.p
         variants={v(fadeUp)}
         className="m-0 mt-4 font-mono text-sub leading-relaxed text-label"
@@ -77,10 +88,9 @@ export const ComparisonRtk = () => {
         >
           rtk
         </a>{" "}
-        (Rust Token Killer). It proved you can sit between an agent and the
-        shell, filter the noise, and hand back a fraction of the tokens.
-        ctx-wire builds on that groundwork and takes the same jobs a step
-        further.
+        (Rust Token Killer): sit between the agent and the shell, filter the
+        noise, hand back a fraction of the tokens. That groundwork holds up.
+        Here is where each job goes a step further.
       </motion.p>
 
       <motion.div
@@ -139,7 +149,13 @@ const Side = ({
 }) => {
   const isTeal = accent === "teal";
   return (
-    <div>
+    <div
+      className={
+        isTeal
+          ? "p-3"
+          : "rounded-card bg-green/4 p-3 ring-1 ring-inset ring-line"
+      }
+    >
       <div className="mb-1.5 flex items-center gap-2">
         <span
           className={`size-1.5 rounded-full ${isTeal ? "bg-teal" : "bg-green"}`}

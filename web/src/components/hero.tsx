@@ -36,6 +36,7 @@ const TRUST = [
   "failures pass through intact",
   "inspect what's filtered",
   "runs fully local",
+  "no sudo, installs to ~/.local/bin",
   "MIT licensed",
 ];
 
@@ -86,6 +87,20 @@ export const Hero = ({ stats }: { stats: TImpactStats }) => {
   const reduce = useReducedMotion();
   const v = (variant: typeof fadeUp) => (reduce ? undefined : variant);
 
+  // Deep-link an agent: ctx-wire.dev/#codex preselects the tab, and picking a
+  // tab updates the hash so each community gets a shareable setup link.
+  useEffect(() => {
+    const fromHash = window.location.hash.slice(1).toLowerCase();
+    if (AGENTS.includes(fromHash)) {
+      setAgent(fromHash);
+    }
+  }, []);
+
+  const pickAgent = (id: string) => {
+    setAgent(id);
+    window.history.replaceState(null, "", `#${id}`);
+  };
+
   return (
     <section id="top" className="w-full max-w-stage pt-2">
       <div className="grid grid-cols-1 items-center lg:grid-cols-2">
@@ -96,7 +111,7 @@ export const Hero = ({ stats }: { stats: TImpactStats }) => {
           viewport={{ once: true, amount: 0.1 }}
         >
           <SectionEyebrow className="mb-4">
-            context compression for AI coding agents
+            the context layer for AI coding agents
           </SectionEyebrow>
 
           <motion.h1
@@ -116,9 +131,10 @@ export const Hero = ({ stats }: { stats: TImpactStats }) => {
             variants={v(fadeUp)}
             className="m-0 max-w-copy font-mono text-sub leading-relaxed text-label"
           >
-            ctx-wire runs your commands, compresses the output with declarative
-            filters, scrubs secrets, and hands your agent a short result. The
-            full log stays on disk for when something actually fails.
+            One install wires Claude Code, Codex, Cursor, and 11 more. ctx-wire
+            runs their commands, compresses the noisy output, scrubs secrets
+            fail-closed, and hands back a short result. The full log stays on
+            disk for when something actually fails.
           </motion.p>
         </motion.div>
 
@@ -150,7 +166,7 @@ export const Hero = ({ stats }: { stats: TImpactStats }) => {
                   role="tab"
                   aria-selected={active}
                   key={id}
-                  onClick={() => setAgent(id)}
+                  onClick={() => pickAgent(id)}
                   className={`relative shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 font-mono text-2xs transition-[color,transform] duration-150 ease-out motion-safe:active:scale-[0.97] ${
                     active ? "text-green" : "text-label hover:text-fg"
                   }`}
@@ -401,6 +417,25 @@ const FlowDiagram = ({
             className="pointer-events-none absolute z-0 size-24 rounded-full bg-green/30 blur-lg"
           />
         ) : null}
+        {phase === "in" && !reduce
+          ? [0, 1, 2].map((n) => (
+              <motion.span
+                key={`${idx}-${n}`}
+                initial={{ top: "-6%", opacity: 0 }}
+                animate={{
+                  top: ["-6%", "45%", "100%"],
+                  opacity: [0, 1, 0],
+                  backgroundColor: ["#67e8f9", "#67e8f9", "#4ade80"],
+                }}
+                transition={{
+                  duration: 0.55,
+                  delay: n * 0.14,
+                  ease: "easeIn",
+                }}
+                className="pointer-events-none absolute left-1/2 z-0 size-1.5 -translate-x-1/2 rounded-full"
+              />
+            ))
+          : null}
         <motion.span
           variants={v(scaleIn)}
           className="flow-node-bg relative z-10 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 font-mono text-sm font-bold text-ink"

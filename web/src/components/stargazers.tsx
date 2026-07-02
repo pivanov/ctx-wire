@@ -1,12 +1,28 @@
 import { IconStarFilled } from "@tabler/icons-react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion, type Variants } from "motion/react";
 import { formatInt } from "../format";
 import type { TStargazer } from "../hooks/use-community";
 import { fadeUp, staggerContainer } from "../lib/variants";
 import { SectionEyebrow } from "./section-heading";
 
 const REPO = "https://github.com/pivanov/ctx-wire";
-const MAX_SHOWN = 28;
+const MAX_SHOWN = 96;
+
+// Per-avatar pop keeps the cluster feeling live without moving the layout;
+// the parent staggers each face in.
+const faceRow: Variants = {
+  hidden: { opacity: 1 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.012 } },
+};
+
+const facePop: Variants = {
+  hidden: { opacity: 0, scale: 0.5 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.25, ease: [0.16, 1, 0.3, 1] },
+  },
+};
 
 export const Stargazers = ({
   stargazers,
@@ -52,14 +68,23 @@ export const Stargazers = ({
         )}
       </motion.h2>
 
+      <motion.p
+        variants={reduce ? undefined : fadeUp}
+        className="m-0 max-w-md font-mono text-sub leading-relaxed text-label"
+      >
+        Open source, MIT licensed. If ctx-wire saved your agent some tokens, a
+        star helps the next developer find it.
+      </motion.p>
+
       {hasFaces ? (
         <motion.div
-          variants={reduce ? undefined : fadeUp}
-          className="flex max-w-2xl flex-wrap items-center justify-center"
+          variants={reduce ? undefined : faceRow}
+          className="flex max-w-3xl flex-wrap items-center justify-center gap-y-1.5"
         >
           {shown.map((s) => (
-            <a
+            <motion.a
               key={s.login}
+              variants={reduce ? undefined : facePop}
               href={s.url}
               target="_blank"
               rel="noreferrer"
@@ -73,23 +98,22 @@ export const Stargazers = ({
                 referrerPolicy="no-referrer"
                 className="size-10 rounded-full bg-panel ring-2 ring-bg"
               />
-            </a>
+            </motion.a>
           ))}
           {extra > 0 ? (
-            <span className="-ml-2 grid size-10 place-items-center rounded-full bg-green/10 font-mono text-2xs text-green ring-2 ring-bg">
+            <motion.a
+              variants={reduce ? undefined : facePop}
+              href={`${REPO}/stargazers`}
+              target="_blank"
+              rel="noreferrer"
+              title="See every stargazer"
+              className="-ml-2 grid size-10 place-items-center rounded-full bg-green/10 font-mono text-2xs text-green ring-2 ring-bg transition-transform hover:z-10 hover:-translate-y-1"
+            >
               +{formatInt(extra)}
-            </span>
+            </motion.a>
           ) : null}
         </motion.div>
-      ) : (
-        <motion.p
-          variants={reduce ? undefined : fadeUp}
-          className="m-0 max-w-md font-mono text-sub leading-relaxed text-label"
-        >
-          If ctx-wire saved your agent some tokens, a star helps other
-          developers find it.
-        </motion.p>
-      )}
+      ) : null}
 
       <motion.a
         variants={reduce ? undefined : fadeUp}

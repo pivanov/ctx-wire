@@ -22,24 +22,24 @@ const STEPS = [
 
 const CAPS = [
   {
-    name: "MCP server",
-    desc: "Filtering as a tool (run_command + read_file) for MCP-native editors.",
-  },
-  {
-    name: "PATH shims",
-    desc: "Coverage for agents without a hook (Cline, Windsurf, VS Code...); where a hook already rewrites, shims step aside.",
-  },
-  {
     name: "Fail-closed scrubbing",
     desc: "Redacts all argv + output; withholds rather than leak a secret.",
+  },
+  {
+    name: "Per-agent attribution",
+    desc: "Savings split by agent (Claude, Codex, Cursor, Gemini, Copilot).",
   },
   {
     name: "Streaming-aware bypass",
     desc: "Auto-detects dev servers, watchers, interactive. No deadlocks.",
   },
   {
-    name: "Per-agent attribution",
-    desc: "Savings split by agent (Claude, Codex, Cursor, Gemini, Copilot).",
+    name: "MCP server",
+    desc: "Filtering as a tool (run_command + read_file) for MCP-native editors.",
+  },
+  {
+    name: "PATH shims",
+    desc: "Coverage for agents without a hook (Cline, Windsurf, VS Code...); where a hook already rewrites, shims step aside.",
   },
   {
     name: "148 filters · 400+ tests",
