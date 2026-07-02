@@ -205,14 +205,6 @@ const SNIPPETS: Record<string, TSnippet> = {
   },
 };
 
-// Filters we actually shipped, framed as a changelog (not the rotation above).
-// Only released fixes belong here, never roadmap.
-const SHIPPED = [
-  { version: "0.1.38", cmd: "uv" },
-  { version: "0.1.38", cmd: "bun" },
-  { version: "0.1.36", cmd: "rubocop" },
-];
-
 // Shown when telemetry has no matching programs yet (idle tab / first paint).
 // Seeded with the real top programs + real per-run averages and run counts, so
 // the idle state mirrors production rather than inventing different commands.
@@ -445,20 +437,6 @@ const CutsTerminal = ({ cuts }: { cuts: TCut[] }) => {
             ))}
           </div>
 
-          {/* changelog: recent filter fixes (separate from the rotation) */}
-          <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-soft pt-4 text-2xs">
-            <span className="text-label">Newest filter fixes:</span>
-            {SHIPPED.map((s) => (
-              <span
-                key={s.cmd}
-                className="inline-flex items-center gap-2 rounded-full bg-green/10 px-3 py-1 ring-1 ring-inset ring-green/25"
-              >
-                <span className="text-green">{s.version}</span>
-                <span className="font-bold text-fg">{s.cmd}</span>
-              </span>
-            ))}
-            <span className="text-dim">· sharper every release</span>
-          </div>
         </div>
       </div>
     </motion.div>
