@@ -94,6 +94,61 @@ func TestInstallCopilot(t *testing.T) {
 	}
 }
 
+func TestInstallCopilotSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"theme":"dark","hooks":{"preToolUse":[{"type":"command","bash":"echo keep"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := InstallCopilotSettings(path)
+	if err != nil {
+		t.Fatalf("InstallCopilotSettings: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{`"theme": "dark"`, `"bash": "echo keep"`, `"command": "ctx-wire hook copilot"`} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("settings missing %q:\n%s", want, content)
+		}
+	}
+
+	changed, err = InstallCopilotSettings(path)
+	if err != nil {
+		t.Fatalf("second InstallCopilotSettings: %v", err)
+	}
+	if changed {
+		t.Fatal("expected changed=false on second install")
+	}
+}
+
+func TestInstallCopilotSettingsRepairsBrokenBashEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"hooks":{"preToolUse":[{"type":"command","bash":"ctx-wire hook copilot"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := InstallCopilotSettings(path)
+	if err != nil {
+		t.Fatalf("InstallCopilotSettings: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true so the live command hook is added")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"command": "ctx-wire hook copilot"`) {
+		t.Fatalf("command hook missing after repair:\n%s", data)
+	}
+}
+
 func TestInstallCopilotIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	instrPath := CopilotInstructionsPath(dir)

@@ -31,6 +31,7 @@ func TestInstallAgentRoundTrip(t *testing.T) {
 			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 			t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 			t.Setenv("GEMINI_HOME", filepath.Join(home, ".gemini"))
+			t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 			t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(home, ".pi", "agent"))
 			t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))

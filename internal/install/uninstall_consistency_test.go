@@ -23,6 +23,7 @@ func TestUninstallConsistency(t *testing.T) {
 			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 			t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 			t.Setenv("GEMINI_HOME", filepath.Join(home, ".gemini"))
+			t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 			t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(home, ".pi", "agent"))
 			t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
@@ -51,6 +52,7 @@ func TestUninstallConsistency(t *testing.T) {
 			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home2, ".claude"))
 			t.Setenv("CODEX_HOME", filepath.Join(home2, ".codex"))
 			t.Setenv("GEMINI_HOME", filepath.Join(home2, ".gemini"))
+			t.Setenv("COPILOT_HOME", filepath.Join(home2, ".copilot"))
 			t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(home2, ".pi", "agent"))
 			t.Setenv("HERMES_HOME", filepath.Join(home2, ".hermes"))
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home2, ".config"))
@@ -175,6 +177,13 @@ func installAgentForTest(t *testing.T, name, home, workdir string) error {
 		}
 	case "copilot":
 		if _, err := InstallCopilot(CopilotInstructionsPath(workdir), CopilotHookPath(workdir)); err != nil {
+			return err
+		}
+		settingsPath, err := CopilotSettingsPath()
+		if err != nil {
+			return err
+		}
+		if _, err := InstallCopilotSettings(settingsPath); err != nil {
 			return err
 		}
 	case "kilocode":

@@ -264,11 +264,22 @@ var agentRegistry = []agentDescriptor{
 		Name:         "copilot",
 		NeedsWorkdir: true,
 		Install: func(workdir string) (string, bool, error) {
-			// The display path is the .github dir; the install writes both the
-			// instructions file and the hook under it.
-			path := filepath.Join(workdir, ".github")
+			// Copilot uses project-local instructions, but current CLI releases
+			// load the command hook from user settings.
+			projectPath := filepath.Join(workdir, ".github")
 			changed, err := InstallCopilot(CopilotInstructionsPath(workdir), CopilotHookPath(workdir))
-			return path, changed, err
+			if err != nil {
+				return projectPath, false, err
+			}
+			settingsPath, err := CopilotSettingsPath()
+			if err != nil {
+				return projectPath, false, err
+			}
+			settingsChanged, err := InstallCopilotSettings(settingsPath)
+			if err != nil {
+				return projectPath, false, err
+			}
+			return projectPath + " + " + settingsPath, changed || settingsChanged, nil
 		},
 		Uninstall: func(workdir string, r *IntegrationUninstallReport) error {
 			changed, err := UninstallCopilotHook(CopilotHookPath(workdir))
@@ -278,11 +289,20 @@ var agentRegistry = []agentDescriptor{
 			if changed {
 				r.Removed = append(r.Removed, "copilot hook")
 			}
+			if settingsPath, err := CopilotSettingsPath(); err == nil {
+				changed, err := UninstallCopilotSettings(settingsPath)
+				if err != nil {
+					return err
+				}
+				if changed {
+					r.Removed = append(r.Removed, "copilot settings")
+				}
+			}
 			return r.removeInstr("copilot instructions", CopilotInstructionsPath(workdir))
 		},
 		ProbeKind:   WiringHook,
 		ProbeNeedle: "ctx-wire hook copilot",
-		ProbePaths:  workdirProbePath(CopilotHookPath),
+		ProbePaths:  copilotProbePaths,
 	},
 
 	{
@@ -464,6 +484,14 @@ func singleProbePath(resolve func() (string, error)) func(string) []string {
 		}
 		return []string{p}
 	}
+}
+
+func copilotProbePaths(workdir string) []string {
+	paths := []string{CopilotHookPath(workdir)}
+	if p, err := CopilotSettingsPath(); err == nil {
+		paths = append(paths, p)
+	}
+	return paths
 }
 
 // workdirProbePath adapts a workdir-relative path resolver (ClineRulesPath, etc.)

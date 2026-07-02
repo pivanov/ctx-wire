@@ -67,9 +67,14 @@ func TestUninstallIntegrationsPreservesUnrelatedConfig(t *testing.T) {
 	clinePath := ClineRulesPath(workdir)
 	windsurfPath := WindsurfRulesPath(workdir)
 	copilotInstructions := CopilotInstructionsPath(workdir)
+	copilotSettings, err := CopilotSettingsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, clinePath, "Keep Cline.\n")
 	writeFile(t, windsurfPath, "Keep Windsurf.\n")
 	writeFile(t, copilotInstructions, "Keep Copilot.\n")
+	writeFile(t, copilotSettings, `{"theme":"dark"}`)
 	if _, err := InstallCline(clinePath); err != nil {
 		t.Fatalf("InstallCline: %v", err)
 	}
@@ -78,6 +83,9 @@ func TestUninstallIntegrationsPreservesUnrelatedConfig(t *testing.T) {
 	}
 	if _, err := InstallCopilot(copilotInstructions, CopilotHookPath(workdir)); err != nil {
 		t.Fatalf("InstallCopilot: %v", err)
+	}
+	if _, err := InstallCopilotSettings(copilotSettings); err != nil {
+		t.Fatalf("InstallCopilotSettings: %v", err)
 	}
 
 	vscodeMCP := VSCodeMCPPath(workdir)
@@ -115,6 +123,7 @@ func TestUninstallIntegrationsPreservesUnrelatedConfig(t *testing.T) {
 	assertNoCtxWireAndKeeps(t, windsurfPath, "Keep Windsurf.")
 	assertNoCtxWireAndKeeps(t, copilotInstructions, "Keep Copilot.")
 	assertMissing(t, CopilotHookPath(workdir))
+	assertNoCtxWireAndKeeps(t, copilotSettings, `"theme": "dark"`)
 	assertNoCtxWireAndKeeps(t, vscodeMCP, "github")
 	assertNoCtxWireAndKeeps(t, visualStudioMCP, "github")
 }
@@ -195,6 +204,30 @@ func TestUninstallCopilotMixedHookPreservesForeign(t *testing.T) {
 	if !strings.Contains(got, "my-other-tool") {
 		t.Fatalf("foreign entry was deleted (uninstall was not surgical):\n%s", got)
 	}
+}
+
+func TestUninstallCopilotSettingsPreservesForeign(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	writeFile(t, path, `{
+	  "theme": "dark",
+	  "hooks": {
+	    "preToolUse": [
+	      {"type":"command","bash":"ctx-wire hook copilot"},
+	      {"type":"command","command":"ctx-wire hook copilot"},
+	      {"type":"command","bash":"echo keep"}
+	    ]
+	  }
+	}`)
+
+	changed, err := UninstallCopilotSettings(path)
+	if err != nil {
+		t.Fatalf("UninstallCopilotSettings: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	assertNoCtxWireAndKeeps(t, path, "echo keep")
+	assertNoCtxWireAndKeeps(t, path, `"theme": "dark"`)
 }
 
 func TestUninstallClaudeRemovesOnlyCtxWireInnerHook(t *testing.T) {

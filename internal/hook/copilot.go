@@ -3,6 +3,8 @@ package hook
 import (
 	"encoding/json"
 	"io"
+	"os"
+	"strings"
 
 	"ctx-wire/internal/rewrite"
 )
@@ -15,17 +17,14 @@ type copilotVSCodeInput struct {
 }
 
 type copilotCLIInput struct {
-	ToolName string `json:"toolName"`
-	ToolArgs string `json:"toolArgs"`
-}
-
-type copilotCLIToolArgs struct {
-	Command string `json:"command"`
+	ToolName string          `json:"toolName"`
+	ToolArgs json.RawMessage `json:"toolArgs"`
 }
 
 type copilotCLIOutput struct {
 	PermissionDecision       string `json:"permissionDecision,omitempty"`
 	PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
+	ModifiedArgs             any    `json:"modifiedArgs,omitempty"`
 }
 
 type copilotVSCodeOutput struct {
@@ -44,8 +43,11 @@ type copilotUpdatedInput struct {
 }
 
 // Copilot handles both VS Code Copilot Chat and GitHub Copilot CLI pre-tool
-// payloads. VS Code can rewrite transparently. Copilot CLI cannot update input
-// today, so it receives a deny-with-suggestion response.
+// payloads. VS Code supports transparent rewrites. Copilot CLI sends toolArgs
+// as a JSON string in current releases, while the SDK type allows an object, so
+// copilotCLI accepts both and preserves unknown fields. The CLI transparent
+// rewrite response is capability-gated; older CLIs that ignore modifiedArgs
+// must keep receiving deny-with-suggestion so the original command never runs raw.
 func Copilot(r io.Reader, w io.Writer) error {
 	data, err := readHookInput(r)
 	if err != nil {
@@ -94,22 +96,52 @@ func copilotCLI(data []byte, w io.Writer) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return nil
 	}
-	if in.ToolName != "bash" || in.ToolArgs == "" {
+	if in.ToolName != "bash" || len(in.ToolArgs) == 0 {
 		return nil
 	}
-	var args copilotCLIToolArgs
-	if err := json.Unmarshal([]byte(in.ToolArgs), &args); err != nil {
+	args, ok := parseCopilotCLIToolArgs(in.ToolArgs)
+	if !ok {
 		return nil
 	}
-	if args.Command == "" {
+	command, _ := args["command"].(string)
+	if command == "" {
 		return nil
 	}
-	rewritten := rewrite.LineForAgent(args.Command, "copilot")
-	if rewritten == args.Command {
+	rewritten := rewrite.LineForAgent(command, "copilot")
+	if rewritten == command {
 		return nil
 	}
+	if !copilotCLIModifiedArgsEnabled() {
+		return json.NewEncoder(w).Encode(copilotCLIOutput{
+			PermissionDecision:       "deny",
+			PermissionDecisionReason: "Token savings: use `" + rewritten + "` instead",
+		})
+	}
+	args["command"] = rewritten
 	return json.NewEncoder(w).Encode(copilotCLIOutput{
-		PermissionDecision:       "deny",
-		PermissionDecisionReason: "Token savings: use `" + rewritten + "` instead",
+		PermissionDecision:       "allow",
+		PermissionDecisionReason: "ctx-wire rewrite",
+		ModifiedArgs:             args,
 	})
+}
+
+func copilotCLIModifiedArgsEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CTX_WIRE_COPILOT_MODIFIED_ARGS"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseCopilotCLIToolArgs(raw json.RawMessage) (map[string]any, bool) {
+	var encoded string
+	if err := json.Unmarshal(raw, &encoded); err == nil {
+		raw = []byte(encoded)
+	}
+	var args map[string]any
+	if err := json.Unmarshal(raw, &args); err != nil || args == nil {
+		return nil, false
+	}
+	return args, true
 }

@@ -14,6 +14,7 @@ var configDirEnvVars = []string{
 	"CLAUDE_CONFIG_DIR",
 	"CODEX_HOME",
 	"GEMINI_HOME",
+	"COPILOT_HOME",
 	"PI_CODING_AGENT_DIR",
 	"HERMES_HOME",
 }
