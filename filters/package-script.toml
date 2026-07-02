@@ -1,6 +1,8 @@
 [filters.package-script]
 description = "Conservative fallback for package-manager scripts with arbitrary names"
-match_command = "^(?:bun(?:\\s+(?:--filter|-F)\\s+\\S+)*\\s+(?:run\\s+)?[A-Za-z0-9_.:@/-]+|(?:npm|pnpm)\\s+run\\s+[A-Za-z0-9_.:@/-]+|yarn\\s+(?:run\\s+)?[A-Za-z0-9_.:@/-]+)\\b"
+# pnpm runs scripts bare (`pnpm build:app`) and with workspace flags before the
+# script (`pnpm -r build`, `pnpm --filter web test`); npm still requires `run`.
+match_command = "^(?:bun(?:\\s+(?:--filter|-F)\\s+\\S+)*\\s+(?:run\\s+)?[A-Za-z0-9_.:@/-]+|npm\\s+run\\s+[A-Za-z0-9_.:@/-]+|pnpm(?:\\s+(?:-r|--recursive|--parallel|--stream|--aggregate-output|(?:--filter|-F)(?:=\\S+|\\s+\\S+)))*\\s+(?:run\\s+)?[A-Za-z0-9_.:@/-]+|yarn\\s+(?:run\\s+)?[A-Za-z0-9_.:@/-]+)\\b"
 # Fallback only: when this ties a specific filter on matched span, the specific
 # filter should win.
 priority = -100
@@ -10,6 +12,7 @@ match_output = [
 ]
 strip_lines_matching = [
   "^\\s*$",
+  "^Scope: \\d+ of \\d+ workspace projects$",
   "^vite v\\d",
   "^transforming\\.\\.\\.",
   "^✓ \\d+ modules transformed\\.",
@@ -66,3 +69,51 @@ dist/assets/app.js  120.4 kB
 ✓ built in 1.23s
 """
 expected = "dist/assets/app.js  120.4 kB\n✓ built in 1.23s"
+
+[[tests.package-script]]
+name = "pnpm recursive workspace build collapses"
+input = """
+Scope: 2 of 3 workspace projects
+packages/api build$ tsc -p tsconfig.json
+packages/web build$ vite build
+packages/api build: compiling api...
+packages/api build: compiled successfully
+packages/web build: vite v6.0.0 building for production...
+packages/web build: transforming...
+packages/web build: ✓ 214 modules transformed.
+packages/web build: dist/index.html  1.2 kB
+packages/web build: ✓ built in 1.42s
+packages/api build: Done
+packages/web build: Done
+"""
+expected = "package script: ok"
+
+[[tests.package-script]]
+name = "pnpm filtered single-package build collapses"
+input = """
+> web@0.0.0 build /home/user/app/packages/web
+> vite build
+
+vite v6.0.0 building for production...
+transforming...
+✓ 214 modules transformed.
+dist/index.html  1.2 kB
+✓ built in 1.42s
+"""
+expected = "package script: ok"
+
+[[tests.package-script]]
+name = "pnpm recursive failure keeps errors visible"
+failed = true
+input = """
+Scope: 2 of 3 workspace projects
+packages/api build$ tsc -p tsconfig.json
+packages/api build: src/main.ts(3,7): error TS2322: type mismatch
+packages/api build: Failed
+ ERR_PNPM_RECURSIVE_FAIL
+Summary: 1 fails, 0 passes
+/home/user/app/packages/api:
+ ERROR  api@0.0.0 build: `tsc -p tsconfig.json`
+Exit status 1
+"""
+expected = "packages/api build$ tsc -p tsconfig.json\npackages/api build: src/main.ts(3,7): error TS2322: type mismatch\npackages/api build: Failed\n ERR_PNPM_RECURSIVE_FAIL\nSummary: 1 fails, 0 passes\n/home/user/app/packages/api:\n ERROR  api@0.0.0 build: `tsc -p tsconfig.json`\nExit status 1"
