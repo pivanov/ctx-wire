@@ -15,6 +15,14 @@ const streamHoldMax = 256 * 1024
 // pemMarkerHold is enough suffix to detect an END marker split across writes.
 const pemMarkerHold = 128
 
+// singleLineHold is the suffix retained when a single line (no newline) exceeds
+// streamHoldMax and must be force-flushed to bound memory. Holding it back keeps
+// a token that straddles the flush boundary intact for the next scrub pass,
+// instead of emitting it as two unmatched halves. Must exceed the longest
+// realistic single-line secret; real tokens are far shorter (mirrors the PEM
+// pemMarkerHold approach for the single-line-token case).
+const singleLineHold = 4096
+
 var (
 	pemBeginRe = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)
 	pemEndRe   = regexp.MustCompile(`-----END [A-Z ]*PRIVATE KEY-----`)
@@ -151,7 +159,9 @@ func (w *Writer) safeEnd() int {
 	nl := bytes.LastIndexByte(w.buf, '\n')
 	if nl < 0 {
 		if len(w.buf) >= streamHoldMax {
-			return len(w.buf)
+			// Flush all but a suffix so a token spanning the forced-flush cut is
+			// re-scrubbed with the next write, not split into two raw halves.
+			return len(w.buf) - singleLineHold
 		}
 		return 0
 	}

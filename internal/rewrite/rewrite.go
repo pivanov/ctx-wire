@@ -259,6 +259,11 @@ func lastTopLevelPipe(s string) int {
 		switch {
 		case esc:
 			esc = false
+		case quote == '\'':
+			// single quotes are literal; backslash does not escape inside them
+			if c == '\'' {
+				quote = 0
+			}
 		case c == '\\':
 			esc = true
 		case quote != 0:
@@ -661,6 +666,14 @@ func splitTopLevel(line string) (segments, seps []string) {
 		case esc:
 			cur.WriteRune(r)
 			esc = false
+		case quote == '\'':
+			// Single quotes are literal: a backslash does not escape inside
+			// them, only the closing quote ends the string (POSIX). Checked
+			// before the backslash case so `'...\'` closes correctly.
+			cur.WriteRune(r)
+			if r == '\'' {
+				quote = 0
+			}
 		case r == '\\':
 			cur.WriteRune(r)
 			esc = true
@@ -727,6 +740,11 @@ func hasUnquotedRune(s string, match func(rune) bool) bool {
 		switch {
 		case esc:
 			esc = false
+		case quote == '\'':
+			// single quotes are literal; backslash does not escape inside them
+			if r == '\'' {
+				quote = 0
+			}
 		case r == '\\':
 			esc = true
 		case quote != 0:

@@ -320,6 +320,23 @@ func compile(name string, def tomlFilter) (*CompiledFilter, error) {
 		return nil, err
 	}
 
+	// Reject non-positive line caps: a negative value drives a slice past its
+	// bounds in the truncate/head/tail/max_lines stages and panics on the hot
+	// path (group_by already validates its own caps this way).
+	for _, lc := range []struct {
+		name string
+		val  *int
+	}{
+		{"truncate_lines_at", def.TruncateLinesAt},
+		{"head_lines", def.HeadLines},
+		{"tail_lines", def.TailLines},
+		{"max_lines", def.MaxLines},
+	} {
+		if lc.val != nil && *lc.val < 1 {
+			return nil, fmt.Errorf("%s must be >= 1, got %d", lc.name, *lc.val)
+		}
+	}
+
 	return &CompiledFilter{
 		Name:            name,
 		Description:     def.Description,

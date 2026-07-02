@@ -113,6 +113,7 @@ func TestClassifyBypassInterpreters(t *testing.T) {
 		{"python -c inline code", "python", []string{"-c", "print(1)"}, false},
 		{"node -e inline code", "node", []string{"-e", "console.log(1)"}, false},
 		{"python script.py", "python", []string{"script.py"}, false},
+		{"python script with trailing -i is the script's flag, still finite", "python", []string{"migrate.py", "-i"}, false},
 		{"node scripts/seed.js", "node", []string{"scripts/seed.js"}, false},
 		{"python -m pytest", "python", []string{"-m", "pytest"}, false},
 	}

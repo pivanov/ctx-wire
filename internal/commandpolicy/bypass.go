@@ -335,26 +335,30 @@ var interpreterLongRunningModules = map[string]bool{
 // interactive flags (-i), and known long-running -m modules are NOT finite
 // (keep inherited stdio).
 func interpreterIsFinite(args []string) bool {
-	runsCode := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
 		case a == "-c" || a == "-e" || a == "--eval":
 			return true
 		case a == "-m":
+			// -m <module>: the module and its args follow; a known long-running
+			// server module keeps inherited stdio, otherwise it is finite.
 			if i+1 < len(args) && interpreterLongRunningModules[args[i+1]] {
 				return false
 			}
-			runsCode = true
+			return true
 		case a == "-i":
 			return false
 		case strings.HasPrefix(a, "-"):
-			continue
+			continue // another interpreter flag (e.g. -O, -B): keep scanning
 		default:
-			runsCode = true
+			// First positional is the script path; its own args follow and must
+			// not be reinterpreted as interpreter flags (e.g. `python x.py -i` is
+			// the script's flag, not Python's interactive mode).
+			return true
 		}
 	}
-	return runsCode
+	return false
 }
 
 // ClassifyBypass reports whether a command should bypass capture and, if so,

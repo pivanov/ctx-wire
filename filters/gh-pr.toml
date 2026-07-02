@@ -3,7 +3,7 @@ description = "Compact high-volume gh list/check/view output"
 match_command = "^gh\\s+(pr|issue|run|workflow)\\s+(list|view|checks|status)\\b"
 strip_ansi = true
 match_output = [
-  { pattern = "(?mi)(All checks were successful|✓ .* passing|no open pull requests|no open issues)", message = "gh: ok" },
+  { pattern = "(?mi)(All checks were successful|✓ .* passing|no open pull requests|no open issues)", message = "gh: ok", unless = "(?mi)(✗|✘|\\bfailing\\b|\\bfailed\\b|\\bfailure\\b|not successful)" },
 ]
 strip_lines_matching = ["^\\s*$"]
 truncate_lines_at = 260
@@ -22,6 +22,15 @@ expected = "gh: ok"
 name = "failed check preserved"
 input = "test  X failing  2m  https://github.com/org/repo/actions/runs/1"
 expected = "test  X failing  2m  https://github.com/org/repo/actions/runs/1"
+
+[[tests.gh-pr]]
+name = "mixed result: a passing summary must not collapse a failing run (exit 0)"
+input = """
+Some checks were not successful
+✓ 3 checks passing
+X 1 check failing  https://github.com/org/repo/actions/runs/9
+"""
+expected = "Some checks were not successful\n✓ 3 checks passing\nX 1 check failing  https://github.com/org/repo/actions/runs/9"
 
 [[tests.gh-pr]]
 name = "checks pass but pr has merge conflict blocking merge"
