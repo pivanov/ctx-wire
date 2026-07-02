@@ -2,6 +2,7 @@ package gain
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"ctx-wire/internal/ui"
@@ -178,18 +179,31 @@ func (t gainTheme) emptyBar(width int) string { return t.Meter(0, width) }
 
 // impact renders the relative-impact bar for a table's last column, using the
 // same unbracketed fill as the efficiency and session-adoption bars.
+//
+// The fill is sqrt-scaled (perceptual), not linear: one program routinely
+// dwarfs the rest (e.g. rg saving 1.1 GB while #2 saves 21 MB), and a linear
+// bar collapses every runner-up to zero cells, so the column only conveys
+// information for the top row. sqrt keeps the outlier clearly dominant while
+// giving the smaller-but-real contributors a legible bar. The exact bytes stay
+// in the Saved column, so the bar can be perceptual without hiding the truth.
 func (t gainTheme) impact(saved, maxSaved int64, width int) string {
 	var inner string
 	switch {
 	case saved < 0:
 		negative := min(width, 3)
 		inner = t.Bad.Render(strings.Repeat("░", negative)) + t.emptyBar(max(width-negative, 0))
-	case maxSaved <= 0:
+	case maxSaved <= 0 || saved == 0:
 		inner = t.emptyBar(width)
 	default:
-		filled := int(float64(saved)/float64(maxSaved)*float64(width) + 0.5)
+		frac := math.Sqrt(float64(saved) / float64(maxSaved))
+		filled := int(frac*float64(width) + 0.5)
 		if filled > width {
 			filled = width
+		}
+		// Floor any real saving at one tick so a program that genuinely cut
+		// bytes never reads as "did nothing" next to an extreme outlier.
+		if filled < 1 {
+			filled = 1
 		}
 		if !t.Color {
 			inner = strings.Repeat("#", filled) + strings.Repeat(".", width-filled)

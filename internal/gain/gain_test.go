@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"ctx-wire/internal/ui"
 )
 
 func useTempLog(t *testing.T) string {
@@ -843,6 +845,39 @@ func TestFormatStyledNegativeImpactUsesBlockGlyph(t *testing.T) {
 	}
 	if !strings.Contains(out, "░░░") {
 		t.Fatalf("negative impact should use block glyphs:\n%s", out)
+	}
+}
+
+func TestImpactBarSqrtKeepsRunnersUpVisible(t *testing.T) {
+	gt := gainTheme{Theme: ui.New(false, true, nil)}
+	const width = 18
+	const maxSaved = int64(1_100_000_000) // rg: 1.1 GB
+	countFill := func(bar string) int { return strings.Count(bar, "#") }
+
+	// The dominant program fills the bar.
+	if got := countFill(gt.impact(maxSaved, maxSaved, width)); got != width {
+		t.Fatalf("max saver should fill the bar: got %d/%d cells", got, width)
+	}
+
+	// A runner-up at ~1.9% of the max (sort: 21 MB) rounds to zero cells under
+	// linear scaling; sqrt must keep it visible. This is the regression guard.
+	runnerUp := gt.impact(21_000_000, maxSaved, width)
+	if countFill(runnerUp) < 1 {
+		t.Fatalf("runner-up rounded to empty under sqrt scaling: %q", runnerUp)
+	}
+	if countFill(runnerUp) >= width {
+		t.Fatalf("runner-up should stay clearly below the outlier: %q", runnerUp)
+	}
+
+	// A program that saved real bytes but is a tiny sliver of the max still
+	// gets one tick, never an empty bar.
+	if got := countFill(gt.impact(1, maxSaved, width)); got != 1 {
+		t.Fatalf("tiny real saving should floor at one tick: got %d cells", got)
+	}
+
+	// A zero saving stays empty (no floored tick).
+	if got := countFill(gt.impact(0, maxSaved, width)); got != 0 {
+		t.Fatalf("zero saving must render empty: got %d cells", got)
 	}
 }
 
