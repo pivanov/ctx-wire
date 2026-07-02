@@ -4,7 +4,7 @@
 #
 # Builds the binary with version metadata, then exercises the full v1 surface
 # (verify, run, gain scrubbing, trust gating, agent install, hooks, MCP) inside
-# hermetic temp dirs so it never touches your real HOME or telemetry. Exits
+# hermetic temp dirs so it never touches your real HOME or production telemetry. Exits
 # non-zero if any check fails.
 #
 #   bash scripts/smoke.sh
@@ -36,7 +36,7 @@ cw() {
 		CLAUDE_CONFIG_DIR="$HOMEDIR/.claude" \
 		CODEX_HOME="$HOMEDIR/.codex" \
 		GEMINI_HOME="$HOMEDIR/.gemini" \
-		CTX_WIRE_TELEMETRY=0 \
+		CTX_WIRE_TELEMETRY_URL="http://127.0.0.1:9/ctx-wire-smoke" \
 		CTX_WIRE_GAIN_FILE="$WORK/gain.jsonl" \
 		CTX_WIRE_TEE_DIR="$WORK/tee" \
 		"$BIN" "$@"
@@ -91,7 +91,7 @@ if cw tune preview | grep -q "no network calls are made"; then ok "ctx-wire tune
 if cw tune bundle --out "$WORK/tune-bundle.tar.gz" >/dev/null && tar -tzf "$WORK/tune-bundle.tar.gz" | grep -q "samples/commands.jsonl"; then ok "ctx-wire tune bundle"; else bad "ctx-wire tune bundle"; fi
 if cw tune issue | grep -q "ctx-wire tune report"; then ok "ctx-wire tune issue"; else bad "ctx-wire tune issue"; fi
 if cw discover | grep -q "ctx-wire discover"; then ok "ctx-wire discover"; else bad "ctx-wire discover"; fi
-if cw telemetry status | grep -q "Telemetry:"; then ok "ctx-wire telemetry status"; else bad "ctx-wire telemetry status"; fi
+if cw telemetry status | grep -q "Aggregate telemetry:"; then ok "ctx-wire telemetry status"; else bad "ctx-wire telemetry status"; fi
 
 step "trust-gated project filters"
 PROJ="$WORK/proj"
@@ -122,7 +122,7 @@ if HOME="$HOMEDIR" \
 	CLAUDE_CONFIG_DIR="$HOMEDIR/.claude" \
 	CODEX_HOME="$HOMEDIR/.codex" \
 	GEMINI_HOME="$HOMEDIR/.gemini" \
-	CTX_WIRE_TELEMETRY=0 \
+	CTX_WIRE_TELEMETRY_URL="http://127.0.0.1:9/ctx-wire-smoke" \
 	CTX_WIRE_GAIN_FILE="$WORK/gain.jsonl" \
 	CTX_WIRE_TEE_DIR="$WORK/tee" \
 	PATH="$HOMEDIR/.local/bin:$PATH" \
@@ -133,7 +133,7 @@ if HOME="$HOMEDIR" \
 	CLAUDE_CONFIG_DIR="$HOMEDIR/.claude" \
 	CODEX_HOME="$HOMEDIR/.codex" \
 	GEMINI_HOME="$HOMEDIR/.gemini" \
-	CTX_WIRE_TELEMETRY=0 \
+	CTX_WIRE_TELEMETRY_URL="http://127.0.0.1:9/ctx-wire-smoke" \
 	CTX_WIRE_GAIN_FILE="$WORK/gain.jsonl" \
 	CTX_WIRE_TEE_DIR="$WORK/tee" \
 	CTX_WIRE_AGENT_SHIMS=1 \

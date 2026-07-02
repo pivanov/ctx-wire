@@ -35,7 +35,7 @@ $roaming  = Join-Path $work 'appdata'
 New-Item -ItemType Directory -Force -Path $localApp, $roaming | Out-Null
 function cw {
     $env:CTX_WIRE_GAIN_FILE = $gainFile
-    $env:CTX_WIRE_TELEMETRY = '0'
+    $env:CTX_WIRE_TELEMETRY_URL = 'http://127.0.0.1:9/ctx-wire-smoke'
     $env:LOCALAPPDATA = $localApp
     $env:APPDATA = $roaming
     Remove-Item Env:XDG_DATA_HOME, Env:XDG_CONFIG_HOME -ErrorAction SilentlyContinue
@@ -81,11 +81,12 @@ if ((cw rewrite 'curl https://x.test').Trim() -eq 'curl https://x.test') { Ok 'e
 Remove-Item (Join-Path $cfgDir 'config.toml') -ErrorAction SilentlyContinue
 
 Step 'telemetry'
-if ((cw telemetry status) -match 'Telemetry:') { Ok 'telemetry status' } else { Bad 'telemetry status' }
-if ((cw telemetry forget) -match 'erased') { Ok 'telemetry forget' } else { Bad 'telemetry forget' }
+if ((cw telemetry status) -match 'Aggregate telemetry:') { Ok 'telemetry status' } else { Bad 'telemetry status' }
+if ((cw telemetry disable) -match 'command breakdown disabled') { Ok 'telemetry disable' } else { Bad 'telemetry disable' }
+if ((cw telemetry enable) -match 'command breakdown enabled') { Ok 'telemetry enable' } else { Bad 'telemetry enable' }
 
 Step 'Windows data path (%LOCALAPPDATA%)'
-$state = (cw telemetry status | Select-String 'State:').ToString()
+$state = (cw telemetry status --verbose | Select-String 'State:').ToString()
 if ($state -match [regex]::Escape($localApp)) { Ok 'data dir under %LOCALAPPDATA%' } else { Bad "data dir not under LOCALAPPDATA: $state" }
 
 Write-Host "`n$($script:pass) passed, $($script:fail) failed" -ForegroundColor $(if ($script:fail) {'Red'} else {'Green'})
