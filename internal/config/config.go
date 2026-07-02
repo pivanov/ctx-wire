@@ -81,11 +81,10 @@ type Retention struct {
 // Update controls background self-update behavior.
 type Update struct {
 	// Auto enables periodic background self-update checks (about every 2 hours,
-	// only on human-facing commands, never on the run/hook hot path). When a
-	// newer release is found it is downloaded, checksum-verified, and atomically
-	// installed by a detached background process. Unset means enabled; set
-	// `auto = false` to turn it off. The CTX_WIRE_NO_AUTOUPDATE env var also
-	// disables it.
+	// with only a cheap local due-check in the foreground). When a newer release
+	// is found it is downloaded, checksum-verified, and atomically installed by a
+	// detached background process. Unset means enabled; set `auto = false` to
+	// turn it off. The CTX_WIRE_NO_AUTOUPDATE env var also disables it.
 	Auto *bool `toml:"auto"`
 
 	// IntervalHours overrides the minimum hours between checks (default 2).

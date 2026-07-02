@@ -59,6 +59,30 @@ func TestIsNewer(t *testing.T) {
 	}
 }
 
+func TestValidReleaseTag(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"v1.2.3", true},
+		{"1.2.3", true},
+		{"v1.2.3-rc.1", true},
+		{"v1.2.3+build", true},
+		{"v1", false},
+		{"v1.2", false},
+		{"v1.2.x", false},
+		{"v1.2.3-", false},
+		{"latest", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.tag, func(t *testing.T) {
+			if got := validReleaseTag(tt.tag); got != tt.want {
+				t.Fatalf("validReleaseTag(%q) = %v, want %v", tt.tag, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestVerifyChecksum(t *testing.T) {
 	archive := []byte("pretend-this-is-a-tarball")
 	sum := sha256.Sum256(archive)
@@ -182,6 +206,14 @@ func TestUpdateUpToDate(t *testing.T) {
 	}
 	if !res.UpToDate || res.Updated {
 		t.Errorf("expected up-to-date, got %+v", res)
+	}
+}
+
+func TestLatestVersionRejectsInvalidTag(t *testing.T) {
+	restore := stub(t, `{"tag_name":"latest"}`, nil, nil)
+	defer restore()
+	if _, err := LatestVersion(); err == nil || !strings.Contains(err.Error(), "not valid semver") {
+		t.Fatalf("LatestVersion invalid tag err = %v, want semver error", err)
 	}
 }
 

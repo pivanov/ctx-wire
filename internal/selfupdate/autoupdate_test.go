@@ -1,6 +1,7 @@
 package selfupdate
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -55,6 +56,30 @@ func TestLastCheckRoundTrip(t *testing.T) {
 	}
 }
 
+func TestShouldCheckOnCommand(t *testing.T) {
+	tests := []struct {
+		cmd  string
+		want bool
+	}{
+		{"run", true},
+		{"hook", true},
+		{"mcp", true},
+		{"gain", true},
+		{"doctor", true},
+		{"", false},
+		{"update", false},
+		{"uninstall", false},
+		{autoUpdateArg, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.cmd, func(t *testing.T) {
+			if got := ShouldCheckOnCommand(tt.cmd); got != tt.want {
+				t.Fatalf("ShouldCheckOnCommand(%q) = %v, want %v", tt.cmd, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMaybeBackgroundUpdateThrottlesAndSkipsDev(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
@@ -81,5 +106,89 @@ func TestMaybeBackgroundUpdateThrottlesAndSkipsDev(t *testing.T) {
 	MaybeBackgroundUpdate("0.1.0", 6*time.Hour)
 	if got := readLastCheck(); !got.Equal(stamp) {
 		t.Fatalf("throttled call rewrote stamp: got %v, want %v", got, stamp)
+	}
+}
+
+func TestMaybeBackgroundUpdateStampsBeforeSpawning(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	now := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
+	oldNow := nowFunc
+	nowFunc = func() time.Time { return now }
+	oldSpawn := spawnDetachedFunc
+	spawned := 0
+	spawnDetachedFunc = func() { spawned++ }
+	t.Cleanup(func() {
+		nowFunc = oldNow
+		spawnDetachedFunc = oldSpawn
+	})
+
+	MaybeBackgroundUpdate("0.1.0", time.Hour)
+	if spawned != 1 {
+		t.Fatalf("spawned = %d, want 1", spawned)
+	}
+	if got := readLastCheck(); !got.Equal(now) {
+		t.Fatalf("last check = %v, want %v", got, now)
+	}
+	lock, err := claimLockPath()
+	if err != nil {
+		t.Fatalf("claimLockPath: %v", err)
+	}
+	if _, err := os.Stat(lock); !os.IsNotExist(err) {
+		t.Fatalf("claim lock should be removed after scheduling, stat err = %v", err)
+	}
+
+	MaybeBackgroundUpdate("0.1.0", time.Hour)
+	if spawned != 1 {
+		t.Fatalf("throttled call spawned again: %d", spawned)
+	}
+}
+
+func TestMaybeBackgroundUpdateClaimLockSuppressesDuplicateAndRecoversStale(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	now := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
+	oldNow := nowFunc
+	nowFunc = func() time.Time { return now }
+	oldSpawn := spawnDetachedFunc
+	spawned := 0
+	spawnDetachedFunc = func() { spawned++ }
+	t.Cleanup(func() {
+		nowFunc = oldNow
+		spawnDetachedFunc = oldSpawn
+	})
+
+	lock, err := claimLockPath()
+	if err != nil {
+		t.Fatalf("claimLockPath: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
+		t.Fatalf("mkdir lock dir: %v", err)
+	}
+	if err := os.WriteFile(lock, []byte("busy\n"), 0o600); err != nil {
+		t.Fatalf("write lock: %v", err)
+	}
+	if err := os.Chtimes(lock, now, now); err != nil {
+		t.Fatalf("chtimes fresh lock: %v", err)
+	}
+
+	MaybeBackgroundUpdate("0.1.0", time.Hour)
+	if spawned != 0 {
+		t.Fatalf("fresh lock should suppress spawn, spawned = %d", spawned)
+	}
+	if got := readLastCheck(); !got.IsZero() {
+		t.Fatalf("fresh lock should not stamp last check, got %v", got)
+	}
+
+	stale := now.Add(-2 * claimLockMaxAge)
+	if err := os.Chtimes(lock, stale, stale); err != nil {
+		t.Fatalf("chtimes stale lock: %v", err)
+	}
+	MaybeBackgroundUpdate("0.1.0", time.Hour)
+	if spawned != 1 {
+		t.Fatalf("stale lock should recover and spawn once, spawned = %d", spawned)
+	}
+	if got := readLastCheck(); !got.Equal(now) {
+		t.Fatalf("last check after stale recovery = %v, want %v", got, now)
 	}
 }

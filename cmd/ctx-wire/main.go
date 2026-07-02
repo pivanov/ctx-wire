@@ -85,16 +85,13 @@ func main() {
 		runner.SetRetention(recent.ApplyEnv(ret))
 		runner.SetDedup(runner.DedupOptions{Enabled: dedupOn, Recency: cfg.Dedup.Recency()})
 	}
-	// Auto-update is opt-out and runs only on human-facing commands, never on the
-	// run/hook/rewrite/mcp hot paths (per-command, machine-facing). It is fully
-	// non-blocking: at most once per interval it spawns a detached updater and
-	// returns immediately. Fail closed on a config parse error: a broken config
-	// must not trigger a background download+replace the user can't see.
-	if err == nil && cfg.Update.AutoEnabled() {
-		switch os.Args[1] {
-		case "gain", "doctor":
-			selfupdate.MaybeBackgroundUpdate(version, cfg.Update.Interval())
-		}
+	// Auto-update is opt-out and may be scheduled by any normal command, including
+	// hot agent paths. The foreground work is local and cheap; if a check is due,
+	// a detached updater handles network/download/replace after this command
+	// returns. Fail closed on a config parse error: a broken config must not
+	// trigger a background download+replace the user can't see.
+	if err == nil && cfg.Update.AutoEnabled() && selfupdate.ShouldCheckOnCommand(os.Args[1]) {
+		selfupdate.MaybeBackgroundUpdate(version, cfg.Update.Interval())
 	}
 	maybeRefreshManagedShims(os.Args[1])
 	// Migrate existing installs: nudge hook/plugin users (once) that redundant PATH

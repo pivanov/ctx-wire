@@ -78,10 +78,10 @@ monthly_token_budget = 2000000
 context_window = 200000
 
 [update]
-# ctx-wire self-updates in the background a few times a day, only on
-# human-facing commands (gain, doctor) and never on the run/hook hot path. A
-# newer release is downloaded, checksum-verified, and atomically installed by a
-# detached process, so your command never blocks. On by default.
+# ctx-wire self-updates in the background a few times a day. Every normal
+# command may do a cheap local due-check; when an update is due, a detached
+# process downloads, checksum-verifies, and atomically installs it after your
+# command returns. On by default.
 auto = true
 # Minimum hours between background checks (default 2, i.e. ~12x/day). Set
 # CTX_WIRE_NO_AUTOUPDATE=1 to disable for a single run or in CI.

@@ -3,10 +3,10 @@
 // replacing the running binary with a backup-and-rollback.
 //
 // It runs in two ways: the explicit `ctx-wire update` command, and an opt-out
-// background updater (MaybeBackgroundUpdate) that checks at most a few times a
-// day on human-facing commands and applies any newer release in a detached
-// process. The background path is disabled by `[update] auto = false` in config
-// or the CTX_WIRE_NO_AUTOUPDATE env var, and never runs for dev builds.
+// background updater (MaybeBackgroundUpdate) that performs a cheap local due
+// check on normal commands and applies any newer release in a detached process.
+// The background path is disabled by `[update] auto = false` in config or the
+// CTX_WIRE_NO_AUTOUPDATE env var, and never runs for dev builds.
 package selfupdate
 
 import (
@@ -134,6 +134,9 @@ func LatestVersion() (string, error) {
 	}
 	if rel.TagName == "" {
 		return "", fmt.Errorf("no published release found for %s", Repo)
+	}
+	if !validReleaseTag(rel.TagName) {
+		return "", fmt.Errorf("release tag %q is not valid semver", rel.TagName)
 	}
 	return rel.TagName, nil
 }
@@ -375,6 +378,38 @@ func sign(n int) int {
 	default:
 		return 0
 	}
+}
+
+// validReleaseTag applies stricter validation to GitHub release tags before they
+// are used to build asset URLs. compareVersions remains intentionally tolerant
+// for local/dev build strings, but public releases must be v?MAJOR.MINOR.PATCH
+// with non-negative numeric components.
+func validReleaseTag(tag string) bool {
+	v := strings.TrimPrefix(strings.TrimSpace(tag), "v")
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		v = v[:i]
+	}
+	if i := strings.IndexByte(v, '-'); i >= 0 {
+		if i == len(v)-1 {
+			return false
+		}
+		v = v[:i]
+	}
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" || strings.HasPrefix(p, "-") {
+			return false
+		}
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return false
+		}
+	}
+	_, _, ok := parseVersion(tag)
+	return ok
 }
 
 // parseVersion splits a version into its numeric [major, minor, patch] core and
