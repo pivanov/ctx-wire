@@ -245,7 +245,12 @@ const toCut = (snippet: TSnippet, p: TProgramStats): TCut | null => {
 const buildCuts = (stats: TImpactStats): TCut[] => {
   const real = topPrograms(stats)
     .map((p) => {
-      const snippet = SNIPPETS[p.program];
+      // Object.hasOwn guards against inherited keys ("constructor", "toString",
+      // ...): a garbage/malicious telemetry program name would otherwise resolve
+      // up the prototype chain to a truthy non-snippet and crash the render.
+      const snippet = Object.hasOwn(SNIPPETS, p.program)
+        ? SNIPPETS[p.program]
+        : undefined;
       return snippet ? toCut(snippet, p) : null;
     })
     .filter((c): c is TCut => c !== null)
@@ -436,7 +441,6 @@ const CutsTerminal = ({ cuts }: { cuts: TCut[] }) => {
               />
             ))}
           </div>
-
         </div>
       </div>
     </motion.div>

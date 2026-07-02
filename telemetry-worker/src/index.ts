@@ -150,8 +150,10 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
 
   const commands = clampInt(payload.commands, 0, MAX_COMMANDS);
   const rawBytes = clampInt(payload.raw_bytes, 0, MAX_RAW_BYTES);
-  const emittedBytes = clampInt(payload.emitted_bytes, 0, MAX_EMITTED_BYTES);
-  const bytesSaved = clampInt(payload.bytes_saved, 0, MAX_BYTES_SAVED);
+  // A report cannot emit or save more than it produced; clamp to rawBytes so one
+  // malformed/malicious client cannot push the public savings % above 100.
+  const emittedBytes = Math.min(clampInt(payload.emitted_bytes, 0, MAX_EMITTED_BYTES), rawBytes);
+  const bytesSaved = Math.min(clampInt(payload.bytes_saved, 0, MAX_BYTES_SAVED), rawBytes);
   const tokensSaved = clampInt(payload.tokens_saved, 0, MAX_TOKENS_SAVED);
   const programs = parsePrograms(payload.programs);
   const agents = parseAgents(payload.agents);

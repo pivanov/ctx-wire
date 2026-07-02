@@ -1,5 +1,6 @@
 import { CommandCuts } from "./components/command-cuts";
 import { ComparisonRtk } from "./components/comparison-rtk";
+import { ErrorBoundary } from "./components/error-boundary";
 import { Faq } from "./components/faq";
 import { Footer } from "./components/footer";
 import { GlobePanel } from "./components/globe-panel";
@@ -38,7 +39,9 @@ export const App = () => {
 
         <HowItWorks />
 
-        <CommandCuts stats={stats} />
+        <ErrorBoundary>
+          <CommandCuts stats={stats} />
+        </ErrorBoundary>
 
         <section className="flex w-full max-w-term flex-col gap-4">
           <SectionKicker desc="Real telemetry, refreshed every few seconds.">
@@ -47,11 +50,15 @@ export const App = () => {
           <TerminalWindow stats={stats} />
         </section>
 
-        <div className="w-full max-w-stage">
-          <GlobePanel stats={stats} />
-        </div>
+        <ErrorBoundary>
+          <div className="w-full max-w-stage">
+            <GlobePanel stats={stats} />
+          </div>
+        </ErrorBoundary>
 
-        <SavedByAgent stats={stats} />
+        <ErrorBoundary>
+          <SavedByAgent stats={stats} />
+        </ErrorBoundary>
 
         <ComparisonRtk />
 

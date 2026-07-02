@@ -100,7 +100,9 @@ export const savedPct = (saved?: number, raw?: number): number => {
   if (rawValue <= 0) {
     return 0;
   }
-  return (Number(saved || 0) / rawValue) * 100;
+  // Clamp to [0,100]: a malformed/malicious report with saved > raw must not
+  // render an impossible percentage on the public site.
+  return Math.min(100, Math.max(0, (Number(saved || 0) / rawValue) * 100));
 };
 
 export const countryCode = (country: TCountryStats): string => {
