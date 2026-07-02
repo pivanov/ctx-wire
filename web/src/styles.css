@@ -723,6 +723,38 @@
   translate: -50% 0;
 }
 
+/* "awaiting signal" markers: installed, not yet saving. A dim hollow ring with
+   no glow and no ping, so the map shows reach without borrowing the impact
+   color. */
+.globe-marker.is-pending .globe-beacon {
+  border-color: rgba(233, 241, 255, 0.32);
+  box-shadow: none;
+  opacity: 0.6;
+  animation: none;
+}
+.globe-marker.is-pending .globe-beacon::after {
+  display: none;
+}
+
+/* The selected country: a filled, enlarged cyan beacon with a cyan ripple, so
+   it is unmistakable against the field of green ambient beacons. Declared after
+   .is-pending so selecting an "awaiting signal" marker highlights it too. */
+.globe-marker.is-focused .globe-beacon {
+  border-color: var(--color-cyan);
+  background: rgba(127, 220, 234, 0.4);
+  box-shadow:
+    0 0 18px rgba(127, 220, 234, 0.85),
+    0 0 7px rgba(127, 220, 234, 0.9);
+  opacity: 1;
+  scale: 1.5;
+  animation: none;
+}
+.globe-marker.is-focused .globe-beacon::after {
+  display: block;
+  border-color: var(--color-cyan);
+  animation: beacon-ping 1.9s ease-out infinite;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .globe-marker:hover {
     z-index: 20;

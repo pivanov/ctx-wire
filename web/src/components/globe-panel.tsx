@@ -48,6 +48,11 @@ const ANCHOR_OK =
   typeof CSS.supports === "function" &&
   CSS.supports("anchor-name: --x");
 
+// Shown for countries that installed but have not saved anything yet. Echoes
+// the panel's "acquiring signal" loading state: the dim beacon is standing by
+// to light up once their first captured command lands.
+const PENDING_LABEL = "awaiting signal";
+
 type TCountryRow = {
   rank: number;
   code: string;
@@ -60,6 +65,10 @@ type TCountryRow = {
   // Beacon scale relative to the top country (sqrt of share, so the tail stays
   // visible). The globe dots encode impact, not just presence.
   weight: number;
+  // Installed but no captured savings yet: a real adopter whose first command
+  // has not landed. Rendered dim as "awaiting signal" so the map shows reach
+  // without faking impact (these contribute 0 to every savings figure).
+  pending: boolean;
 };
 
 export const GlobePanel = ({ stats }: { stats: TImpactStats }) => {
@@ -196,14 +205,21 @@ export const GlobePanel = ({ stats }: { stats: TImpactStats }) => {
         )}
         <div className="readout-glass absolute bottom-2 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-1 font-mono text-2xs tracking-wide text-label">
           <span className="readout-dot size-1.5 rounded-full bg-green motion-safe:animate-pulse-dot" />
-          {live ? (
-            <>
-              <span className="text-green">{rows.length}</span>{" "}
-              {rows.length === 1 ? "country" : "countries"} reporting
-            </>
-          ) : (
-            "acquiring signal"
-          )}
+          {live
+            ? (() => {
+                const saving = rows.filter((r) => !r.pending).length;
+                const fresh = rows.length - saving;
+                return (
+                  <>
+                    <span className="text-green">{saving}</span>{" "}
+                    {saving === 1 ? "country" : "countries"} saving
+                    {fresh > 0 ? (
+                      <span className="text-label"> · +{fresh} new</span>
+                    ) : null}
+                  </>
+                );
+              })()
+            : "acquiring signal"}
         </div>
       </div>
     </section>
@@ -270,7 +286,7 @@ const CountryPills = ({
                 active
                   ? "bg-green/10 ring-green/40"
                   : "bg-white/3 ring-line hover:bg-white/6"
-              }`}
+              } ${row.pending ? "opacity-55" : ""}`}
             >
               <span aria-hidden="true" className="text-sm leading-none">
                 {flagEmoji(row.code)}
@@ -278,12 +294,20 @@ const CountryPills = ({
               <span className={active ? "text-head" : "text-fg"}>
                 {row.code.toUpperCase()}
               </span>
-              <span className="tabular-nums text-cyan">
-                {formatTokens(row.tokens)}
-              </span>
-              <span className="ml-auto tabular-nums text-label">
-                {formatBytes(row.saved)}
-              </span>
+              {row.pending ? (
+                <span className="ml-auto text-2xs italic text-label">
+                  {PENDING_LABEL}
+                </span>
+              ) : (
+                <>
+                  <span className="tabular-nums text-cyan">
+                    {formatTokens(row.tokens)}
+                  </span>
+                  <span className="ml-auto tabular-nums text-label">
+                    {formatBytes(row.saved)}
+                  </span>
+                </>
+              )}
             </button>
           </li>
         );
@@ -516,7 +540,7 @@ const GlobePulse = ({
                 key={row.code}
                 className={`globe-marker ${
                   focus?.code === row.code ? "is-focused" : ""
-                }`}
+                } ${row.pending ? "is-pending" : ""}`}
                 style={
                   {
                     positionAnchor: `--cobe-${id}`,
@@ -532,12 +556,20 @@ const GlobePulse = ({
                     {flagEmoji(row.code)}
                   </span>
                   {row.name}
-                  <span className="ml-1.5 tabular-nums text-cyan">
-                    {formatTokens(row.tokens)}
-                  </span>
-                  <span className="ml-1.5 tabular-nums text-label">
-                    {formatBytes(row.saved)}
-                  </span>
+                  {row.pending ? (
+                    <span className="ml-1.5 italic text-label">
+                      {PENDING_LABEL}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="ml-1.5 tabular-nums text-cyan">
+                        {formatTokens(row.tokens)}
+                      </span>
+                      <span className="ml-1.5 tabular-nums text-label">
+                        {formatBytes(row.saved)}
+                      </span>
+                    </>
+                  )}
                 </span>
               </div>
             );
@@ -549,12 +581,18 @@ const GlobePulse = ({
         <div className="readout-glass absolute left-3 top-3 z-10 inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-2xs text-fg">
           <span aria-hidden="true">{flagEmoji(focus.code)}</span>
           {focus.name}
-          <span className="tabular-nums text-cyan">
-            {formatTokens(focus.tokens)}
-          </span>
-          <span className="tabular-nums text-label">
-            {formatBytes(focus.saved)}
-          </span>
+          {focus.pending ? (
+            <span className="italic text-label">{PENDING_LABEL}</span>
+          ) : (
+            <>
+              <span className="tabular-nums text-cyan">
+                {formatTokens(focus.tokens)}
+              </span>
+              <span className="tabular-nums text-label">
+                {formatBytes(focus.saved)}
+              </span>
+            </>
+          )}
         </div>
       ) : null}
     </div>
@@ -586,14 +624,53 @@ const buildRows = (stats: TImpactStats): TCountryRow[] => {
         // Faint center point only; the visible marker is the DOM beacon ring.
         size: 0.012,
         weight: 1,
+        pending: false,
       };
     })
     .filter((r): r is TCountryRow => Boolean(r));
   const maxSaved = Math.max(...base.map((r) => r.saved), 1);
-  return base.map((r) => ({
+  const active = base.map((r) => ({
     ...r,
     weight: 0.7 + 0.75 * Math.sqrt(r.saved / maxSaved),
   }));
+
+  // Countries that installed but have not saved anything yet: real adopters
+  // whose first captured command has not landed. Shown after the active set
+  // (most installs first) as dim "awaiting signal" markers, so the map reflects
+  // reach without inventing impact. They contribute 0 to every savings figure.
+  const activeCodes = new Set(active.map((r) => r.code));
+  const pending = (stats.countries || [])
+    .filter(
+      (country) =>
+        countryMeta[countryCode(country)] &&
+        !activeCodes.has(countryCode(country)) &&
+        Number(country.bytes_saved || 0) <= 0 &&
+        Number(country.installs || 0) > 0
+    )
+    .sort(
+      (a, b) =>
+        Number(b.installs || 0) - Number(a.installs || 0) ||
+        countryCode(a).localeCompare(countryCode(b))
+    )
+    .map((country, index) => {
+      const code = countryCode(country);
+      const meta = countryMeta[code];
+      return {
+        rank: active.length + index + 1,
+        code,
+        name: meta.name,
+        location: [meta.lat, meta.lng] as [number, number],
+        saved: 0,
+        tokens: 0,
+        commands: Number(country.commands || 0),
+        // Small, dim dot; styled hollow via .is-pending so it never reads as impact.
+        size: 0.006,
+        weight: 0.55,
+        pending: true,
+      };
+    });
+
+  return [...active, ...pending];
 };
 
 const toCobeMarker = (row: TCountryRow): Marker => {
