@@ -12,7 +12,6 @@ import (
 
 func TestReportImpactSendsDeltaOnly(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	// Steady state: install already reported, so impact flushes don't also backfill.
@@ -94,7 +93,6 @@ func TestReportImpactSendsDeltaOnly(t *testing.T) {
 
 func TestReportInstallMarksOnlyAfterSuccess(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	var count int
@@ -122,11 +120,10 @@ func TestReportInstallMarksOnlyAfterSuccess(t *testing.T) {
 	}
 }
 
-// TestReportInstallEnabledByDefault pins the opt-out default: with no explicit
+// TestReportInstallEnabledByDefault pins the aggregate default: with no explicit
 // choice telemetry is on, so an init reports the install and latches it.
 func TestReportInstallEnabledByDefault(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	var count int
@@ -140,10 +137,10 @@ func TestReportInstallEnabledByDefault(t *testing.T) {
 		t.Fatalf("ReportInstall: %v", err)
 	}
 	if res.Disabled {
-		t.Fatalf("ReportInstall under opt-out default = %#v, want sent (not Disabled)", res)
+		t.Fatalf("ReportInstall under aggregate default = %#v, want sent (not Disabled)", res)
 	}
 	if count != 1 {
-		t.Fatalf("install reports sent by default = %d, want 1 (opt-out is on)", count)
+		t.Fatalf("install reports sent by default = %d, want 1", count)
 	}
 	status, err := GetStatus()
 	if err != nil {
@@ -154,16 +151,16 @@ func TestReportInstallEnabledByDefault(t *testing.T) {
 	}
 }
 
-// TestReportInstallSilencedWhenDisabled verifies the explicit off-switch stops
-// the install report: nothing is sent and InstallReported stays unlatched, so a
-// later re-enable still reports the install.
-func TestReportInstallSilencedWhenDisabled(t *testing.T) {
+// TestReportInstallStillSendsWithLegacyDisabledConfig pins the current product
+// model: old configs may contain enabled=false, but aggregate install telemetry
+// still flows. The only public off-ramp is the command-breakdown toggle.
+func TestReportInstallStillSendsWithLegacyDisabledConfig(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
-	if err := SetEnabled(false); err != nil {
-		t.Fatalf("SetEnabled(false): %v", err)
+	legacyOff := false
+	if err := writeConfig(Config{Enabled: &legacyOff}); err != nil {
+		t.Fatalf("seed legacy disabled config: %v", err)
 	}
 	var count int
 	restoreSender(t, func(payload any) error {
@@ -175,18 +172,18 @@ func TestReportInstallSilencedWhenDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReportInstall: %v", err)
 	}
-	if !res.Disabled {
-		t.Fatalf("ReportInstall when disabled = %#v, want Disabled", res)
+	if !res.Sent || res.Disabled {
+		t.Fatalf("ReportInstall with legacy disabled config = %#v, want sent", res)
 	}
-	if count != 0 {
-		t.Fatalf("install reports sent while disabled = %d, want 0", count)
+	if count != 1 {
+		t.Fatalf("install reports sent = %d, want 1", count)
 	}
 	status, err := GetStatus()
 	if err != nil {
 		t.Fatalf("GetStatus: %v", err)
 	}
-	if status.InstallReported {
-		t.Fatal("a disabled install report must not mark InstallReported")
+	if !status.Enabled || !status.InstallReported {
+		t.Fatalf("status = %#v, want enabled and install reported", status)
 	}
 }
 
@@ -195,7 +192,6 @@ func TestReportInstallSilencedWhenDisabled(t *testing.T) {
 // controls the one-time telemetry notice and remembers which agents were seen.
 func TestReportInstallPerAgent(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	var sent []installPayload
@@ -249,11 +245,17 @@ func TestReportInstallPerAgent(t *testing.T) {
 	}
 }
 
-func TestTelemetryCanBeDisabled(t *testing.T) {
+func TestSetEnabledFalseDisablesOnlyCommandBreakdown(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
-	t.Setenv(envURL, "http://127.0.0.1:1")
+	var sent []impactPayload
+	restoreSender(t, func(v any) error {
+		if p, ok := v.(impactPayload); ok {
+			sent = append(sent, p)
+		}
+		return nil
+	})
 
 	if err := SetEnabled(false); err != nil {
 		t.Fatalf("SetEnabled(false): %v", err)
@@ -262,21 +264,28 @@ func TestTelemetryCanBeDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatus: %v", err)
 	}
-	if status.Enabled {
-		t.Fatal("expected telemetry disabled")
+	if !status.Enabled {
+		t.Fatal("aggregate telemetry must stay enabled")
 	}
-	res, err := ReportImpact(summary(1, 100, 50, 50, nil))
+	if status.ShareImprovements {
+		t.Fatal("SetEnabled(false) should disable only the command breakdown")
+	}
+	res, err := ReportImpact(summary(1, 100, 50, 50, []gain.CommandStat{
+		{Program: "rg", Count: 1, RawBytes: 100, EmittedBytes: 50, SavedBytes: 50},
+	}))
 	if err != nil {
-		t.Fatalf("ReportImpact disabled: %v", err)
+		t.Fatalf("ReportImpact: %v", err)
 	}
-	if !res.Disabled {
-		t.Fatalf("disabled result = %#v", res)
+	if !res.Sent || len(sent) != 1 {
+		t.Fatalf("result=%#v sent=%d, want sent aggregate payload", res, len(sent))
+	}
+	if sent[0].Programs != nil {
+		t.Fatalf("command breakdown should be withheld, got %v", sent[0].Programs)
 	}
 }
 
 func TestRecordCommandFlushesAfterInterval(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	base := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)
@@ -336,7 +345,6 @@ func TestRecordCommandFlushesAfterInterval(t *testing.T) {
 
 func TestRecordCommandFlushesLargeSavedBytesImmediately(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	restoreClock(t, time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC))
@@ -360,7 +368,6 @@ func TestRecordCommandFlushesLargeSavedBytesImmediately(t *testing.T) {
 
 func TestRecordCommandFailureKeepsPendingAndThrottlesRetry(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	base := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)
@@ -407,10 +414,9 @@ func TestRecordCommandFailureKeepsPendingAndThrottlesRetry(t *testing.T) {
 }
 
 // TestBuildImpactPayloadGatesPrograms pins the single gating point both send
-// paths use: improvements off withholds Programs but keeps the website stats;
-// on (or the default nil) includes Programs.
+// paths use: command breakdown off withholds Programs but keeps the website
+// stats; on (or the default nil) includes Programs.
 func TestBuildImpactPayloadGatesPrograms(t *testing.T) {
-	t.Setenv(envImprovements, "")
 	delta := Totals{
 		Commands: 10, RawBytes: 1000, EmittedBytes: 200, BytesSaved: 800, TokensSaved: 200,
 		Programs: map[string]ProgramTotals{"rg": {Count: 10, BytesSaved: 800}},
@@ -419,10 +425,10 @@ func TestBuildImpactPayloadGatesPrograms(t *testing.T) {
 	off := false
 	pOff := buildImpactPayload(delta, Config{ShareImprovements: &off})
 	if pOff.Programs != nil {
-		t.Errorf("improvements off: Programs must be withheld, got %v", pOff.Programs)
+		t.Errorf("command breakdown off: Programs must be withheld, got %v", pOff.Programs)
 	}
 	if pOff.Agents == nil || pOff.Commands == 0 {
-		t.Error("improvements off: website stats (agents, totals) must still flow")
+		t.Error("command breakdown off: website stats (agents, totals) must still flow")
 	}
 	on := true
 	if buildImpactPayload(delta, Config{ShareImprovements: &on}).Programs == nil {
@@ -431,16 +437,27 @@ func TestBuildImpactPayloadGatesPrograms(t *testing.T) {
 	if buildImpactPayload(delta, Config{}).Programs == nil {
 		t.Error("improvements default (nil): Programs must be present")
 	}
+	// Legacy enabled=false withholds Programs but keeps aggregate flowing.
+	legacyOff := false
+	pLegacy := buildImpactPayload(delta, Config{Enabled: &legacyOff})
+	if pLegacy.Programs != nil {
+		t.Errorf("legacy enabled=false: Programs must be withheld, got %v", pLegacy.Programs)
+	}
+	if pLegacy.Agents == nil || pLegacy.Commands == 0 {
+		t.Error("legacy enabled=false: aggregate (agents, totals) must still flow")
+	}
+	// Explicit ShareImprovements overrides the legacy flag.
+	if buildImpactPayload(delta, Config{Enabled: &legacyOff, ShareImprovements: &on}).Programs == nil {
+		t.Error("explicit ShareImprovements=true must override legacy enabled=false")
+	}
 }
 
 // TestRecordCommandAutoFlushRespectsImprovementsOff is the integration guard for
 // the bug this almost shipped with: the hook auto-flush is a SEPARATE send path
 // from the manual gain flush, so it must ALSO withhold the per-command breakdown
-// when improvements is off.
+// when the command breakdown is off.
 func TestRecordCommandAutoFlushRespectsImprovementsOff(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
-	t.Setenv(envImprovements, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	off := false
@@ -466,7 +483,7 @@ func TestRecordCommandAutoFlushRespectsImprovementsOff(t *testing.T) {
 		t.Fatalf("impact payloads = %d, want 1", len(sent))
 	}
 	if sent[0].Programs != nil {
-		t.Errorf("auto-flush with improvements off must withhold Programs, got %v", sent[0].Programs)
+		t.Errorf("auto-flush with command breakdown off must withhold Programs, got %v", sent[0].Programs)
 	}
 	if sent[0].Agents == nil {
 		t.Error("auto-flush must still send Agents (website stat)")
@@ -479,8 +496,6 @@ func TestRecordCommandAutoFlushRespectsImprovementsOff(t *testing.T) {
 // toward the aggregate (a website stat), but their per-command bucket must not.
 func TestImprovementsOffPendingNotLeakedOnReenable(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
-	t.Setenv(envImprovements, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	if err := writeConfig(Config{InstallReported: true}); err != nil {
@@ -537,8 +552,6 @@ func TestImprovementsOffPendingNotLeakedOnReenable(t *testing.T) {
 // so a swallowed line never means the human sees nothing.
 func TestMigrationNoticeIfPending(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "")
-	t.Setenv(envImprovements, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 
@@ -553,27 +566,18 @@ func TestMigrationNoticeIfPending(t *testing.T) {
 	}
 }
 
-// TestMigrationNoticeSuppressedWhenDecidedOrForced verifies the notice is silent
-// for users who already chose and when the env override decides.
-func TestMigrationNoticeSuppressedWhenDecidedOrForced(t *testing.T) {
+// TestMigrationNoticeStillShowsAfterCommandBreakdownChoice verifies the
+// disclosure is about aggregate telemetry, not just the optional command
+// breakdown. Toggling that breakdown must not suppress the one-time notice.
+func TestMigrationNoticeStillShowsAfterCommandBreakdownChoice(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envImprovements, "")
-	t.Setenv(envEnabled, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
-	if err := SetEnabled(true); err != nil {
-		t.Fatalf("SetEnabled: %v", err)
+	if err := SetShareImprovements(false); err != nil {
+		t.Fatalf("SetShareImprovements: %v", err)
 	}
-	if got := MigrationNoticeIfPending(); got != "" {
-		t.Errorf("explicit choice must suppress the migration notice, got %q", got)
-	}
-
-	dir2 := t.TempDir()
-	t.Setenv(envConfig, filepath.Join(dir2, "telemetry.json"))
-	t.Setenv(envState, filepath.Join(dir2, "state.json"))
-	t.Setenv(envEnabled, "1")
-	if got := MigrationNoticeIfPending(); got != "" {
-		t.Errorf("env-forced telemetry must suppress the migration notice, got %q", got)
+	if got := MigrationNoticeIfPending(); got == "" {
+		t.Fatal("command-breakdown choice must not suppress aggregate telemetry notice")
 	}
 }
 
@@ -584,8 +588,6 @@ func TestMigrationNoticeSuppressedWhenDecidedOrForced(t *testing.T) {
 // the off-period buckets.
 func TestImprovementsOffGainBackfillNotLeaked(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
-	t.Setenv(envImprovements, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	if err := writeConfig(Config{InstallReported: true}); err != nil {
@@ -643,7 +645,6 @@ func TestImprovementsOffGainBackfillNotLeaked(t *testing.T) {
 // also reports the install once; later flushes do not repeat it.
 func TestReportImpactBackfillsInstall(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	var installs, impacts int
@@ -683,7 +684,6 @@ func TestReportImpactBackfillsInstall(t *testing.T) {
 
 func TestReportImpactClearsPendingAfterManualFlush(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	if err := writeConfig(Config{InstallReported: true}); err != nil {
@@ -725,7 +725,6 @@ func TestReportImpactClearsPendingAfterManualFlush(t *testing.T) {
 // totals without inventing an agent bucket.
 func TestRecordCommandPerAgentBreakdown(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	base := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)

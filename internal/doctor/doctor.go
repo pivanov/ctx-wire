@@ -162,19 +162,11 @@ func telemetrySection() Section {
 		sec.Checks = append(sec.Checks, Check{"status", Warn, "cannot read: " + err.Error()})
 		return sec
 	}
-	if status.Enabled {
-		detail := "enabled: aggregate counters only"
-		if status.ForcedByEnv {
-			detail += " (from CTX_WIRE_TELEMETRY)"
-		}
-		sec.Checks = append(sec.Checks, Check{"status", OK, detail})
-	} else {
-		detail := "disabled"
-		if status.ForcedByEnv {
-			detail += " (from CTX_WIRE_TELEMETRY)"
-		}
-		sec.Checks = append(sec.Checks, Check{"status", OK, detail})
+	detail := "enabled: aggregate counters"
+	if !status.ShareImprovements {
+		detail += "; command breakdown off"
 	}
+	sec.Checks = append(sec.Checks, Check{"status", OK, detail})
 	sec.Checks = append(sec.Checks, Check{"endpoint", OK, display(status.Endpoint)})
 	return sec
 }

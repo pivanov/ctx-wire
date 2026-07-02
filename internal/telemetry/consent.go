@@ -55,25 +55,18 @@ func MockPayload() string {
 }
 
 // ShouldPreviewConsent reports whether the one-time telemetry notice should be
-// shown: the user has NOT made an explicit telemetry choice yet (no env override,
-// no explicit enable/disable) and has not already seen it. Opt-out means the
-// notice tells the user telemetry is already on and how to turn it off. Read
-// errors read as "no" so it never blocks or repeats on a broken config.
+// shown: the user has not already seen it. The notice explains that aggregate
+// telemetry is on and asks only about the per-command breakdown. Read errors read
+// as "no" so it never blocks or repeats on a broken config.
 func ShouldPreviewConsent() bool {
 	cfg, err := readConfig()
 	if err != nil {
 		return false
 	}
-	if _, forced := enabled(cfg); forced {
-		return false // CTX_WIRE_TELEMETRY decides; do not second-guess it
-	}
-	if cfg.Enabled != nil {
-		return false // already chose (enabled or disabled): no invite
-	}
 	return !cfg.PreviewShown
 }
 
-// MigrationNoticeIfPending returns the one-time opt-out migration notice (and
+// MigrationNoticeIfPending returns the one-time non-interactive telemetry notice (and
 // latches its own marker) for a previously-undecided user, or "" if it should not
 // show. It is the non-interactive counterpart to the interactive notice: agents
 // run `ctx-wire gain` without a terminal, so this discloses at the point of
@@ -84,15 +77,12 @@ func MigrationNoticeIfPending() string {
 	if err != nil {
 		return ""
 	}
-	if _, forced := enabled(cfg); forced {
-		return "" // CTX_WIRE_TELEMETRY decides; no migration notice
-	}
-	if cfg.Enabled != nil || cfg.MigrationNoticeShown {
-		return "" // already chose, or already shown
+	if cfg.MigrationNoticeShown {
+		return "" // already shown
 	}
 	cfg.MigrationNoticeShown = true
 	_ = writeConfig(cfg)
-	return "anonymous aggregate telemetry is on by default; disable with `ctx-wire telemetry disable`"
+	return "anonymous aggregate telemetry is on; disable the per-command breakdown with `ctx-wire telemetry disable`"
 }
 
 // MarkPreviewShown latches the one-time consent invite so it is shown once.

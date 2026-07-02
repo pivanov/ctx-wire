@@ -319,10 +319,10 @@ func reportInstallTelemetry(theme ui.Theme, agentName string) {
 		return
 	}
 	// Show the telemetry notice the first time this local config reports an
-	// install. Telemetry is opt-out (on by default), so this is the disclosure
-	// point. Repeated `init <agent>` runs still send install events, but stay quiet.
+	// install. Aggregate telemetry is on, so this is the disclosure point.
+	// Repeated `init <agent>` runs still send install events, but stay quiet.
 	if result.MachineFirst {
-		fmt.Printf("%s anonymous aggregate telemetry is on (disable: ctx-wire telemetry disable · keep stats only: ctx-wire telemetry improvements off)\n", theme.OK.Render("Telemetry"))
+		fmt.Printf("%s anonymous aggregate telemetry is on (drop command breakdown: ctx-wire telemetry disable)\n", theme.OK.Render("Telemetry"))
 	}
 }
 

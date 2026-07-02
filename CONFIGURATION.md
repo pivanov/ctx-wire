@@ -135,21 +135,21 @@ filter change improved fresh dogfood runs.
 
 ## Telemetry
 
-Anonymous aggregate telemetry is opt-out: it is on by default and stays on until
-you disable it. The first interactive `ctx-wire gain` for an undecided user shows
-a one-time notice with a fixed example payload and how to turn it off. An explicit
-disable (or `forget`) is recorded and never reversed by an update; only an
-undecided (never-chosen) state defaults to on. To inspect your exact local
+Anonymous aggregate telemetry is on by default and stays on: it powers the public
+impact page and contains only counters. The first interactive `ctx-wire gain`
+for an undecided user shows a one-time notice with a fixed example payload and
+how to drop the optional per-command breakdown. To inspect your exact local
 payload, run `ctx-wire telemetry preview`.
 
-When enabled, telemetry sends only counters used for the public impact page:
+Telemetry sends only counters used for the public impact page:
 
 - reported installs (successful `ctx-wire init <agent>` runs)
 - total commands, raw bytes, emitted bytes, bytes saved, and estimated tokens
   saved
-- per-program aggregate totals such as `cat`, `rg`, and `git`
 - per-agent aggregate totals (claude, codex, ...), so a device using several
   agents reports a real split (token counts only, never dollars)
+- when command breakdown is enabled, allowlisted per-program aggregate totals
+  such as `cat`, `rg`, and `git`
 
 Impact counters are accumulated locally and flushed opportunistically after a
 command finishes: the first flush waits for a meaningful batch (1000 pending
@@ -167,19 +167,14 @@ Controls:
 ```sh
 ctx-wire telemetry status
 ctx-wire telemetry preview
-ctx-wire telemetry enable
-ctx-wire telemetry disable             # turn ALL telemetry off
-ctx-wire telemetry improvements off    # keep stats; drop only the per-command detail
-ctx-wire telemetry forget   # withdraw consent + erase local data (stays disabled)
+ctx-wire telemetry enable              # share the per-command breakdown
+ctx-wire telemetry disable             # drop only the per-command breakdown
 ```
 
-`forget` erases the pending/last-reported counters and records a disabled
-consent so it stays off and the notice does not reappear. Re-enable later with
-`telemetry enable`.
-
-Set `CTX_WIRE_TELEMETRY=0` to disable all telemetry for one process, or
-`CTX_WIRE_TELEMETRY_IMPROVEMENTS=0` to drop only the per-command breakdown while
-the aggregate stats keep flowing. Set `CTX_WIRE_TELEMETRY_URL` to override the
+Aggregate telemetry stays on because it powers the public website totals and
+never includes commands, arguments, paths, output, repo/user/host names, install
+IDs, or IPs. `telemetry disable` only drops the allowlisted per-program command
+breakdown used to tune filters. Set `CTX_WIRE_TELEMETRY_URL` to override the
 endpoint for tests or local Worker development.
 
 ## Codex hook permissions
@@ -206,9 +201,8 @@ background when it can be detected.
 `CTX_WIRE_GAIN_FALLBACK_FILE` override the primary and fallback gain logs for
 tests or sandboxed runs.
 
-`CTX_WIRE_TELEMETRY=0` disables anonymous aggregate telemetry. `CTX_WIRE_TELEMETRY_URL`,
-`CTX_WIRE_TELEMETRY_CONFIG`, and `CTX_WIRE_TELEMETRY_STATE` override telemetry
-paths/endpoints for tests.
+`CTX_WIRE_TELEMETRY_URL`, `CTX_WIRE_TELEMETRY_CONFIG`, and
+`CTX_WIRE_TELEMETRY_STATE` override telemetry paths/endpoints for tests.
 
 `CTX_WIRE_TEE=0` disables full-output spooling. `CTX_WIRE_TEE_DIR` and
 `CTX_WIRE_TEE_FALLBACK_DIR` override the primary and fallback spool

@@ -23,11 +23,9 @@ import (
 const (
 	DefaultEndpoint = "https://ctx-wire-telemetry.iweb-ivanov.workers.dev/v1/telemetry"
 
-	envEnabled      = "CTX_WIRE_TELEMETRY"
-	envImprovements = "CTX_WIRE_TELEMETRY_IMPROVEMENTS"
-	envURL          = "CTX_WIRE_TELEMETRY_URL"
-	envConfig       = "CTX_WIRE_TELEMETRY_CONFIG"
-	envState        = "CTX_WIRE_TELEMETRY_STATE"
+	envURL    = "CTX_WIRE_TELEMETRY_URL"
+	envConfig = "CTX_WIRE_TELEMETRY_CONFIG"
+	envState  = "CTX_WIRE_TELEMETRY_STATE"
 
 	requestTimeout = 900 * time.Millisecond
 
@@ -42,6 +40,9 @@ var (
 )
 
 type Config struct {
+	// Enabled is a legacy all-telemetry switch kept only so old config files keep
+	// parsing. It no longer gates aggregate telemetry: ctx-wire's public control
+	// is the command-breakdown toggle below.
 	Enabled         *bool `json:"enabled,omitempty"`
 	InstallReported bool  `json:"install_reported,omitempty"`
 	// PreviewShown latches the one-time consent invite shown on the first
@@ -55,14 +56,13 @@ type Config struct {
 	// Agent type is a category, not an identity, so it stays within the
 	// anonymous, aggregate-only model.
 	InstalledAgents []string `json:"installed_agents,omitempty"`
-	// ShareImprovements gates ONLY the granular per-program ("help improve
-	// ctx-wire") breakdown. nil means "never decided" and defaults to on; an
-	// explicit false keeps the website stats (totals, agents, country, install)
-	// flowing while withholding the per-command detail. The master Enabled switch
-	// gates everything; this is the finer, second toggle.
+	// ShareImprovements gates ONLY the granular per-program command breakdown.
+	// nil means "never decided" and defaults to on; an explicit false keeps the
+	// website stats (totals, agents, country, install) flowing while withholding
+	// the per-command detail used to tune filters.
 	ShareImprovements *bool `json:"share_improvements,omitempty"`
-	// MigrationNoticeShown latches the one-time, non-interactive opt-out migration
-	// notice. It is SEPARATE from PreviewShown on purpose: a swallowed
+	// MigrationNoticeShown latches the one-time, non-interactive telemetry notice.
+	// It is SEPARATE from PreviewShown on purpose: a swallowed
 	// non-interactive notice must not suppress the reliable interactive one, so the
 	// worst case is "shown twice", never "shown zero times".
 	MigrationNoticeShown bool `json:"migration_notice_shown,omitempty"`
@@ -70,7 +70,6 @@ type Config struct {
 
 type Status struct {
 	Enabled           bool
-	ForcedByEnv       bool
 	Endpoint          string
 	ConfigPath        string
 	StatePath         string
@@ -156,10 +155,8 @@ func GetStatus() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	enabled, forced := enabled(cfg)
 	return Status{
-		Enabled:           enabled,
-		ForcedByEnv:       forced,
+		Enabled:           true,
 		Endpoint:          endpoint(),
 		ConfigPath:        configPath,
 		StatePath:         statePath,
@@ -169,39 +166,27 @@ func GetStatus() (Status, error) {
 }
 
 func SetEnabled(value bool) error {
-	cfg, err := readConfig()
-	if err != nil {
-		return err
-	}
-	cfg.Enabled = &value
-	if !value {
-		_ = ClearState()
-	}
-	return writeConfig(cfg)
+	return SetShareImprovements(value)
 }
 
-// shareImprovements reports whether the granular per-program ("help improve
-// ctx-wire") breakdown may ride along. It is the second, finer toggle: callers
-// gate the whole send on enabled() first, and this only decides whether the
-// per-command detail is included. Defaults ON; opting out is an explicit choice.
+// shareImprovements reports whether the granular per-program command breakdown
+// may ride along. Aggregate telemetry is always sent; this only decides whether
+// the per-command detail is included. Defaults ON; opting out is an explicit
+// choice via `ctx-wire telemetry disable`.
 func shareImprovements(cfg Config) bool {
-	if v := strings.TrimSpace(strings.ToLower(os.Getenv(envImprovements))); v != "" {
-		switch v {
-		case "0", "false", "off", "no":
-			return false
-		case "1", "true", "on", "yes":
-			return true
-		}
-	}
 	if cfg.ShareImprovements != nil {
 		return *cfg.ShareImprovements
+	}
+	// Legacy enabled=false migrates to breakdown-off (aggregate still flows).
+	if cfg.Enabled != nil && !*cfg.Enabled {
+		return false
 	}
 	return true
 }
 
-// SetShareImprovements records the user's choice for the per-program improvement
-// data. The master Enabled switch is untouched, so the website stats keep
-// flowing; this only adds or removes the granular per-command breakdown.
+// SetShareImprovements records the user's choice for the per-program command
+// breakdown. Aggregate website stats keep flowing; this only adds or removes the
+// granular per-command detail used to improve filters.
 func SetShareImprovements(value bool) error {
 	cfg, err := readConfig()
 	if err != nil {
@@ -236,38 +221,14 @@ func ClearState() error {
 	return nil
 }
 
-// Forget withdraws telemetry consent and erases all local telemetry data: the
-// pending/last-reported counters and the install-reported flag. ctx-wire
-// telemetry carries no device identity and only ever sends aggregate counters,
-// so there is nothing to erase server-side; this is the local equivalent of
-// withdrawal plus erasure.
-//
-// Telemetry is opt-out (on by default), so withdrawal is a deliberate "no":
-// Forget persists {enabled: false} rather than deleting the config. That records
-// an explicit choice, distinct from "never decided" (nil) which an update
-// migrates to on, so a withdrawal sticks: the one-time notice does not re-appear
-// and no update reverses it. Missing files are not an error.
-func Forget() error {
-	if err := ClearState(); err != nil {
-		return err
-	}
-	disabled := false
-	return writeConfig(Config{Enabled: &disabled})
-}
-
 // ReportInstall records a successful init. agentName is the configured agent
 // (claude, codex, ...). Every successful agent init reports an install event,
 // including repeats for the same agent. The local config only latches the
 // one-time telemetry notice and tracks which agent names have been seen before.
-// It sends nothing when telemetry is disabled.
 func ReportInstall(agentName string) (Result, error) {
 	cfg, err := readConfig()
 	if err != nil {
 		return Result{}, err
-	}
-	isEnabled, _ := enabled(cfg)
-	if !isEnabled {
-		return Result{Disabled: true}, nil
 	}
 
 	ag := safeAgentName(agentName)
@@ -328,13 +289,9 @@ func ReportImpact(summary *gain.Summary) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	isEnabled, _ := enabled(cfg)
-	if !isEnabled {
-		return Result{Disabled: true}, nil
-	}
 	// Backfill the install if it was never reported: init may have run while
-	// telemetry was off (or before opt-out), then telemetry came on. Count it from
-	// the first impact flush. Best-effort; never blocks the impact report.
+	// impact reporting was unavailable in an older version. Count it from the
+	// first impact flush. Best-effort; never blocks the impact report.
 	if !cfg.InstallReported {
 		_, _ = ReportInstall("")
 	}
@@ -374,10 +331,6 @@ func RecordCommand(command, agentName string, rawBytes, emittedBytes int) (Resul
 	cfg, err := readConfig()
 	if err != nil {
 		return Result{}, err
-	}
-	isEnabled, _ := enabled(cfg)
-	if !isEnabled {
-		return Result{Disabled: true}, nil
 	}
 
 	now := clockNow().UTC()
@@ -624,25 +577,6 @@ func totalsEmpty(t Totals) bool {
 
 func programEmpty(p ProgramTotals) bool {
 	return p.Count == 0 && p.RawBytes == 0 && p.EmittedBytes == 0 && p.BytesSaved == 0 && p.TokensSaved == 0
-}
-
-func enabled(cfg Config) (bool, bool) {
-	if v := strings.TrimSpace(strings.ToLower(os.Getenv(envEnabled))); v != "" {
-		switch v {
-		case "0", "false", "off", "no":
-			return false, true
-		case "1", "true", "on", "yes":
-			return true, true
-		}
-	}
-	if cfg.Enabled != nil {
-		return *cfg.Enabled, false
-	}
-	// Opt-out: anonymous aggregate telemetry is ON by default and stays on until
-	// the user explicitly disables it. A nil choice means "never decided", treated
-	// as on. An explicit {enabled:false} (the off-switch) is honored here and is
-	// never reversed by an update: only nil is migrated to on, never false.
-	return true, false
 }
 
 func endpoint() string {

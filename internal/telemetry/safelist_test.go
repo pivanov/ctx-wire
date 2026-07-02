@@ -76,7 +76,6 @@ func captureSender(t *testing.T) *[]map[string]any {
 func telemetryTempEnv(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "1")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 }

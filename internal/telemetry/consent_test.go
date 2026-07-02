@@ -10,13 +10,11 @@ import (
 
 func TestShouldPreviewConsentLatch(t *testing.T) {
 	dir := t.TempDir()
-	// An undecided user: no env override and no explicit enable/disable. Opt-in
-	// shows them the invite once.
-	t.Setenv(envEnabled, "")
+	// An undecided user sees the invite once.
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
 	if !ShouldPreviewConsent() {
-		t.Fatal("an undecided user (opt-in) should get the consent invite once")
+		t.Fatal("an undecided user should get the consent invite once")
 	}
 	MarkPreviewShown()
 	if ShouldPreviewConsent() {
@@ -26,31 +24,16 @@ func TestShouldPreviewConsentLatch(t *testing.T) {
 
 func TestShouldPreviewConsentNotAfterChoice(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(envEnabled, "")
 	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
 	t.Setenv(envState, filepath.Join(dir, "state.json"))
-	// A user who already chose (enabled OR disabled) is never re-invited.
-	if err := SetEnabled(true); err != nil {
+	// A user who already saw the notice is never re-invited. Command-breakdown
+	// choices do not affect aggregate telemetry.
+	if err := SetShareImprovements(true); err != nil {
 		t.Fatal(err)
 	}
+	MarkPreviewShown()
 	if ShouldPreviewConsent() {
-		t.Fatal("an enabled user must not be re-invited")
-	}
-	if err := SetEnabled(false); err != nil {
-		t.Fatal(err)
-	}
-	if ShouldPreviewConsent() {
-		t.Fatal("a user who disabled must not be re-invited")
-	}
-}
-
-func TestShouldPreviewConsentDisabled(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv(envEnabled, "0") // forced off
-	t.Setenv(envConfig, filepath.Join(dir, "telemetry.json"))
-	t.Setenv(envState, filepath.Join(dir, "state.json"))
-	if ShouldPreviewConsent() {
-		t.Fatal("disabled telemetry must not show the consent preview")
+		t.Fatal("a user who saw the notice must not be re-invited")
 	}
 }
 
