@@ -108,7 +108,12 @@ export const SavedByAgent = ({ stats }: { stats: TImpactStats }) => {
             key={agent.agent}
             agent={agent}
             rank={index + 1}
-            pct={(tokensOf(agent) / max) * 100}
+            // sqrt-scaled fill, matching the globe beacons and the CLI gain
+            // bars: one agent routinely dwarfs the rest, and a linear fill
+            // collapses the tail to an invisible sliver. sqrt keeps the leader
+            // dominant while the smaller-but-real agents stay legible. The exact
+            // token count is printed on the row, so the bar stays perceptual.
+            pct={Math.sqrt(tokensOf(agent) / max) * 100}
             lead={index === 0}
             reduce={Boolean(reduce)}
           />
