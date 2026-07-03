@@ -52,6 +52,24 @@ const MAX_PROGRAMS = 50;
 const MAX_AGENTS = 20;
 const MAX_PROGRAM_RUNS = 100_000;
 const PROGRAM_RE = /^[a-z0-9._+-]{1,64}$/;
+
+// Catch-all label for any agent not on the allowlist below, matching the
+// client's telemetry safelist (internal/telemetry/safelist.go otherBucket). A
+// well-behaved client already collapses unknown agents to "other" before
+// sending, so this gate changes nothing for real traffic; it exists so a direct
+// unauthenticated POST cannot put an arbitrary name on the public "saved by
+// agent" leaderboard, and so agent_stats rows stay bounded to a known set.
+const OTHER_BUCKET = "other";
+
+// KNOWN_AGENTS mirrors agent.Known in internal/agent/agent.go. Keep the two in
+// sync: a new agent added there must be added here, or its telemetry folds into
+// "other" on the board (fails safe, never drops the data). The list is small and
+// changes only when a new agent integration ships.
+const KNOWN_AGENTS = new Set([
+  "claude", "codex", "cursor", "gemini", "copilot", "windsurf", "cline",
+  "kilocode", "antigravity", "opencode", "pi", "hermes", "vscode", "visualstudio",
+  OTHER_BUCKET,
+]);
 // Version label for the per-version aggregates that drive "did this filter
 // improve across releases" charts. A pre-0.1.17 client sends no version, bucket
 // those as "pre-0.1.17"; an invalid value buckets as "unknown" so one bad
@@ -359,14 +377,19 @@ async function recordInstall(
   }
 }
 
-// parseInstallAgent validates the install event's agent name with the same
-// charset as program/agent buckets, returning "" for absent or malformed values.
+// parseInstallAgent validates the install event's agent name, returning "" for
+// absent or malformed values. A valid-but-unknown agent folds to "other" (the
+// same allowlist the impact agent breakdown uses), so a direct install POST
+// cannot write an arbitrary name into agent_install_stats.
 function parseInstallAgent(value: unknown): string {
   if (typeof value !== "string") {
     return "";
   }
   const name = value.trim().toLowerCase();
-  return PROGRAM_RE.test(name) ? name : "";
+  if (!PROGRAM_RE.test(name)) {
+    return "";
+  }
+  return KNOWN_AGENTS.has(name) ? name : OTHER_BUCKET;
 }
 
 // STATS_CACHE_TTL_SECONDS caches the read-only stats response at the edge. The
@@ -529,32 +552,57 @@ function parsePrograms(value: unknown): Bucket[] {
 }
 
 function parseAgents(value: unknown): Bucket[] {
-  return parseBuckets(value, MAX_AGENTS);
+  return parseBuckets(value, MAX_AGENTS, KNOWN_AGENTS);
 }
 
 // parseBuckets validates a {name: count|object} map (programs or agents) into a
 // capped, sanitized list. The same name regex and counter clamps apply to both,
-// so an agent breakdown is validated exactly like a program breakdown.
-function parseBuckets(value: unknown, maxEntries: number): Bucket[] {
+// so an agent breakdown is validated exactly like a program breakdown. When an
+// allowlist is given, any name not on it folds into the "other" bucket (with its
+// counts merged), so a direct POST cannot inject an arbitrary label and the row
+// count stays bounded to the known set.
+function parseBuckets(value: unknown, maxEntries: number, allowlist?: Set<string>): Bucket[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return [];
   }
 
-  const buckets: Bucket[] = [];
+  const merged = new Map<string, Bucket>();
+
+  const add = (name: string, delta: Omit<Bucket, "name">) => {
+    const cur = merged.get(name) ?? {
+      name,
+      runs: 0,
+      rawBytes: 0,
+      emittedBytes: 0,
+      bytesSaved: 0,
+      tokensSaved: 0,
+    };
+    // Re-clamp each accumulator so merging several folded entries in one payload
+    // cannot exceed the per-report ceiling.
+    cur.runs = clampInt(cur.runs + delta.runs, 0, MAX_PROGRAM_RUNS);
+    cur.rawBytes = clampInt(cur.rawBytes + delta.rawBytes, 0, MAX_RAW_BYTES);
+    cur.emittedBytes = clampInt(cur.emittedBytes + delta.emittedBytes, 0, MAX_EMITTED_BYTES);
+    cur.bytesSaved = clampInt(cur.bytesSaved + delta.bytesSaved, 0, MAX_BYTES_SAVED);
+    cur.tokensSaved = clampInt(cur.tokensSaved + delta.tokensSaved, 0, MAX_TOKENS_SAVED);
+    merged.set(name, cur);
+  };
 
   for (const [rawName, rawValue] of Object.entries(value as Record<string, ProgramValue>)) {
-    if (buckets.length >= maxEntries) {
-      break;
+    const raw = rawName.trim().toLowerCase();
+    if (!PROGRAM_RE.test(raw)) {
+      continue;
     }
-    const name = rawName.trim().toLowerCase();
-    if (!PROGRAM_RE.test(name)) {
+    const name = allowlist && !allowlist.has(raw) ? OTHER_BUCKET : raw;
+    // Cap distinct names; a folded "other" that already exists does not count
+    // against the cap, so real known entries still land after a burst of junk.
+    if (!merged.has(name) && merged.size >= maxEntries) {
       continue;
     }
 
     if (typeof rawValue === "number") {
       const runs = clampInt(rawValue, 0, MAX_PROGRAM_RUNS);
       if (runs > 0) {
-        buckets.push({ name, runs, rawBytes: 0, emittedBytes: 0, bytesSaved: 0, tokensSaved: 0 });
+        add(name, { runs, rawBytes: 0, emittedBytes: 0, bytesSaved: 0, tokensSaved: 0 });
       }
       continue;
     }
@@ -569,11 +617,11 @@ function parseBuckets(value: unknown, maxEntries: number): Bucket[] {
     const bytesSaved = clampInt(rawValue.bytes_saved, 0, MAX_BYTES_SAVED);
     const tokensSaved = clampInt(rawValue.tokens_saved, 0, MAX_TOKENS_SAVED);
     if (runs > 0 || rawBytes > 0 || emittedBytes > 0 || bytesSaved > 0 || tokensSaved > 0) {
-      buckets.push({ name, runs, rawBytes, emittedBytes, bytesSaved, tokensSaved });
+      add(name, { runs, rawBytes, emittedBytes, bytesSaved, tokensSaved });
     }
   }
 
-  return buckets;
+  return [...merged.values()];
 }
 
 function clampInt(value: unknown, min: number, max: number): number {
