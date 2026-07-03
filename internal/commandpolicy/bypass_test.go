@@ -127,3 +127,69 @@ func TestClassifyBypassInterpreters(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifyBypassDBClients(t *testing.T) {
+	tests := []struct {
+		name       string
+		cmd        string
+		args       []string
+		wantBypass bool
+	}{
+		// MUST bypass: an interactive REPL (bare, or connection args only), or a
+		// form that would read stdin. Capturing these would break the session.
+		{"mysql bare", "mysql", nil, true},
+		{"mysql conn args only", "mysql", []string{"-u", "root", "app"}, true},
+		{"mariadb bare", "mariadb", nil, true},
+		{"psql bare", "psql", nil, true},
+		{"psql dbname only", "psql", []string{"mydb"}, true},
+		// psql -f - (and spellings) reads SQL from stdin: must bypass like a REPL.
+		{"psql -f - reads stdin", "psql", []string{"-f", "-"}, true},
+		{"psql --file - reads stdin", "psql", []string{"--file", "-"}, true},
+		{"psql --file=- reads stdin", "psql", []string{"--file=-"}, true},
+		{"psql -f- attached stdin", "psql", []string{"-f-"}, true},
+		{"psql -c with -f - still bypasses (stdin hazard)", "psql", []string{"-c", "SELECT 1", "-f", "-"}, true},
+		{"redis-cli bare", "redis-cli", nil, true},
+		{"redis-cli conn args only", "redis-cli", []string{"-h", "db", "-p", "6379"}, true},
+		{"redis-cli -x reads stdin", "redis-cli", []string{"-x", "SET", "k"}, true},
+		{"redis-cli --pipe reads stdin", "redis-cli", []string{"--pipe"}, true},
+		// -r is repeat mode; -r -1 repeats forever. Both must stay bypassed so the
+		// skipped value is never mistaken for a finite command keyword.
+		{"redis-cli -r -1 infinite repeat", "redis-cli", []string{"-r", "-1", "PING"}, true},
+		{"redis-cli -r finite repeat still bypassed", "redis-cli", []string{"-r", "5", "GET", "k"}, true},
+		// streaming / blocking commands never return on their own.
+		{"redis-cli MONITOR streams forever", "redis-cli", []string{"MONITOR"}, true},
+		{"redis-cli SUBSCRIBE blocks", "redis-cli", []string{"SUBSCRIBE", "ch"}, true},
+		{"redis-cli lowercase psubscribe blocks", "redis-cli", []string{"psubscribe", "ch.*"}, true},
+		{"redis-cli BLPOP blocking pop", "redis-cli", []string{"BLPOP", "q", "0"}, true},
+		{"redis-cli -h host then MONITOR", "redis-cli", []string{"-h", "db", "MONITOR"}, true},
+		// ssh stays bypassed: its command is a bare positional that may be an
+		// interactive or long-running remote process, with no clean one-shot signal.
+		{"ssh remote command", "ssh", []string{"host", "cat", "/etc/passwd"}, true},
+		{"ssh interactive shell", "ssh", []string{"host"}, true},
+
+		// MUST NOT bypass: a finite one-shot query (capture + scrub the output).
+		{"mysql -e", "mysql", []string{"-e", "SELECT 1"}, false},
+		{"mysql --execute=", "mysql", []string{"--execute=SELECT 1"}, false},
+		{"mysql -e attached", "mysql", []string{"-eSELECT 1"}, false},
+		{"mysql -e with conn args", "mysql", []string{"-u", "root", "-e", "SELECT 1"}, false},
+		{"mariadb -e", "mariadb", []string{"-e", "SELECT 1"}, false},
+		{"psql -c", "psql", []string{"-c", "SELECT 1"}, false},
+		{"psql --command=", "psql", []string{"--command=SELECT 1"}, false},
+		{"psql -l list", "psql", []string{"-l"}, false},
+		{"psql -f file", "psql", []string{"-f", "seed.sql"}, false},
+		{"psql -f attached real file", "psql", []string{"-fseed.sql"}, false},
+		{"psql --file= real file", "psql", []string{"--file=seed.sql"}, false},
+		{"redis-cli GET", "redis-cli", []string{"GET", "mykey"}, false},
+		{"redis-cli conn args then command", "redis-cli", []string{"-h", "db", "PING"}, false},
+		{"redis-cli -n then command", "redis-cli", []string{"-n", "0", "GET", "k"}, false},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got, reason := ClassifyBypass(tt.cmd, tt.args)
+			if got != tt.wantBypass {
+				t.Fatalf("ClassifyBypass(%q, %v) bypass = %v (%q), want %v", tt.cmd, tt.args, got, reason, tt.wantBypass)
+			}
+		})
+	}
+}

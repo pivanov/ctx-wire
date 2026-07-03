@@ -13,7 +13,8 @@ var InteractivePrograms = map[string]bool{
 	"vi": true, "vim": true, "nvim": true, "nano": true, "emacs": true,
 	"less": true, "more": true, "top": true, "htop": true, "watch": true, "man": true,
 	"ssh": true, "tmux": true, "screen": true, "fzf": true,
-	"gdb": true, "lldb": true, "mysql": true, "psql": true, "redis-cli": true,
+	"gdb": true, "lldb": true, "mysql": true, "mariadb": true,
+	"psql": true, "redis-cli": true,
 	"python": true, "python3": true, "node": true, "irb": true, "ipython": true,
 }
 
@@ -361,6 +362,112 @@ func interpreterIsFinite(args []string) bool {
 	return false
 }
 
+// dbOneShotFlags maps an interactive database client to the flags that make it
+// run a single query and exit. When present, the client's output is finite and
+// safe to capture+scrub instead of bypassing (which would leak an unscrubbed
+// query result: a token stored in a row, a connection string with a password).
+var dbOneShotFlags = map[string][]string{
+	"mysql":   {"-e", "--execute"},
+	"mariadb": {"-e", "--execute"},
+	"psql":    {"-c", "--command", "-l", "--list", "-f", "--file"},
+}
+
+// redisCLIValueFlags consume the following arg as their value, so that arg is
+// not the command keyword. "-x" is deliberately excluded: it makes redis-cli
+// read the final argument from stdin, which would block on a passthrough
+// terminal, so a command using it stays bypassed.
+var redisCLIValueFlags = map[string]bool{
+	"-h": true, "-p": true, "-s": true, "-a": true, "-u": true, "-n": true,
+	"-i": true, "-t": true, "--user": true, "--pass": true,
+}
+
+// redisBlockingCommands stream output or block indefinitely (MONITOR, the
+// SUBSCRIBE family, blocking list/stream pops and WAIT that can take a 0 =
+// infinite timeout). They carry a command keyword but never return on their
+// own, so they must stay bypassed. Matched case-insensitively.
+var redisBlockingCommands = map[string]bool{
+	"monitor": true, "subscribe": true, "psubscribe": true, "ssubscribe": true,
+	"blpop": true, "brpop": true, "blmove": true, "blmpop": true,
+	"brpoplpush": true, "bzpopmin": true, "bzpopmax": true, "bzmpop": true,
+	"xread": true, "xreadgroup": true, "wait": true, "waitaof": true,
+}
+
+// psqlFileReadsStdin reports whether a psql -f/--file argument points at stdin
+// ("-") in any of its spellings (`-f -`, `--file -`, `--file=-`, `-f-`). Such a
+// form reads SQL from stdin, which would block on the inherited terminal under
+// capture, so it must stay bypassed even though -f is otherwise a one-shot flag.
+func psqlFileReadsStdin(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-f-" || a == "--file=-":
+			return true
+		case a == "-f" || a == "--file":
+			if i+1 < len(args) && args[i+1] == "-" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// dbCommandIsFinite reports whether an interactive db client is being run in a
+// one-shot form that produces finite output (so it can be captured + scrubbed).
+// Bare invocations (an interactive REPL) return false and stay bypassed.
+func dbCommandIsFinite(base string, args []string) bool {
+	if base == "redis-cli" {
+		return redisHasCommand(args)
+	}
+	flags := dbOneShotFlags[base]
+	if flags == nil {
+		return false
+	}
+	if base == "psql" && psqlFileReadsStdin(args) {
+		return false // `psql -f -` reads SQL from stdin: would block under capture
+	}
+	for _, a := range args {
+		for _, f := range flags {
+			if a == f {
+				return true
+			}
+			if strings.HasPrefix(f, "--") {
+				if strings.HasPrefix(a, f+"=") {
+					return true // --command=...
+				}
+			} else if len(a) > 2 && strings.HasPrefix(a, f) {
+				return true // attached short-flag value: -e"SELECT 1"
+			}
+		}
+	}
+	return false
+}
+
+// redisHasCommand reports whether a redis-cli invocation carries a finite
+// command keyword (`redis-cli GET foo`, `redis-cli -h host PING`) whose output
+// is safe to capture. It returns false for an interactive REPL (no command), a
+// form that reads stdin (-x, --pipe), repeat mode (-r, whose -1 repeats
+// forever), and streaming/blocking commands (MONITOR, SUBSCRIBE, blocking pops).
+func redisHasCommand(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-x" || a == "--pipe" || a == "--pipe-mode":
+			return false // reads from stdin: would block on a passthrough terminal
+		case a == "-r":
+			return false // repeat mode; `-r -1` repeats forever
+		case redisCLIValueFlags[a]:
+			i++ // skip the flag's value
+			continue
+		case strings.HasPrefix(a, "-"):
+			continue // another flag (e.g. --scan, --no-raw)
+		default:
+			// First positional is the command keyword: capture it unless it is a
+			// streaming/blocking command that never returns on its own.
+			return !redisBlockingCommands[strings.ToLower(a)]
+		}
+	}
+	return false
+}
+
 // ClassifyBypass reports whether a command should bypass capture and, if so,
 // returns a human-readable reason.
 func ClassifyBypass(name string, args []string) (bool, string) {
@@ -374,9 +481,12 @@ func ClassifyBypass(name string, args []string) (bool, string) {
 		return true, "long-running dev script"
 	}
 	if base := filepath.Base(name); InteractivePrograms[base] {
-		if interpreters[base] && interpreterIsFinite(args) {
+		switch {
+		case interpreters[base] && interpreterIsFinite(args):
 			// finite one-shot interpreter command -> fall through to capture+scrub
-		} else {
+		case dbCommandIsFinite(base, args):
+			// finite one-shot db query -> fall through to capture+scrub
+		default:
 			return true, "interactive program " + base
 		}
 	}
