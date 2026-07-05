@@ -9,6 +9,31 @@ permissions:
   contents: read
 
 jobs:
+  # Website + telemetry worker: typecheck/lint/build. Neither runs in any other
+  # gate (deploys build without these checks), so regressions here previously
+  # shipped unverified.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Web check + build
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run check
+          bun run build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: telemetry-worker/package-lock.json
+      - name: Worker typecheck
+        working-directory: telemetry-worker
+        run: |
+          npm ci
+          npm run check
+
   check:
     runs-on: ubuntu-latest
     steps:
