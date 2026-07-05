@@ -44,7 +44,11 @@ var rules = []rule{
 			`|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b` + // Stripe key
 			`|\bsk-(?:ant-)?[A-Za-z0-9_\-]{20,}\b` + // OpenAI / Anthropic key
 			`|\bhv[sbr]\.[A-Za-z0-9_-]{20,}\b` + // HashiCorp Vault service/batch/recovery token
-			`|\bpypi-[A-Za-z0-9_-]{16,}\b`, // PyPI API token
+			`|\bpypi-[A-Za-z0-9_-]{16,}\b` + // PyPI API token
+			`|\bglpat-[A-Za-z0-9_\-]{20,}\b` + // GitLab personal access token
+			`|\bnpm_[A-Za-z0-9]{36,}\b` + // npm access token
+			`|\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b` + // SendGrid API key
+			`|\bdckr_pat_[A-Za-z0-9_-]{16,}\b`, // Docker Hub personal access token
 	), replacement: redacted},
 	// Authorization: <scheme> <secret> -> keep the scheme, redact the secret.
 	// Any scheme word (Bearer, Basic, token, ApiKey, Digest, NTLM, custom) is
@@ -86,6 +90,7 @@ var (
 		"eyJ", "AKIA", "ASIA", "AIza", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
 		"github_pat_", "xox", "sk_", "rk_", "sk-", "-----BEGIN", "://",
 		"hvs.", "hvb.", "hvr.", "pypi-",
+		"glpat-", "npm_", "SG.", "dckr_pat_",
 	}
 	keywordRoots = []string{
 		"pass", "pwd", "secret", "token", "api", "key", "auth", "client", "access", "private", "cred",

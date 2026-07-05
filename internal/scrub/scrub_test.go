@@ -173,7 +173,36 @@ var scrubCases = []struct {
 	{name: "json quoted token", in: `{"token":"faketok987"}`, wantRedac: true, mustDrop: []string{"faketok987"}},
 	{name: "json quoted api_key", in: `"api_key": "fakeapikey555"`, wantRedac: true, mustDrop: []string{"fakeapikey555"}},
 	{name: "json non-secret key kept", in: `{"host": "db.example.com"}`, wantRedac: false, mustKeep: []string{"db.example.com"}},
+	// Bare provider tokens with no secret-ish keyword nearby. Each input is the
+	// token alone, so the case also guards the literalAnchors prefilter entry:
+	// mightContainSecret must trigger on the prefix or the rule never runs.
+	{name: "gitlab pat bare", in: fakeGitLabPAT, wantRedac: true, mustDrop: []string{fakeGitLabPAT}},
+	{name: "npm token bare", in: fakeNPMToken, wantRedac: true, mustDrop: []string{fakeNPMToken}},
+	{name: "sendgrid key bare", in: fakeSendGridKey, wantRedac: true, mustDrop: []string{fakeSendGridKey}},
+	{name: "docker hub pat bare", in: fakeDockerPAT, wantRedac: true, mustDrop: []string{fakeDockerPAT}},
+	{name: "slack token bare", in: fakeSlackToken, wantRedac: true, mustDrop: []string{fakeSlackToken}},
+	{name: "google api key bare", in: fakeGoogleKey, wantRedac: true, mustDrop: []string{fakeGoogleKey}},
+	{name: "stripe live key bare", in: fakeStripeLive, wantRedac: true, mustDrop: []string{fakeStripeLive}},
+	{name: "stripe restricted key bare", in: fakeStripeRK, wantRedac: true, mustDrop: []string{fakeStripeRK}},
+	{name: "github fine-grained pat bare", in: fakeGitHubPAT, wantRedac: true, mustDrop: []string{fakeGitHubPAT}},
 }
+
+// The bare fake tokens are assembled by concatenation so the contiguous
+// token shape never appears in this file's bytes: secret scanners (GitHub
+// push protection, ctx-wire's own scrubber) match the same shapes the rules
+// do, and a shape-perfect literal blocks the push. The runtime values are
+// exactly the token shapes the rules must redact.
+var (
+	fakeGitLabPAT   = "glpat" + "-Fake0GitLabValue0000"
+	fakeNPMToken    = "npm" + "_abcdefgh0123456789abcdefgh0123456789"
+	fakeSendGridKey = "SG" + ".aaaabbbbccccdddd0000.eeeeffffgggghhhh1111"
+	fakeDockerPAT   = "dckr" + "_pat_aaaa0000bbbb1111cccc"
+	fakeSlackToken  = "xoxb" + "-1234567890-Fake0SlackValue"
+	fakeGoogleKey   = "AIza" + "SyFakeValue000000000000000000000000"
+	fakeStripeLive  = "sk" + "_live_Fake0StripeValue"
+	fakeStripeRK    = "rk" + "_test_Fake0StripeValue"
+	fakeGitHubPAT   = "github" + "_pat_11AAAA0aaaabbbbccccdddd"
+)
 
 func TestScrub(t *testing.T) {
 	for _, tt := range scrubCases {
