@@ -75,6 +75,14 @@ if command -v dotnet >/dev/null 2>&1; then
 else
 	echo "  SKIP  run dotnet (not installed)"
 fi
+# Exit-code propagation end-to-end at the built binary: a wrapped child's exit
+# code must reach the caller unchanged, and a missing command must exit 127.
+cw run sh -c 'exit 3' >/dev/null 2>&1
+rc=$?
+if [ "$rc" -eq 3 ]; then ok "run propagates child exit code"; else bad "run exit code (want 3, got $rc)"; fi
+cw run ctx-wire-smoke-missing-cmd >/dev/null 2>&1
+rc=$?
+if [ "$rc" -eq 127 ]; then ok "run missing command exits 127"; else bad "run missing command exit (want 127, got $rc)"; fi
 
 step "gain records a scrubbed command"
 rm -f "$WORK/gain.jsonl"

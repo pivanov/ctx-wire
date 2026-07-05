@@ -84,6 +84,17 @@ func TestRunBufferedPropagatesExitCode(t *testing.T) {
 	}
 }
 
+// A wrapped command that does not exist must exit 127 (shell convention), not
+// a generic 1, so agents and scripts can tell "not installed" from "failed".
+func TestRunMissingCommandExits127(t *testing.T) {
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	reg := mustRegistry(t)
+	code, _ := Run(context.Background(), reg, "ctx-wire-definitely-missing-binary", nil)
+	if code != 127 {
+		t.Errorf("exit code = %d, want 127", code)
+	}
+}
+
 func TestRunBufferedDoesNotInventOnEmptyOKOnFailure(t *testing.T) {
 	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
 	reg := mustRegistry(t)

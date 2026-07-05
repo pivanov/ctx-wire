@@ -572,6 +572,12 @@ func runAndExitCode(cmd *exec.Cmd) (int, error) {
 		}
 		return ee.ExitCode(), nil
 	}
+	// The child never ran. Command-not-found maps to the conventional 127 (what
+	// a shell reports) so callers can tell "not installed" from a generic
+	// launch failure.
+	if errors.Is(err, exec.ErrNotFound) {
+		return 127, err
+	}
 	return 1, err
 }
 
