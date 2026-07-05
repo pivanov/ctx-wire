@@ -9,6 +9,10 @@ export interface Env {
   // Optional so the worker still runs in local/dev or test contexts where the
   // binding is absent; when present, write requests are rate-limited per IP.
   WRITE_RATE_LIMITER?: RateLimiter;
+  // Much tighter second limiter for impact reports with outsized savings
+  // claims, the writes that move the public counters disproportionately.
+  // Optional for the same fail-open reason as above.
+  HEAVY_RATE_LIMITER?: RateLimiter;
 }
 
 type TelemetryEvent = "install" | "impact";
@@ -48,6 +52,13 @@ const MAX_RAW_BYTES = 1024 * 1024 * 1024;
 const MAX_EMITTED_BYTES = 1024 * 1024 * 1024;
 const MAX_BYTES_SAVED = 1024 * 1024 * 1024;
 const MAX_TOKENS_SAVED = 300_000_000;
+// Reports claiming more than this are possible but rare for a genuine client
+// (a 30-minute flush from the heaviest observed real workload is around this
+// scale), so they additionally pass the HEAVY_RATE_LIMITER. A flood of
+// ceiling-sized reports is the cheapest way to inflate the public counters;
+// one such report every few minutes per IP is not.
+const HEAVY_REPORT_TOKENS = 25_000_000;
+const HEAVY_REPORT_BYTES = 100 * 1024 * 1024;
 const MAX_PROGRAMS = 50;
 const MAX_AGENTS = 20;
 const MAX_PROGRAM_RUNS = 100_000;
@@ -121,9 +132,9 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
   // Bound write volume per client IP (cheapest possible reject, before parsing).
   // Fail-open if the binding is missing so a misconfiguration never drops legit
   // reports. Cloudflare's edge DDoS/bot protection covers the cruder cases.
+  const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
   if (env.WRITE_RATE_LIMITER) {
-    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-    const { success } = await env.WRITE_RATE_LIMITER.limit({ key: ip });
+    const { success } = await env.WRITE_RATE_LIMITER.limit({ key: clientIP });
     if (!success) {
       return json({ error: "rate_limited" }, 429);
     }
@@ -162,20 +173,24 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
   const now = new Date().toISOString();
 
   if (event === "install") {
+    // Bounded by the ordinary limiter only. Every `ctx-wire init <agent>`
+    // sends one install event with no retry, so a legit multi-agent init
+    // burst (or a NAT fleet onboarding) must never be dropped; installs are
+    // fixed +1 increments with no volume dimension, and inflating the counter
+    // is detectable and repairable in a way faked token volume is not.
     await recordInstall(env, country, now, payload);
     return json({ ok: true });
   }
 
-  const commands = clampInt(payload.commands, 0, MAX_COMMANDS);
-  const rawBytes = clampInt(payload.raw_bytes, 0, MAX_RAW_BYTES);
-  // A report cannot emit or save more than it produced; clamp to rawBytes so one
-  // malformed/malicious client cannot push the public savings % above 100.
-  const emittedBytes = Math.min(clampInt(payload.emitted_bytes, 0, MAX_EMITTED_BYTES), rawBytes);
-  const bytesSaved = Math.min(clampInt(payload.bytes_saved, 0, MAX_BYTES_SAVED), rawBytes);
-  const tokensSaved = clampInt(payload.tokens_saved, 0, MAX_TOKENS_SAVED);
-  const programs = parsePrograms(payload.programs);
-  const agents = parseAgents(payload.agents);
+  const impact = sanitizeImpact(payload);
+  const { commands, rawBytes, emittedBytes, bytesSaved, tokensSaved, programs, agents } = impact;
   const version = normalizeVersion(payload.version);
+
+  // Surface reports that tripped a consistency guard so `wrangler tail` can
+  // attribute skew attempts; the report still lands with the clamped values.
+  if (impact.flags.length > 0) {
+    console.log("consistency guard", country, impact.flags.join(","));
+  }
 
   if (
     commands === 0 &&
@@ -187,6 +202,20 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
     agents.length === 0
   ) {
     return json({ error: "empty_impact" }, 400);
+  }
+
+  // Outsized savings claims pass a second, much tighter per-IP limit. The
+  // standard limiter's shared-NAT headroom would let a flood of ceiling-sized
+  // reports add billions of fake tokens per hour; genuine heavy reports are
+  // far rarer than the limit here.
+  if (
+    env.HEAVY_RATE_LIMITER &&
+    (tokensSaved > HEAVY_REPORT_TOKENS || bytesSaved > HEAVY_REPORT_BYTES)
+  ) {
+    const { success } = await env.HEAVY_RATE_LIMITER.limit({ key: clientIP });
+    if (!success) {
+      return json({ error: "rate_limited" }, 429);
+    }
   }
 
   const statements: D1PreparedStatement[] = [
@@ -538,13 +567,108 @@ function normalizeCountry(value: unknown): string {
   return /^[A-Z]{2}$/.test(country) ? country : "XX";
 }
 
-interface Bucket {
+export interface Bucket {
   name: string;
   runs: number;
   bytesSaved: number;
   rawBytes: number;
   emittedBytes: number;
   tokensSaved: number;
+}
+
+interface ImpactTotals {
+  commands: number;
+  rawBytes: number;
+  emittedBytes: number;
+  bytesSaved: number;
+  tokensSaved: number;
+}
+
+// sanitizeImpact validates an impact payload into consistent, bounded totals
+// and breakdowns. Beyond per-field ceilings it enforces the bounds a genuine
+// client actually respects: saved bytes never exceed raw bytes, claimed tokens
+// never exceed what the saved volume can encode, and a breakdown never sums
+// past its totals. A crafted POST that violates them is clamped or stripped
+// rather than rejected, so the volume it is entitled to still counts while the
+// excess cannot inflate the public stats. Each guard that fired is named in
+// flags for logging.
+//
+// NOTE: saved is bounded by raw, NOT by raw - emitted. The client floors each
+// command's saved to 0 when a synthetic on_empty message makes emitted exceed
+// raw (internal/gain gain.go: `saved := rawBytes - emittedBytes; if saved < 0
+// { saved = 0 }`), so the summed saved legitimately exceeds summed raw minus
+// summed emitted for any client that runs empty searches. raw is the only
+// valid ceiling: each per-command term is max(0, raw - emitted) <= raw, so the
+// sum is <= sum(raw). An earlier raw-minus-emitted bound wrongly flagged (and,
+// for on_empty-heavy users, zeroed) genuine savings.
+export function sanitizeImpact(payload: TelemetryPayload): ImpactTotals & {
+  programs: Bucket[];
+  agents: Bucket[];
+  flags: string[];
+} {
+  const flags: string[] = [];
+  const commands = clampInt(payload.commands, 0, MAX_COMMANDS);
+  const rawBytes = clampInt(payload.raw_bytes, 0, MAX_RAW_BYTES);
+  // Emitted is capped at raw for a tidy display (it can legitimately exceed raw
+  // on on_empty-heavy reports); this cap is cosmetic and predates the guards.
+  const emittedBytes = Math.min(clampInt(payload.emitted_bytes, 0, MAX_EMITTED_BYTES), rawBytes);
+  // Saved is bounded by raw (see NOTE): a crafted report cannot claim it saved
+  // more than the bytes it produced, but on_empty savings are never clipped.
+  const bytesSaved = Math.min(clampInt(payload.bytes_saved, 0, MAX_BYTES_SAVED), rawBytes);
+  const claimedTokens = clampInt(payload.tokens_saved, 0, MAX_TOKENS_SAVED);
+  const tokensSaved = Math.min(claimedTokens, maxTokensFor(bytesSaved));
+  if (tokensSaved < claimedTokens) {
+    flags.push("tokens_saved_over_ratio");
+  }
+
+  const totals = { commands, rawBytes, emittedBytes, bytesSaved, tokensSaved };
+  let programs = parsePrograms(payload.programs);
+  if (!bucketsWithinTotals(programs, totals)) {
+    programs = [];
+    flags.push("programs_over_totals");
+  }
+  let agents = parseAgents(payload.agents);
+  if (!bucketsWithinTotals(agents, totals)) {
+    agents = [];
+    flags.push("agents_over_totals");
+  }
+  return { ...totals, programs, agents, flags };
+}
+
+// maxTokensFor bounds a claimed token count by the byte volume backing it.
+// The client derives tokens as ceil(bytes/4) (internal/telemetry
+// approxTokens); two bytes per token leaves 2x headroom for any future
+// estimator while still rejecting counts no real byte stream could encode.
+function maxTokensFor(bytesSaved: number): number {
+  return Math.ceil(bytesSaved / 2);
+}
+
+// bucketsWithinTotals reports whether a breakdown stays inside its report's
+// totals on every axis. A genuine client's breakdown sums to at most the
+// totals (top-N truncation only lowers it; each command has at most one
+// program and one agent, so runs compare against commands). Tokens get one
+// count of slack per entry because the client rounds each bucket's token
+// estimate up independently.
+function bucketsWithinTotals(buckets: Bucket[], totals: ImpactTotals): boolean {
+  let runs = 0;
+  let rawBytes = 0;
+  let emittedBytes = 0;
+  let bytesSaved = 0;
+  let tokensSaved = 0;
+  for (const b of buckets) {
+    runs += b.runs;
+    rawBytes += b.rawBytes;
+    emittedBytes += b.emittedBytes;
+    bytesSaved += b.bytesSaved;
+    tokensSaved += b.tokensSaved;
+  }
+  return (
+    runs <= totals.commands &&
+    rawBytes <= totals.rawBytes &&
+    emittedBytes <= totals.emittedBytes &&
+    bytesSaved <= totals.bytesSaved &&
+    tokensSaved <= totals.tokensSaved + buckets.length
+  );
 }
 
 function parsePrograms(value: unknown): Bucket[] {
@@ -584,6 +708,11 @@ function parseBuckets(value: unknown, maxEntries: number, allowlist?: Set<string
     cur.emittedBytes = clampInt(cur.emittedBytes + delta.emittedBytes, 0, MAX_EMITTED_BYTES);
     cur.bytesSaved = clampInt(cur.bytesSaved + delta.bytesSaved, 0, MAX_BYTES_SAVED);
     cur.tokensSaved = clampInt(cur.tokensSaved + delta.tokensSaved, 0, MAX_TOKENS_SAVED);
+    // Re-enforce the bounds after merging (saved by raw, tokens by saved); the
+    // on_empty note in sanitizeImpact applies equally per bucket.
+    cur.emittedBytes = Math.min(cur.emittedBytes, cur.rawBytes);
+    cur.bytesSaved = Math.min(cur.bytesSaved, cur.rawBytes);
+    cur.tokensSaved = Math.min(cur.tokensSaved, maxTokensFor(cur.bytesSaved));
     merged.set(name, cur);
   };
 
@@ -612,10 +741,12 @@ function parseBuckets(value: unknown, maxEntries: number, allowlist?: Set<string
     }
 
     const runs = clampInt(rawValue.runs ?? rawValue.count, 0, MAX_PROGRAM_RUNS);
+    // Each entry is bounded like the report totals: saved by its own raw (not
+    // raw - emitted; see the on_empty note in sanitizeImpact), tokens by saved.
     const rawBytes = clampInt(rawValue.raw_bytes, 0, MAX_RAW_BYTES);
-    const emittedBytes = clampInt(rawValue.emitted_bytes, 0, MAX_EMITTED_BYTES);
-    const bytesSaved = clampInt(rawValue.bytes_saved, 0, MAX_BYTES_SAVED);
-    const tokensSaved = clampInt(rawValue.tokens_saved, 0, MAX_TOKENS_SAVED);
+    const emittedBytes = Math.min(clampInt(rawValue.emitted_bytes, 0, MAX_EMITTED_BYTES), rawBytes);
+    const bytesSaved = Math.min(clampInt(rawValue.bytes_saved, 0, MAX_BYTES_SAVED), rawBytes);
+    const tokensSaved = Math.min(clampInt(rawValue.tokens_saved, 0, MAX_TOKENS_SAVED), maxTokensFor(bytesSaved));
     if (runs > 0 || rawBytes > 0 || emittedBytes > 0 || bytesSaved > 0 || tokensSaved > 0) {
       add(name, { runs, rawBytes, emittedBytes, bytesSaved, tokensSaved });
     }

@@ -28,11 +28,12 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: telemetry-worker/package-lock.json
-      - name: Worker typecheck
+      - name: Worker typecheck + tests
         working-directory: telemetry-worker
         run: |
           npm ci
           npm run check
+          npm test
 
   check:
     runs-on: ubuntu-latest

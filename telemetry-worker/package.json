@@ -8,11 +8,13 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "schema:local": "wrangler d1 execute ctx-wire-telemetry --local --file=./schema.sql",
-    "schema:remote": "wrangler d1 execute ctx-wire-telemetry --remote --file=./schema.sql"
+    "schema:remote": "wrangler d1 execute ctx-wire-telemetry --remote --file=./schema.sql",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
     "typescript": "latest",
+    "vitest": "^4.1.9",
     "wrangler": "^4.97.0"
   }
 }

@@ -17,3 +17,16 @@ name = "WRITE_RATE_LIMITER"
 type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 60, period = 60 }
+
+# Tighter second limiter for impact reports with outsized savings claims (see
+# HEAVY_REPORT_* in src/index.ts), the writes that move the public counters
+# disproportionately. Ordinary 30-minute impact flushes never touch it, and
+# install events deliberately stay on the ordinary limiter: every
+# `ctx-wire init <agent>` sends one unretried install event, so a multi-agent
+# init burst must never be dropped. 4/min still covers a shared NAT hosting
+# several genuinely heavy workloads.
+[[unsafe.bindings]]
+name = "HEAVY_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 4, period = 60 }
