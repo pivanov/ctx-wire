@@ -3,6 +3,7 @@ package telemetry
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -806,4 +807,55 @@ func payloadMap(t *testing.T, v any) map[string]any {
 		t.Fatal(err)
 	}
 	return payload
+}
+
+// TestBuildImpactPayloadCapsWireBuckets pins the fix for the oversized-payload
+// data-loss bug: a delta with many distinct programs must not build a payload
+// the worker rejects wholesale. The breakdown is capped to <= 50 buckets by
+// folding the tail into "other", and no savings are lost to the fold.
+func TestBuildImpactPayloadCapsWireBuckets(t *testing.T) {
+	on := true
+	cfg := Config{ShareImprovements: &on}
+	delta := Totals{Commands: 200, Programs: map[string]ProgramTotals{}}
+	var wantSaved int64
+	for i := 0; i < 130; i++ {
+		s := int64(10_000 - i) // strictly decreasing so the top-N is deterministic
+		delta.Programs[fmt.Sprintf("prog%03d", i)] = ProgramTotals{Count: 1, RawBytes: s, BytesSaved: s, TokensSaved: s}
+		wantSaved += s
+	}
+	p := buildImpactPayload(delta, cfg)
+	// Literal 50, not maxWireBuckets: removing the cap must fail this
+	// behaviorally (uncapped len would be 130), not just fail to compile.
+	if len(p.Programs) > 50 {
+		t.Fatalf("wire programs = %d, want <= 50 (uncapped would be 130, which the worker rejects)", len(p.Programs))
+	}
+	if _, ok := p.Programs["prog000"]; !ok {
+		t.Errorf("highest-savings program prog000 must stay itemized")
+	}
+	if _, ok := p.Programs[otherBucket]; !ok {
+		t.Errorf("folded tail must appear as %q", otherBucket)
+	}
+	var gotSaved int64
+	for _, b := range p.Programs {
+		gotSaved += b.BytesSaved
+	}
+	if gotSaved != wantSaved {
+		t.Errorf("folded saved = %d, want %d: the cap must not lose any savings", gotSaved, wantSaved)
+	}
+}
+
+// TestCapBucketsSmallMapUntouched confirms the common case (breakdown already
+// within the wire cap) is returned unchanged.
+func TestCapBucketsSmallMapUntouched(t *testing.T) {
+	m := map[string]ProgramTotals{
+		"git": {Count: 3, BytesSaved: 30},
+		"rg":  {Count: 2, BytesSaved: 20},
+	}
+	got := capBuckets(m)
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (small map must pass through)", len(got))
+	}
+	if _, ok := got[otherBucket]; ok {
+		t.Errorf("small map must not synthesize an %q bucket", otherBucket)
+	}
 }

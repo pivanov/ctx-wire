@@ -46,7 +46,16 @@ interface TelemetryPayload {
   machine?: unknown;
 }
 
-const MAX_BODY_BYTES = 16 * 1024;
+// Generous body ceiling: a pure abuse/cost backstop, NOT a shape constraint.
+// A real payload is a few KB (recent clients cap their own breakdown to ~50
+// buckets) and ~60KB even for a worst-case uncapped old client, so 1MB is far
+// above anything legitimate while staying cheap to read and small enough to
+// bound what an anonymous POST can force the Worker to hold in memory. The old
+// 16KB was tight enough that big real reports (first flush of a large history,
+// 100+ programs) were rejected wholesale and retried forever, silently losing an
+// install's telemetry. A reject is logged (see below) so if a legitimate client
+// ever approaches 1MB we see it in `wrangler tail` instead of losing it silently.
+const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_COMMANDS = 1_000_000;
 const MAX_RAW_BYTES = 1024 * 1024 * 1024;
 const MAX_EMITTED_BYTES = 1024 * 1024 * 1024;
@@ -145,11 +154,13 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
   // before rejection. The CLI always sets it (fetch/Go http with a sized body).
   const contentLength = Number(request.headers.get("content-length"));
   if (!Number.isFinite(contentLength) || contentLength <= 0 || contentLength > MAX_BODY_BYTES) {
+    console.log("body rejected (content-length)", clientIP, contentLength);
     return json({ error: "body_too_large" }, 413);
   }
 
   const text = await request.text();
   if (text.length > MAX_BODY_BYTES) {
+    console.log("body rejected (length)", clientIP, text.length);
     return json({ error: "body_too_large" }, 413);
   }
 
@@ -178,7 +189,16 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
     // burst (or a NAT fleet onboarding) must never be dropped; installs are
     // fixed +1 increments with no volume dimension, and inflating the counter
     // is detectable and repairable in a way faked token volume is not.
-    await recordInstall(env, country, now, payload);
+    //
+    // Wrap the D1 write like the impact path: a transient failure returns a
+    // logged 503 instead of an opaque unhandled 5xx. (Installs don't retry, so
+    // this write can still be lost, but at least it's visible in the log.)
+    try {
+      await recordInstall(env, country, now, payload);
+    } catch (err) {
+      console.log("d1 install write failed", country, String(err));
+      return json({ error: "write_failed" }, 503);
+    }
     return json({ ok: true });
   }
 
@@ -349,7 +369,16 @@ async function writeTelemetry(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  await env.ctx_wire_telemetry.batch(statements);
+  // The batch is one D1 transaction (all-or-nothing), so a failure commits
+  // nothing and the client's retry-preserves-state behavior re-sends the same
+  // delta cleanly, no double count. Catch it so a transient D1 error returns a
+  // logged 503 (client retries next flush) instead of an opaque unhandled 5xx.
+  try {
+    await env.ctx_wire_telemetry.batch(statements);
+  } catch (err) {
+    console.log("d1 write failed", country, String(err));
+    return json({ error: "write_failed" }, 503);
+  }
   return json({ ok: true });
 }
 

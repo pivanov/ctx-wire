@@ -1,7 +1,52 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeImpact } from "./index";
+import worker, { sanitizeImpact } from "./index";
 
 const base = { schema: 1, event: "impact" };
+
+// failingD1Env returns an Env whose every D1 write rejects, so the write-path
+// error handling can be exercised. Rate-limiter bindings are absent (the worker
+// fails open on those).
+function failingD1Env() {
+  const stmt = {
+    bind: () => stmt,
+    run: async () => {
+      throw new Error("d1 unavailable");
+    },
+  };
+  return {
+    ctx_wire_telemetry: {
+      prepare: () => stmt,
+      batch: async () => {
+        throw new Error("d1 unavailable");
+      },
+    },
+  } as unknown as Parameters<typeof worker.fetch>[1];
+}
+
+function postJSON(bodyObj: unknown): Request {
+  const body = JSON.stringify(bodyObj);
+  return new Request("https://telemetry.test/v1/telemetry", {
+    method: "POST",
+    headers: { "content-type": "application/json", "content-length": String(body.length) },
+    body,
+  });
+}
+
+const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
+
+describe("D1 write failure handling", () => {
+  it("returns a logged 503, not an opaque 5xx, when the install write fails", async () => {
+    const req = postJSON({ schema: 1, event: "install", agent: "claude", machine: true });
+    const res = await worker.fetch(req, failingD1Env(), ctx);
+    expect(res.status).toBe(503);
+  });
+
+  it("returns a logged 503, not an opaque 5xx, when the impact write fails", async () => {
+    const req = postJSON({ ...base, commands: 1, raw_bytes: 100, emitted_bytes: 10, bytes_saved: 90, tokens_saved: 22 });
+    const res = await worker.fetch(req, failingD1Env(), ctx);
+    expect(res.status).toBe(503);
+  });
+});
 
 describe("sanitizeImpact", () => {
   it("passes a stock client report through unchanged", () => {

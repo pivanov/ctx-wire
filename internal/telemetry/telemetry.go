@@ -275,13 +275,57 @@ func buildImpactPayload(delta Totals, cfg Config) impactPayload {
 		EmittedBytes: delta.EmittedBytes,
 		BytesSaved:   delta.BytesSaved,
 		TokensSaved:  delta.TokensSaved,
-		Programs:     delta.Programs,
-		Agents:       delta.Agents,
+		Programs:     capBuckets(delta.Programs),
+		Agents:       capBuckets(delta.Agents),
 	}
 	if !shareImprovements(cfg) {
 		p.Programs = nil
 	}
 	return p
+}
+
+// maxWireBuckets bounds the per-program and per-agent breakdown a single report
+// puts on the wire. The worker stores at most 50 program buckets and rejects
+// oversized request bodies; the delta otherwise carries every distinct program
+// run since the last successful flush, so an install with a long, tool-diverse
+// history (or a large first flush of accumulated history) could build a payload
+// the worker drops wholesale, then retry it forever, silently losing all of that
+// install's telemetry. Keeping the top buckets by bytes saved and folding the
+// rest into "other" bounds the body to a few KB while preserving both the scalar
+// totals (sent separately) and the breakdown's aggregate.
+const maxWireBuckets = 50
+
+func capBuckets(m map[string]ProgramTotals) map[string]ProgramTotals {
+	if len(m) <= maxWireBuckets {
+		return m
+	}
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	// Highest savings first, name as a stable tie-break so the wire output is
+	// deterministic regardless of Go's map iteration order.
+	sort.Slice(names, func(i, j int) bool {
+		if m[names[i]].BytesSaved != m[names[j]].BytesSaved {
+			return m[names[i]].BytesSaved > m[names[j]].BytesSaved
+		}
+		return names[i] < names[j]
+	})
+	out := make(map[string]ProgramTotals, maxWireBuckets)
+	var other ProgramTotals
+	for i, name := range names {
+		if i < maxWireBuckets-1 {
+			out[name] = m[name]
+		} else {
+			other = addBucket(other, m[name])
+		}
+	}
+	// A tail folded into "other" (merging with any existing "other" from the
+	// kept set) keeps the breakdown's aggregate equal to the totals.
+	if !programEmpty(other) {
+		out[otherBucket] = addBucket(out[otherBucket], other)
+	}
+	return out
 }
 
 func ReportImpact(summary *gain.Summary) (Result, error) {
