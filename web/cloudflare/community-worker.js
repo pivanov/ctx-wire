@@ -30,7 +30,7 @@ export async function handleCommunity(request, env, ctx) {
 
   // 2) cache miss → fetch GitHub
   try {
-    const payload = await fetchCommunity(repo, env);
+    const payload = await fetchCommunity(repo, env, cache, staleKey);
     const body = JSON.stringify(payload);
     ctx.waitUntil(cache.put(freshKey, jsonResponse(body, FRESH_TTL)));
     ctx.waitUntil(cache.put(staleKey, jsonResponse(body, STALE_TTL)));
@@ -58,7 +58,7 @@ export async function handleCommunity(request, env, ctx) {
   }
 }
 
-async function fetchCommunity(repo, env) {
+async function fetchCommunity(repo, env, cache, staleKey) {
   const headers = { "User-Agent": UA, Accept: "application/vnd.github+json" };
   // Optional GITHUB_TOKEN secret. Public repo data needs no scope, so a
   // read-only/public-only token just lifts the rate limit from 60/hr
@@ -66,25 +66,45 @@ async function fetchCommunity(repo, env) {
   // and the cache/backoff above degrades gracefully.
   const token = env && env.GITHUB_TOKEN;
   if (token) headers.Authorization = `Bearer ${token}`;
-  const [repoRes, starRes] = await Promise.all([
-    fetch(`${GH}/repos/${repo}`, { headers }),
-    fetch(`${GH}/repos/${repo}/stargazers?per_page=100`, { headers }),
-  ]);
-  if (!repoRes.ok) throw new Error(`repo ${repoRes.status}`);
-  if (!starRes.ok) throw new Error(`stargazers ${starRes.status}`);
 
+  // The star COUNT is the value that matters and comes from the repo endpoint.
+  // It is required: if this fails, throw so the caller serves stale and backs off.
+  const repoRes = await fetch(`${GH}/repos/${repo}`, { headers });
+  if (!repoRes.ok) throw new Error(`repo ${repoRes.status}`);
   const meta = await repoRes.json();
-  const list = await starRes.json();
-  const stargazers = (Array.isArray(list) ? list : []).map((u) => ({
-    login: u.login,
-    avatar: u.avatar_url,
-    url: u.html_url,
-  }));
-  return {
-    stars: Number(meta.stargazers_count || stargazers.length || 0),
-    stargazers,
-    cached_at: new Date().toISOString(),
-  };
+  const stars = Number(meta.stargazers_count || 0);
+
+  // The stargazer AVATAR list is best-effort and must NOT gate the count:
+  // GitHub currently 404s the stargazers endpoint even with a valid token, so
+  // a failure here is expected. Fall back to the last-good avatars from the
+  // stale cache so the row does not blank out while the count stays correct.
+  let stargazers = [];
+  try {
+    const starRes = await fetch(`${GH}/repos/${repo}/stargazers?per_page=100`, { headers });
+    if (starRes.ok) {
+      const list = await starRes.json();
+      stargazers = (Array.isArray(list) ? list : []).map((u) => ({
+        login: u.login,
+        avatar: u.avatar_url,
+        url: u.html_url,
+      }));
+    }
+  } catch {
+    // ignore: avatars are best-effort
+  }
+  if (stargazers.length === 0 && cache && staleKey) {
+    const prev = await cache.match(staleKey);
+    if (prev) {
+      try {
+        const p = await prev.json();
+        if (Array.isArray(p.stargazers)) stargazers = p.stargazers;
+      } catch {
+        // ignore: no usable last-good list
+      }
+    }
+  }
+
+  return { stars, stargazers, cached_at: new Date().toISOString() };
 }
 
 function jsonResponse(body, ttl) {
