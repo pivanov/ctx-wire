@@ -1,10 +1,11 @@
 // GET /v1/community: { stars, stargazers } for STARGAZER_REPO (env var, default
-// pivanov/ctx-wire), cached ~1h with a stale fallback, no GitHub token needed.
+// pivanov/ctx-wire), cached with a stale fallback, no GitHub token needed.
 // Merge into the telemetry worker: route /v1/community to handleCommunity().
 
 const DEFAULT_REPO = "pivanov/ctx-wire";
-const FRESH_TTL = 3600; // serve cached for 1 hour
-const STALE_TTL = 604800; // keep last-good up to 7 days as a fallback
+const FRESH_TTL = 21600; // serve a good value for 6h before refreshing (stars move slowly)
+const RETRY_TTL = 300; // after a failed refresh, wait 5m before hitting GitHub again
+const STALE_TTL = 604800; // keep last-good up to 7 days as the fallback body
 const GH = "https://api.github.com";
 const UA = "ctx-wire-web (+https://github.com/pivanov/ctx-wire)";
 
@@ -29,26 +30,42 @@ export async function handleCommunity(request, env, ctx) {
 
   // 2) cache miss → fetch GitHub
   try {
-    const payload = await fetchCommunity(repo);
+    const payload = await fetchCommunity(repo, env);
     const body = JSON.stringify(payload);
     ctx.waitUntil(cache.put(freshKey, jsonResponse(body, FRESH_TTL)));
     ctx.waitUntil(cache.put(staleKey, jsonResponse(body, STALE_TTL)));
     return withCors(jsonResponse(body, FRESH_TTL));
   } catch (err) {
-    // 3) GitHub failed (e.g. 403 rate limit) → serve last-good if we have it
+    // 3) GitHub failed (typically the 60/hr unauthenticated limit on the shared
+    // Worker IP). Serve last-good AND re-arm both caches so a failure can't
+    // snowball: write it back into the fresh key with a short TTL so we retry
+    // GitHub at most once per RETRY_TTL instead of on every request (hammering
+    // it would self-inflict the rate limit), and re-put the stale key so the
+    // last-good never decays to the stars:0 fallback.
+    console.log("community: github refresh failed", repo, String(err));
     const stale = await cache.match(staleKey);
-    if (stale) return withCors(stale);
-    return withCors(
-      jsonResponse(
-        JSON.stringify({ stars: 0, stargazers: [], error: String(err) }),
-        60
-      )
-    );
+    if (stale) {
+      const body = await stale.text();
+      ctx.waitUntil(cache.put(freshKey, jsonResponse(body, RETRY_TTL)));
+      ctx.waitUntil(cache.put(staleKey, jsonResponse(body, STALE_TTL)));
+      return withCors(jsonResponse(body, RETRY_TTL));
+    }
+    // No last-good at all (cold worker that has never succeeded): negative-cache
+    // briefly so we still retry soon without hammering.
+    const body = JSON.stringify({ stars: 0, stargazers: [], error: String(err) });
+    ctx.waitUntil(cache.put(freshKey, jsonResponse(body, RETRY_TTL)));
+    return withCors(jsonResponse(body, RETRY_TTL));
   }
 }
 
-async function fetchCommunity(repo) {
+async function fetchCommunity(repo, env) {
   const headers = { "User-Agent": UA, Accept: "application/vnd.github+json" };
+  // Optional GITHUB_TOKEN secret. Public repo data needs no scope, so a
+  // read-only/public-only token just lifts the rate limit from 60/hr
+  // (unauthenticated, shared Worker IP) to 5,000/hr. Absent -> unauthenticated,
+  // and the cache/backoff above degrades gracefully.
+  const token = env && env.GITHUB_TOKEN;
+  if (token) headers.Authorization = `Bearer ${token}`;
   const [repoRes, starRes] = await Promise.all([
     fetch(`${GH}/repos/${repo}`, { headers }),
     fetch(`${GH}/repos/${repo}/stargazers?per_page=100`, { headers }),

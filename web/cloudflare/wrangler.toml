@@ -3,5 +3,6 @@ main = "community-worker.js"
 compatibility_date = "2025-01-01"
 
 # Serves GET /v1/community: { stars, stargazers } for pivanov/ctx-wire, proxied
-# from GitHub and cached (1h fresh, 7d stale on 403) so the browser never hits
-# GitHub's 60/hr unauthenticated limit. Deploy: wrangler deploy.
+# from GitHub and cached (6h fresh, 5m retry-backoff on failure, 7d stale) so the
+# browser never hits GitHub's 60/hr unauthenticated limit and a rate-limit window
+# can't snowball or decay the count to 0. Deploy: wrangler deploy.
