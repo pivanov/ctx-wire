@@ -84,6 +84,20 @@ func Run(ctx context.Context, reg *filter.Registry, name string, args []string) 
 		return streamLive(ctx, execName, args, scrubbedCmd, spool, os.Stdout, os.Stderr, true)
 	}
 
+	// Machine-readable output (git --porcelain/-z/--format) is consumed by a
+	// parser, an IDE's Source Control panel or a script, not the agent. A line
+	// filter or dedup would corrupt it (VS Code polling `git status --porcelain -z`
+	// through a PATH shim and seeing a truncated file list), so stream it whole and
+	// unfiltered (scrubbing preserved). The byte ceiling is a flood backstop: keep
+	// it for agent callers (hook/MCP; the full output is still spooled and
+	// recoverable via `ctx-wire fetch`) and lift it only for an external tool
+	// reaching us through a PATH shim, which must parse the whole output and where
+	// a cap buys the agent nothing.
+	if commandpolicy.IsMachineReadable(name, args) {
+		ceilingOff := os.Getenv(shim.EnvName) != ""
+		return streamLive(ctx, execName, args, scrubbedCmd, spool, os.Stdout, os.Stderr, ceilingOff)
+	}
+
 	matched := reg.Find(cmdline)
 
 	// No filter: stream output live (line-buffered, scrubbed) so long-running

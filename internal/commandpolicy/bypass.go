@@ -109,6 +109,35 @@ func IsFullFileRead(name string, args []string) bool {
 	return operands > 0
 }
 
+// IsMachineReadable reports whether name+args request machine-parseable output
+// that a tool, not the agent, consumes: git's --porcelain, git -z, or a git
+// --format/--pretty template. Such output must be streamed whole and unfiltered,
+// because a line filter or dedup would corrupt what an IDE's Source Control or a
+// script parses, e.g. VS Code polling `git status --porcelain -z` and getting a
+// truncated file list.
+//
+// Scope is deliberately git-only (plus --porcelain, which only VCS tools use):
+// -z means gzip for tar/xz, and a bare -0/--null is a coincidental argument for
+// python/kill/etc. Generic NUL-separated idioms (find -print0, sort -z, grep -Z,
+// xargs -0) share this bug class and are a separate, per-tool follow-up.
+func IsMachineReadable(name string, args []string) bool {
+	git := filepath.Base(name) == "git"
+	for _, a := range args {
+		switch {
+		case a == "--porcelain" || strings.HasPrefix(a, "--porcelain="):
+			return true
+		case git && a == "-z":
+			return true
+		case git && (a == "--format" || strings.HasPrefix(a, "--format=") ||
+			strings.HasPrefix(a, "--pretty=format:") || strings.HasPrefix(a, "--pretty=tformat:")):
+			// git log/for-each-ref/branch/tag --format is a custom template a tool
+			// parses (VS Code's history graph); never a filter target.
+			return true
+		}
+	}
+	return false
+}
+
 // matchesFullFilePattern reports whether path's basename matches any active
 // full-file pattern, using filepath.Match glob syntax (*, ?, [..]).
 func matchesFullFilePattern(path string) bool {

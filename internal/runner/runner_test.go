@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"ctx-wire/internal/filter"
+	"ctx-wire/internal/shim"
 	"ctx-wire/internal/tee"
 )
 
@@ -48,6 +49,134 @@ func TestShouldBypass(t *testing.T) {
 				t.Errorf("shouldBypass(%q, %v) = %v, want %v", tt.cmd, tt.args, got, tt.want)
 			}
 		})
+	}
+}
+
+// captureStdout redirects os.Stdout for fn and returns what was written. A drain
+// goroutine reads concurrently so output larger than the pipe buffer never blocks.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(r)
+		done <- buf.String()
+	}()
+	fn()
+	_ = w.Close()
+	os.Stdout = old
+	return <-done
+}
+
+// TestRunMachineReadableGitNotTruncated is the regression test for the shim/IDE
+// corruption bug: VS Code's Source Control polls `git status --porcelain -z`, and
+// before the machine-readable bypass ctx-wire's git-status filter (max_lines /
+// truncate_lines_at) plus dedup mangled that NUL-separated output, so the IDE saw
+// only a few files. The bypass must stream it whole and unfiltered.
+func TestRunMachineReadableGitNotTruncated(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	repo := t.TempDir()
+	mustRunIn(t, repo, "git", "init", "-q")
+	const nFiles = 20
+	for i := 0; i < nFiles; i++ {
+		if err := os.WriteFile(filepath.Join(repo, "f"+strconv.Itoa(i)+".txt"), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg := mustRegistry(t)
+	var code int
+	var runErr error
+	out := captureStdout(t, func() {
+		code, runErr = Run(context.Background(), reg, "git", []string{"-C", repo, "status", "--porcelain", "-z"})
+	})
+	if runErr != nil {
+		t.Fatalf("Run: %v", runErr)
+	}
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0", code)
+	}
+	raw := exec.Command("git", "-C", repo, "status", "--porcelain", "-z")
+	rawOut, err := raw.Output()
+	if err != nil {
+		t.Fatalf("raw git status: %v", err)
+	}
+	if !bytes.Equal([]byte(out), rawOut) {
+		t.Fatalf("machine-readable git status was not byte-identical to raw git\nctx-wire=%q\nraw=%q", out, string(rawOut))
+	}
+	entries := 0
+	for _, e := range strings.Split(out, "\x00") {
+		if strings.TrimSpace(e) != "" {
+			entries++
+		}
+	}
+	if entries != nFiles {
+		t.Fatalf("machine-readable git status returned %d entries, want %d (filter/dedup/ceiling must not truncate); out=%q", entries, nFiles, out)
+	}
+}
+
+func mustRunIn(t *testing.T, dir, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+	}
+}
+
+// TestRunMachineReadableCeilingGatedOnShim verifies fix 1: filter/dedup are
+// always bypassed for machine-readable git, but the byte ceiling (flood backstop)
+// is lifted only for an external shim caller (an IDE parsing the whole output).
+// An agent caller (no shim env) keeps the ceiling so a huge porcelain in a big
+// repo cannot flood its context.
+func TestRunMachineReadableCeilingGatedOnShim(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	t.Setenv("CTX_WIRE_TEE_DIR", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())  // isolate any shim-usage write
+	t.Setenv("XDG_STATE_HOME", t.TempDir()) // isolate any state write
+	t.Setenv("CTX_WIRE_TRUNCATE", "aggressive")
+	repo := t.TempDir()
+	mustRunIn(t, repo, "git", "init", "-q")
+	pad := strings.Repeat("n", 60)
+	for i := 0; i < 700; i++ {
+		if err := os.WriteFile(filepath.Join(repo, pad+strconv.Itoa(i)+".txt"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rawOut, err := exec.Command("git", "-C", repo, "status", "--porcelain", "-z").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rawOut) < 40<<10 {
+		t.Fatalf("test setup: raw output %d bytes, expected well over the aggressive ceiling", len(rawOut))
+	}
+	args := []string{"-C", repo, "status", "--porcelain", "-z"}
+
+	// Agent caller (no shim env): ceiling applies, output is capped below raw.
+	agentOut := captureStdout(t, func() {
+		Run(context.Background(), mustRegistry(t), "git", args)
+	})
+	if len(agentOut) >= len(rawOut) {
+		t.Fatalf("agent caller output %d bytes was not capped below raw %d", len(agentOut), len(rawOut))
+	}
+
+	// Shim caller: ceiling lifted, output is the whole raw porcelain.
+	t.Setenv(shim.EnvName, "git")
+	shimOut := captureStdout(t, func() {
+		Run(context.Background(), mustRegistry(t), "git", args)
+	})
+	if !bytes.Equal([]byte(shimOut), rawOut) {
+		t.Fatalf("shim caller output not whole: got %d bytes, want raw %d", len(shimOut), len(rawOut))
 	}
 }
 

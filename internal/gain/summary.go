@@ -652,6 +652,11 @@ func isHookLimitedSample(program, sample string) bool {
 	if isInteractiveProgram(program) {
 		return true
 	}
+	if fields := strings.Fields(inner); len(fields) > 0 && commandpolicy.IsMachineReadable(fields[0], fields[1:]) {
+		// Machine-readable output (git --porcelain/-z/--format) intentionally
+		// bypasses filtering, so it is not a "missing filter" to advise on.
+		return true
+	}
 	for _, tok := range strings.Fields(inner) {
 		if commandpolicy.IsStreamingArg(tok) {
 			return true
