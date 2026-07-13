@@ -442,6 +442,31 @@ func cmdInitCodex() int {
 		}
 	}
 
+	// Gain-log durability: Codex's workspace-write sandbox denies writes to
+	// ctx-wire's data dir, so the gain log silently falls back to a $TMPDIR copy
+	// macOS eventually purges (idle janitor / OS update). Granting write to that
+	// one directory keeps codex's local gain history durable. Best-effort.
+	if root, rerr := install.CodexWritableRoot(); rerr == nil {
+		switch res, serr := install.InstallCodexWritableRoot(configPath, root); {
+		case serr != nil:
+			fmt.Fprintf(os.Stderr, "ctx-wire init: codex gain durability: %v\n", serr)
+		case res == install.CodexSandboxUpdated:
+			fmt.Printf("%s %s in %s (sandbox_workspace_write.writable_roots)\n", theme.OK.Render("Configured"), theme.Path.Render(root), theme.Path.Render(configPath))
+			fmt.Println("   Keeps codex's gain log durable under the sandbox; grants write to ctx-wire's data dir only.")
+			fmt.Println("   Applies on the next Codex session; `ctx-wire uninstall` reverts this root.")
+		case res == install.CodexSandboxNoChange:
+			fmt.Printf("%s codex gain durability already configured in %s\n", theme.OK.Render("OK"), theme.Path.Render(configPath))
+		case res == install.CodexSandboxConflict:
+			fmt.Printf("%s %s uses Codex's newer [permissions] system; leaving the sandbox config untouched.\n", theme.Warn.Render("Note"), theme.Path.Render(configPath))
+			fmt.Printf("       For durable codex gain, grant write access to %s in your permissions config.\n", theme.Path.Render(root))
+		case res == install.CodexSandboxManual:
+			fmt.Printf("%s could not confidently edit %s; for durable codex gain add manually:\n", theme.Warn.Render("Note"), theme.Path.Render(configPath))
+			for _, line := range strings.Split(install.CodexWritableRootSnippet(root), "\n") {
+				fmt.Printf("       %s\n", line)
+			}
+		}
+	}
+
 	fmt.Printf("\n%s\n", theme.Section.Render("Two user steps remain (ctx-wire does not perform them for you):"))
 	if !enabled {
 		fmt.Printf("  1. Enable hooks: add to %s\n", theme.Path.Render(configPath))

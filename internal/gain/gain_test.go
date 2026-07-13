@@ -282,6 +282,77 @@ func TestRecordFallsBackWhenPrimaryUnavailable(t *testing.T) {
 	}
 }
 
+func TestRecordDrainsFallbackAfterPrimaryWrite(t *testing.T) {
+	dir := t.TempDir()
+	primary := filepath.Join(dir, "data", "ctx-wire", "gain.jsonl")
+	fallback := filepath.Join(dir, "fallback", "gain.jsonl")
+	t.Setenv(envFile, "")
+	t.Setenv(envFallbackFile, fallback)
+	t.Setenv(envDisable, "")
+	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
+
+	writeEntry(t, fallback+".1", Entry{TS: "2026-07-13T10:00:00Z", Command: "git fallback-rotated", RawBytes: 1000, EmittedBytes: 100, SavedBytes: 900})
+	writeEntry(t, fallback, Entry{TS: "2026-07-13T10:01:00Z", Command: "git fallback-current", RawBytes: 2000, EmittedBytes: 200, SavedBytes: 1800})
+
+	if err := Record("git primary", 3000, 300, 0); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	entries, err := readEntries(primary)
+	if err != nil {
+		t.Fatalf("read primary: %v", err)
+	}
+	got := map[string]bool{}
+	for _, e := range entries {
+		got[e.Command] = true
+	}
+	for _, want := range []string{"git primary", "git fallback-rotated", "git fallback-current"} {
+		if !got[want] {
+			t.Fatalf("primary missing drained command %q; entries=%+v", want, entries)
+		}
+	}
+	for _, path := range []string{fallback + ".1", fallback} {
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("fallback path %s was not drained", path)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat fallback path %s: %v", path, err)
+		}
+	}
+
+	s, err := Summarize()
+	if err != nil {
+		t.Fatalf("Summarize: %v", err)
+	}
+	if s.Commands != 3 || s.SavedBytes != 5400 {
+		t.Fatalf("summary after drain = %+v, want 3 commands and 5400 saved bytes", s)
+	}
+}
+
+func TestRecordSkipsDrainLockWhenFallbackEmpty(t *testing.T) {
+	dir := t.TempDir()
+	fallback := filepath.Join(dir, "fallback", "gain.jsonl")
+	t.Setenv(envFile, "")
+	t.Setenv(envFallbackFile, fallback)
+	t.Setenv(envDisable, "")
+	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
+
+	if err := os.MkdirAll(filepath.Dir(fallback), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fallback, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Record("git primary", 3000, 300, 0); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if _, err := os.Stat(fallback + ".lock"); err == nil {
+		t.Fatalf("empty fallback should not create a drain lock")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat fallback lock: %v", err)
+	}
+}
+
 func TestSummarizeAggregates(t *testing.T) {
 	useTempLog(t)
 	mustRecord(t, "git status", 1000, 100, 0)

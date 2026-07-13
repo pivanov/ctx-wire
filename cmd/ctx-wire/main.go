@@ -94,6 +94,11 @@ func main() {
 		selfupdate.MaybeBackgroundUpdate(version, cfg.Update.Interval())
 	}
 	maybeRefreshManagedShims(os.Args[1])
+	// Migrate existing installs: after a ctx-wire version change, grant Codex's
+	// sandbox durable write access to ctx-wire's data dir so codex gain stops
+	// falling into a $TMPDIR copy macOS purges. Once per version, silent and
+	// idempotent, and only for a Codex ctx-wire already manages.
+	selfupdate.MaybeRunPostUpdate(version, install.SyncCodexWritableRootOnUpdate)
 	// Migrate existing installs: nudge hook/plugin users (once) that redundant PATH
 	// shims are slowing their prompt and can be removed with one command. Advisory
 	// only, never auto-deletes (see maybeAdviseRedundantShims).

@@ -165,6 +165,23 @@ var agentRegistry = []agentDescriptor{
 				}
 			}
 			if path, err := CodexConfigPath(); err == nil {
+				// Remove the sandbox writable root before the agent-env key: the
+				// env block's cleanup treats any following non-blank line as
+				// "section not empty", so a ctx-wire sandbox block still wedged
+				// after it would leave an empty [shell_environment_policy] stub
+				// behind on a fresh-install round trip. Sandbox-first avoids that.
+				if root, rerr := CodexWritableRoot(); rerr == nil {
+					res, err := UninstallCodexWritableRoot(path, root)
+					if err != nil {
+						return err
+					}
+					switch res {
+					case CodexSandboxUpdated:
+						r.Removed = append(r.Removed, "codex sandbox writable root")
+					case CodexSandboxManual:
+						r.Skipped = append(r.Skipped, path)
+					}
+				}
 				res, err := UninstallCodexAgentEnv(path)
 				if err != nil {
 					return err

@@ -276,6 +276,9 @@ func RecordWithMeta(command, filterName, mode, agentName, source string, rawByte
 	}
 
 	if err := appendLine(path, line); err == nil || os.Getenv(envFile) != "" {
+		if err == nil && os.Getenv(envFile) == "" {
+			_ = drainFallbackGain(path)
+		}
 		return err
 	}
 	fallback, err := fallbackGainPath()
@@ -286,6 +289,13 @@ func RecordWithMeta(command, filterName, mode, agentName, source string, rawByte
 }
 
 func appendLine(path string, line []byte) error {
+	data := make([]byte, 0, len(line)+1)
+	data = append(data, line...)
+	data = append(data, '\n')
+	return appendBytes(path, data)
+}
+
+func appendBytes(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -296,7 +306,17 @@ func appendLine(path string, line []byte) error {
 		return err
 	}
 	defer unlock()
-	if err := rotateGainLog(path, int64(len(line)+1)); err != nil {
+	return appendBytesLocked(path, data)
+}
+
+func appendBytesLocked(path string, data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if err := rotateGainLog(path, int64(len(data))); err != nil {
 		return err
 	}
 	// O_APPEND keeps concurrent writes from multiple ctx-wire processes
@@ -306,8 +326,87 @@ func appendLine(path string, line []byte) error {
 		return err
 	}
 	defer f.Close()
-	_, err = f.Write(append(line, '\n'))
+	_, err = f.Write(data)
 	return err
+}
+
+// drainFallbackGain moves entries from the sandbox fallback log family into the
+// durable primary log after a primary write has succeeded. This lets sandboxed
+// Codex/Desktop-App writes survive once any later unsandboxed ctx-wire command
+// can write the primary store. Best-effort: failures leave the fallback intact
+// for the next successful primary write.
+func drainFallbackGain(primary string) error {
+	fallback, err := fallbackGainPath()
+	if err != nil {
+		return err
+	}
+	if fallback == primary {
+		return nil
+	}
+	if !fallbackFamilyHasData(fallback) {
+		return nil
+	}
+
+	gainWriteMu.Lock()
+	defer gainWriteMu.Unlock()
+
+	// Lock the current fallback path; fallback writers also hold this lock while
+	// rotating the family, so this serializes the read+clear with concurrent
+	// sandboxed appends.
+	unlockFallback, err := acquireGainLock(fallback)
+	if err != nil {
+		return err
+	}
+	defer unlockFallback()
+
+	var drained bytes.Buffer
+	fallbackPaths := gainLogFamily(fallback)
+	for _, path := range fallbackPaths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return err
+		}
+		if len(data) == 0 {
+			continue
+		}
+		drained.Write(data)
+		if data[len(data)-1] != '\n' {
+			drained.WriteByte('\n')
+		}
+	}
+	if drained.Len() == 0 {
+		return nil
+	}
+
+	unlockPrimary, err := acquireGainLock(primary)
+	if err != nil {
+		return err
+	}
+	if err := appendBytesLocked(primary, drained.Bytes()); err != nil {
+		unlockPrimary()
+		return err
+	}
+	unlockPrimary()
+
+	var firstErr error
+	for _, path := range fallbackPaths {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func fallbackFamilyHasData(fallback string) bool {
+	for _, path := range gainLogFamily(fallback) {
+		if st, err := os.Stat(path); err == nil && st.Size() > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func truncateCommandSample(s string) string {

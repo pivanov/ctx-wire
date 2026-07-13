@@ -416,6 +416,21 @@ func codexHookChecks(p install.AgentProbe, opts Options) []Check {
 			checks = append(checks, Check{"codex agent attribution", Warn,
 				"not set; run `ctx-wire init codex` so gain attributes direct runs when the sandbox blocks ps"})
 		}
+		// Gain durability: classic CLI Codex honors sandbox_workspace_write,
+		// while the ChatGPT desktop app builds per-exec sandbox state and may
+		// still write sandboxed entries to the $TMPDIR fallback. Primary writes
+		// now drain that fallback into the durable log. Config-present only; the
+		// runtime proof is post-session entries in the primary log and a fallback
+		// mtime that stops advancing except for sandboxed-only bursts.
+		if root, rerr := install.CodexWritableRoot(); rerr == nil {
+			if install.CodexWritableRootConfigured(cp, root) {
+				checks = append(checks, Check{"codex gain durability", OK,
+					"classic writable_roots grant present; CLI codex can write the primary log, and desktop-app fallback entries are recovered on later primary writes"})
+			} else if _, serr := os.Stat(cp); serr == nil {
+				checks = append(checks, Check{"codex gain durability", Warn,
+					"classic writable_roots grant missing; sandboxed codex may fall back to $TMPDIR until a later primary write drains it. Run `ctx-wire init codex` for CLI direct durability"})
+			}
+		}
 	}
 	return checks
 }

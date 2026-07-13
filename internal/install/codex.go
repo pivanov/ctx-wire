@@ -143,6 +143,28 @@ func hasCodexHook(pre []any) bool {
 	return false
 }
 
+// CodexHookInstalled reports whether ctx-wire's Bash hook is present in the
+// hooks.json at path. It parses the file and inspects hook commands structurally
+// (via hasCodexHook), so an incidental occurrence of the command string
+// elsewhere in the JSON never counts as installed.
+func CodexHookInstalled(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var root map[string]any
+	if json.Unmarshal(data, &root) != nil {
+		return false
+	}
+	hooks, _ := root["hooks"].(map[string]any)
+	for _, v := range hooks {
+		if list, ok := v.([]any); ok && hasCodexHook(list) {
+			return true
+		}
+	}
+	return false
+}
+
 // CodexHooksEnabled reports whether [features] hooks = true in the config.toml
 // at path. A missing file or missing key reports false. ctx-wire never flips
 // this flag itself; enabling hooks is a user decision.
