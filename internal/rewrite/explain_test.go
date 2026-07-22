@@ -110,3 +110,54 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+func TestRewriteMetadata(t *testing.T) {
+	le := RewriteMetadata("git status; FOO=1 git log", "pi")
+	wantResult := "ctx-wire run --agent pi git status; FOO=1 ctx-wire run --agent pi git log"
+	if le.Result != wantResult || !le.Changed {
+		t.Fatalf("result = %q changed=%v, want %q/true", le.Result, le.Changed, wantResult)
+	}
+	if len(le.Segments) != 2 {
+		t.Fatalf("segments = %d, want 2", len(le.Segments))
+	}
+	for i, want := range []struct {
+		program string
+		inner   string
+	}{
+		{"git", "git status"},
+		{"git", "git log"},
+	} {
+		got := le.Segments[i]
+		if !got.Wrapped || got.Program != want.program || got.Inner != want.inner {
+			t.Errorf("segment %d = %+v, want wrapped program=%q inner=%q", i, got, want.program, want.inner)
+		}
+		if got.Rewritten == "" {
+			t.Errorf("segment %d missing rewritten command", i)
+		}
+	}
+}
+
+func TestRewriteMetadataChangedFalseForPassthrough(t *testing.T) {
+	le := RewriteMetadata("cd /tmp", "pi")
+	if le.Changed || le.Result != le.Original {
+		t.Fatalf("passthrough changed: %+v", le)
+	}
+	if got := le.Segments[0].Program; got != "" {
+		t.Fatalf("passthrough program = %q, want empty", got)
+	}
+}
+
+func TestExplainMetadataMatchesRuntimeLookPath(t *testing.T) {
+	orig := lookPath
+	lookPath = func(string) bool { return false }
+	t.Cleanup(func() { lookPath = orig })
+
+	le := RewriteMetadata("missing-command arg", "pi")
+	if le.Changed || le.Result != le.Original {
+		t.Fatalf("result changed despite failed lookup: %+v", le)
+	}
+	segment := le.Segments[0]
+	if segment.Wrapped || segment.Reason != ReasonExecutableNotFound || segment.Program != "" {
+		t.Fatalf("segment does not match runtime passthrough: %+v", segment)
+	}
+}

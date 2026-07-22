@@ -72,11 +72,19 @@ func Line(line string) string {
 // process-tree detection for plugins, MCP hosts, and agents that launch shell
 // commands through helper processes.
 func LineForAgent(line, agentName string) string {
-	name := agent.Normalize(agentName)
-	if name == "" {
+	wrap := wrapForAgent(agentName)
+	if wrap == prefix {
 		return Line(line)
 	}
-	return lineWith(line, "ctx-wire run --agent "+name+" ")
+	return lineWith(line, wrap)
+}
+
+func wrapForAgent(agentName string) string {
+	name := agent.Normalize(agentName)
+	if name == "" {
+		return prefix
+	}
+	return "ctx-wire run --agent " + name + " "
 }
 
 // lineWith rewrites a command line using wrap as the wrap prefix for each
@@ -570,6 +578,7 @@ const (
 	ReasonEnvFlags           = "env with flags"
 	ReasonShellCommandString = "shell command string"
 	ReasonDynamicCommand     = "dynamic command"
+	ReasonExecutableNotFound = "executable not found on PATH"
 	ReasonExcluded           = "excluded by config"
 	ReasonUnattestable       = "unattestable shell construct"
 )
