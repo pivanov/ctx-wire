@@ -57,6 +57,14 @@ var rules = []rule{
 	// Split long flags whose following argv value is a secret. This is a
 	// defense-in-depth pass for older persisted command samples; new command
 	// records are scrubbed argv-aware by Command before they reach disk.
+	//
+	// The bare-value class stays `[^\s]+` deliberately. Narrowing it to `[^\s"]+`
+	// to protect JSON was tried and REVERTED: against an escaped value
+	// (`{"cmd":"deploy --token \\"secret\\""}`) it consumed only the backslash and
+	// stopped at the quote, leaving the real secret exposed beside a [REDACTED]
+	// marker. Over-consuming and corrupting JSON is bad; under-consuming and
+	// exposing the secret is worse. Making this rule JSON-safe needs structural
+	// parsing, not another character-class exclusion (see backlog item 1c).
 	{name: "secret-flag-value", re: regexp.MustCompile(`(?i)(--(?:password|passwd|pwd|secret|token|auth[_-]?token|access[_-]?token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|client[_-]?secret|credential|credentials)\s+)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s]+)`), replacement: "${1}" + redacted},
 	// scheme://user:password@host -> redact only the password, keep the rest
 	{name: "url-userinfo", re: regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]*:)[^\s@/]+(@)`), replacement: "${1}" + redacted + "${2}"},
@@ -67,7 +75,13 @@ var rules = []rule{
 	{name: "secret-assignment", re: regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret|pass|credential[s]?)\s*[:=]\s*)('[^']*'|"(?:[^"\\]|\\.)*"|[^\s=>][^\s]*)`), replacement: "${1}" + redacted},
 	// JSON-style "key": "value" where the key is a quoted secret keyword.
 	// secret-assignment misses this because a `"` separates the keyword from `:`.
-	{name: "quoted-secret-key", re: regexp.MustCompile(`(?i)("(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret|pass|credential[s]?)"\s*:\s*)("(?:[^"\\]|\\.)*")`), replacement: "${1}" + redacted},
+	//
+	// The replacement keeps the value's quotes. Emitting a bare [REDACTED] turned
+	// `"password":"secret"` into `"password":[REDACTED]`, which is not valid JSON.
+	// That matters because the runner passes complete JSON through whole under the
+	// "JSON payloads are not reduced" guarantee, so an unquoted marker handed the
+	// agent a document its parser rejects.
+	{name: "quoted-secret-key", re: regexp.MustCompile(`(?i)("(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|private[_-]?key|auth[_-]?token|client[_-]?secret|pass|credential[s]?)"\s*:\s*)("(?:[^"\\]|\\.)*")`), replacement: "${1}\"" + redacted + "\""},
 }
 
 // Scrub redacts known secret shapes from s. It never returns an error and is

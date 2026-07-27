@@ -1,6 +1,7 @@
 package scrub
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -502,6 +503,52 @@ func TestTokenizeShell(t *testing.T) {
 					t.Errorf("tokenizeShell(%q)[%d] = %q, want %q",
 						tt.in, i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+// TestScrubKeepsJSONValid pins the class of defect that produced several bugs in
+// this area: a value pattern that does not know where its value ends. The runner
+// passes complete JSON through whole under the "JSON payloads are not reduced"
+// guarantee, so a redaction that eats a closing quote hands the agent a document
+// its parser rejects. That looks protected and is unusable.
+//
+// The cases below are the KEY-based rules, which are safe because a JSON string
+// value is matched as a whole quoted token. The VALUE-scanning rules are not
+// safe on JSON and are deliberately not listed here; they are deferred to a
+// structural fix rather than patched with more character classes (backlog 1c):
+//
+//	{"cmd":"DB_PASS=<secret>"}                 secret-assignment: corrupts
+//	{"cmd":"Authorization: Bearer <secret>"}   authorization-header: corrupts
+//	{"cmd":"deploy --token \"<secret>\""}      secret-flag-value: corrupts
+//
+// All three remove the secret but leave invalid JSON. Do not "fix" one of them
+// by narrowing a bare class: doing exactly that to secret-flag-value made an
+// escaped value stop at the backslash and leave the secret exposed next to a
+// [REDACTED] marker, which is strictly worse than the corruption it replaced.
+func TestScrubKeepsJSONValid(t *testing.T) {
+	cases := []struct {
+		name   string
+		in     string
+		secret string
+	}{
+		{"quoted secret key", `{"password":"fakesecret123","host":"db"}`, "fakesecret123"},
+		{"quoted key with spaces", `{"api_key": "fakeapikey5551234", "host": "db"}`, "fakeapikey5551234"},
+		{"nested object", `{"spec":{"config":{"password":"nestedsecret123"}}}`, "nestedsecret123"},
+		{"url userinfo in json", `{"dsn":"postgres://admin:s3cr3tP4ssw0rd@db:5432/app"}`, "s3cr3tP4ssw0rd"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Scrub(c.in)
+			if !json.Valid([]byte(got)) {
+				t.Fatalf("scrubbing produced invalid JSON:\n in:  %s\n out: %s", c.in, got)
+			}
+			if strings.Contains(got, c.secret) {
+				t.Errorf("secret %q survived scrubbing: %s", c.secret, got)
+			}
+			if !strings.Contains(got, redacted) {
+				t.Errorf("expected a %s marker, got: %s", redacted, got)
 			}
 		})
 	}
