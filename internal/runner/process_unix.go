@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 
 	"ctx-wire/internal/shim"
 )
@@ -39,6 +38,6 @@ func newCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 		}
 		return cmd.Process.Signal(syscall.SIGTERM)
 	}
-	cmd.WaitDelay = 3 * time.Second
+	cmd.WaitDelay = WaitDelay
 	return cmd
 }

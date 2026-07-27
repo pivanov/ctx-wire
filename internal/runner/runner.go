@@ -37,6 +37,28 @@ import (
 // to disk. It is a var so tests can shrink it. The on-disk spool is unaffected.
 var maxCapture = 10 << 20 // 10 MiB
 
+// WaitDelay bounds how long Wait blocks on the command's I/O pipes after the
+// process itself exits, so a descendant that inherited stdout cannot hold
+// ctx-wire open indefinitely. A var (not const) so tests can shrink it and
+// exercise the descendant-holds-stdout path without costing real seconds.
+// Consumed by the Unix command builder; the Windows one does not set it.
+var WaitDelay = 3 * time.Second
+
+// incompleteIONote reports exactly what a WaitDelay expiry cost, and nothing
+// more. What ErrWaitDelay actually proves is narrow: an output pipe was still
+// open when the grace period elapsed, so Go force-closed it. It does not
+// identify what held the pipe. A descendant that inherited stdout is the usual
+// cause, but os/exec also copies through goroutines for non-file writers, so the
+// note names the pipe rather than blaming a background process. Nor can it
+// promise that everything written before the close survived: if the copier
+// itself stalls, pipe data written before closure is dropped unread. So the note
+// claims only what is certain, that whatever was not copied before the close is
+// gone. A vaguer "output may be incomplete" would fire on every
+// `docker compose up -d`, cast doubt on output that is nearly always whole, and
+// invite a fetch that returns identical bytes, inflating the very redemption
+// counters the retrieval-feedback work reads as an over-filtering signal.
+const incompleteIONote = "[ctx-wire: an output pipe remained open past the grace period and was closed; any output not copied before closure was not captured]"
+
 // explicitRangeCeiling bounds how many lines an explicit, bounded read
 // (sed -n 'A,Bp', head/tail -n N) may carry past the per-filter line cap. A
 // deliberate slice up to this size honors the agent's own bound; beyond it the
@@ -150,7 +172,7 @@ func streamLive(ctx context.Context, name string, args []string, scrubbedCmd str
 	rawOut := &counter{}
 	rawErr := &counter{}
 
-	code, err := execChild(ctx, name, args,
+	code, incompleteIO, err := execChild(ctx, name, args,
 		io.MultiWriter(outScrub, spool, rawOut),
 		io.MultiWriter(errScrub, spool, rawErr))
 
@@ -174,12 +196,21 @@ func streamLive(ctx context.Context, name string, args []string, scrubbedCmd str
 		_, _ = spool.Finalize(false)
 		return code, err
 	}
+	if incompleteIO {
+		fmt.Fprintln(stderr, incompleteIONote)
+	}
 	recordGain(scrubbedCmd, "", "passthrough", rawOut.n+rawErr.n, emitOut.n+emitErr.n, code)
 	// Keep the spool on failure or truncation, but only POINT at it when the
 	// ceiling actually omitted bytes. Passthrough already streamed the full scrubbed
 	// output live, so on a plain failure with nothing omitted the agent already has
 	// everything and a "[full output: ...]" footer would be pure net-negative cost.
-	if path, ok := spool.Finalize(code != 0 || truncated); ok {
+	// An incomplete-IO run also retains the spool, as a forensic copy of whatever
+	// WAS captured. Retention is silent: no hint is printed, so no hash is
+	// surfaced and the file is kept for post-hoc inspection rather than being
+	// directly agent-recoverable. That is deliberate, since hinting here would let
+	// any backgrounded descendant inflate the fetch-redemption counters that the
+	// retrieval-feedback work reads as an over-filtering signal.
+	if path, ok := spool.Finalize(code != 0 || truncated || incompleteIO); ok {
 		if truncated {
 			fmt.Fprintln(stderr, tee.Hint(path))
 		}
@@ -195,7 +226,8 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	outCap := &capWriter{max: maxCapture}
 	errCap := &capWriter{max: maxCapture}
 
-	code, err = execChild(ctx, name, args,
+	var incompleteIO bool
+	code, incompleteIO, err = execChild(ctx, name, args,
 		io.MultiWriter(outCap, spool),
 		io.MultiWriter(errCap, spool))
 	if err != nil {
@@ -281,13 +313,18 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	if emptyTailFallback {
 		meta = append(meta, "[ctx-wire: filter emptied the output; showing raw tail]")
 	}
+	if incompleteIO {
+		meta = append(meta, incompleteIONote)
+	}
 
 	// Dedup: if an eligible read-only command re-ran with byte-identical output,
 	// substitute a short recoverable reference for the body. Account the saved
 	// bytes against the real raw output size, keep the prior retained entry as the
 	// recoverable copy (do not record a new one), and discard the spool. Skipped
-	// when this run was truncated, so a truncation notice is never silently lost.
-	if !truncated {
+	// when this run was truncated, so a truncation notice is never silently lost,
+	// and likewise when a descendant's post-exit output was dropped: the early
+	// return discards meta, which would take the incomplete-IO note with it.
+	if !truncated && !incompleteIO {
 		if ref, ok := maybeDedup(name, args, scrubbedCmd, stdoutText+stderrText, code); ok {
 			recordGain(scrubbedCmd, filterName, "dedup", outCap.total+errCap.total, len(ref), code)
 			_, _ = spool.Finalize(false)
@@ -302,8 +339,16 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	// footer and spool. Truncation and the empty-tail fallback always keep the
 	// footer (genuine recovery). The fallback emits the already-scrubbed raw, never
 	// unsanitized bytes.
+	// An incomplete-IO run additionally retains the spool as a forensic copy of
+	// the captured bytes, which matters most when a filter reduced them without
+	// setting Truncated (match_output collapse, strip/keep). Retention is SILENT:
+	// the footer logic below stays gated on the original failure/recovery
+	// condition, so no pointer is emitted and no hash is surfaced. The file is
+	// kept for post-hoc inspection, not as a directly agent-recoverable artifact,
+	// so a backgrounded descendant cannot inflate the redemption counters the
+	// retrieval-feedback work reads as an over-filtering signal.
 	recovery := truncated || emptyTailFallback
-	if path, ok := spool.Finalize(code != 0 || recovery); ok {
+	if path, ok := spool.Finalize(code != 0 || recovery || incompleteIO); ok && (code != 0 || recovery) {
 		footer := tee.Hint(path)
 		rawStdout, rawStderr := scrub.Scrub(out), scrub.Scrub(errOut)
 		switch {
@@ -497,17 +542,24 @@ func Capture(ctx context.Context, reg *filter.Registry, name string, args []stri
 }
 
 // execChild runs name+args with the given output writers, propagating ctx
-// cancellation to the child process.
-func execChild(ctx context.Context, name string, args []string, stdout, stderr io.Writer) (int, error) {
+// cancellation to the child process. incompleteIO reports that the command
+// succeeded but a lingering descendant held the pipes past WaitDelay, so its
+// post-exit writes were dropped. It is a distinct outcome rather than an error:
+// the command did not fail, so callers must keep the captured output and the
+// spool and must never emit the generic wrapper-failure message for it.
+func execChild(ctx context.Context, name string, args []string, stdout, stderr io.Writer) (code int, incompleteIO bool, err error) {
 	cmd := newCommand(ctx, name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	code, err := runAndExitCode(cmd)
-	if err != nil {
-		return code, fmt.Errorf("ctx-wire: failed to run %q: %w", name, err)
+	code, err = runAndExitCode(cmd)
+	if errors.Is(err, exec.ErrWaitDelay) {
+		return code, true, nil
 	}
-	return code, nil
+	if err != nil {
+		return code, false, fmt.Errorf("ctx-wire: failed to run %q: %w", name, err)
+	}
+	return code, false, nil
 }
 
 // applySafe runs the filter pipeline, falling back to the unfiltered text if the
@@ -585,6 +637,21 @@ func runAndExitCode(cmd *exec.Cmd) (int, error) {
 			return code, nil
 		}
 		return ee.ExitCode(), nil
+	}
+	// The process already exited successfully; only its I/O pipes were still open
+	// when WaitDelay expired, so Go force-closed them. This is never a failed
+	// command: os/exec returns ErrWaitDelay only when the process "exits with a
+	// successful status code" (exec.go ErrWaitDelay doc), only when "no Cancel
+	// call has occurred" (the WaitDelay field doc), and only via
+	// `if err == nil { err = ErrWaitDelay }`, so an *ExitError from a nonzero exit
+	// always wins. A nonzero exit and a cancelled context therefore cannot reach
+	// here. Report the real exit status and hand the error up so the caller can
+	// note the descendant output that was dropped.
+	if errors.Is(err, exec.ErrWaitDelay) {
+		if cmd.ProcessState != nil {
+			return cmd.ProcessState.ExitCode(), err
+		}
+		return 0, err
 	}
 	// The child never ran. Command-not-found maps to the conventional 127 (what
 	// a shell reports) so callers can tell "not installed" from a generic
