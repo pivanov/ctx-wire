@@ -176,6 +176,15 @@ func (f *CompiledFilter) ReducesJSON() bool { return f.reduceJSON }
 type ApplyResult struct {
 	Output    string
 	Truncated bool
+	// Synthetic reports that Output is a canned message from a match_output (or
+	// on_empty) rule rather than text derived from the input. That is categorically
+	// different from line filtering: the agent receives bytes the command never
+	// produced, and the entire real output is gone. Callers use it to RETAIN the
+	// spool, since Truncated stays false on this path and the bytes would
+	// otherwise be deleted outright. Retention alone is forensic: without a
+	// surfaced hash the agent cannot fetch it, so a large collapse also emits a
+	// recovery pointer.
+	Synthetic bool
 }
 
 // ApplyOptions controls context-sensitive parts of the pipeline. The default is
@@ -460,7 +469,7 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 				if rule.unless != nil && rule.unless.MatchString(blob) {
 					continue
 				}
-				return ApplyResult{Output: rule.message, Truncated: truncated}
+				return ApplyResult{Output: rule.message, Truncated: truncated, Synthetic: true}
 			}
 		}
 	}
@@ -555,7 +564,7 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 		result = squeezeBlankLines(result)
 	}
 	if strings.TrimSpace(result) == "" && f.onEmpty != nil && !opts.SuppressSyntheticSuccess {
-		return ApplyResult{Output: *f.onEmpty, Truncated: truncated}
+		return ApplyResult{Output: *f.onEmpty, Truncated: truncated, Synthetic: true}
 	}
 	return ApplyResult{Output: result, Truncated: truncated}
 }

@@ -243,3 +243,12 @@ func fileExists(path string) bool {
 func warnf(format string, a ...any) {
 	fmt.Fprintf(os.Stderr, "[ctx-wire] "+format+"\n", a...)
 }
+
+// CompileTOMLForTest compiles filters from inline TOML so tests in other
+// packages can pin runner behavior against a specific filter shape, including
+// one that is deliberately no longer shipped in filters/. Without this, a test
+// that relies on a shipped filter's pattern silently goes vacuous the moment
+// that pattern is tightened.
+func CompileTOMLForTest(toml string) ([]*CompiledFilter, error) {
+	return parseAndCompile(toml, "test")
+}

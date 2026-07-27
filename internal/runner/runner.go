@@ -59,6 +59,13 @@ var WaitDelay = 3 * time.Second
 // counters the retrieval-feedback work reads as an over-filtering signal.
 const incompleteIONote = "[ctx-wire: an output pipe remained open past the grace period and was closed; any output not copied before closure was not captured]"
 
+// syntheticRecoveryHintBytes is how much raw output a match_output/on_empty
+// collapse must discard before the agent is pointed at the spool. Below it the
+// spool is still retained, just silently: a two-line "npm: ok" collapse does not
+// need a recovery pointer, whereas a collapsed multi-kilobyte response probably
+// held something the agent wanted.
+const syntheticRecoveryHintBytes = 4 << 10 // 4 KiB
+
 // explicitRangeCeiling bounds how many lines an explicit, bounded read
 // (sed -n 'A,Bp', head/tail -n N) may carry past the per-filter line cap. A
 // deliberate slice up to this size honors the agent's own bound; beyond it the
@@ -242,6 +249,7 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	mode := "passthrough"
 	filterTruncated := false
 	emptyTailFallback := false
+	collapsedRawBytes := 0
 	switch f := matched; {
 	case f == nil:
 		stdoutText = scrub.Scrub(out)
@@ -266,12 +274,29 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 			opts.MaxLinesOverride = &span
 		}
 		applied := applySafe(f, text, opts)
-		if jsonText, jsonMode, ok := jsonGuard(out, applied.Truncated, f.FilterStderr, f.ReducesJSON()); ok {
+		// The structured-output guard is evaluated against the RAW output, before
+		// the filter's result is consulted, because a filter can destroy a complete
+		// JSON document without ever setting Truncated. `match_output` is the sharp
+		// case: kubectl.toml's unanchored alternation matched the word "created"
+		// inside an ordinary annotation and replaced an entire successful ConfigMap
+		// response with "kubectl: ok". Gating the guard on Truncated meant it never
+		// ran for that path, and since nothing looked truncated the spool was
+		// dropped too, so the payload was unrecoverable. strip/keep/replace can
+		// invalidate a document the same way.
+		if jsonText, jsonMode, ok := jsonGuard(out, filterAltered(text, applied), f.FilterStderr, f.ReducesJSON()); ok {
 			mode = jsonMode
 			stdoutText = jsonText
 			stderrText = scrub.Scrub(errOut)
 			filterTruncated = jsonMode == jsonModeCapped
 		} else {
+			// A synthetic message means the real output is gone and nothing in it is
+			// derivable from what the agent receives. The JSON guard above covers the
+			// structured case, but ~39 of the filters using match_output have at least
+			// one unanchored pattern, so the same collapse can hit plain text in
+			// filters nobody has audited. Keep the bytes recoverable there too.
+			if applied.Synthetic && len(strings.TrimSpace(text)) > 0 {
+				collapsedRawBytes = len(text)
+			}
 			filterTruncated = applied.Truncated
 			stdoutText = withTrailingNewline(scrub.Scrub(maybeStripStack(applied.Output, &filterTruncated)))
 			if !f.FilterStderr {
@@ -324,7 +349,10 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	// when this run was truncated, so a truncation notice is never silently lost,
 	// and likewise when a descendant's post-exit output was dropped: the early
 	// return discards meta, which would take the incomplete-IO note with it.
-	if !truncated && !incompleteIO {
+	// A synthetic collapse is excluded for a sharper reason: dedup discards the
+	// spool outright, which would undo the retention below and make the lost
+	// output unrecoverable again.
+	if !truncated && !incompleteIO && collapsedRawBytes == 0 {
 		if ref, ok := maybeDedup(name, args, scrubbedCmd, stdoutText+stderrText, code); ok {
 			recordGain(scrubbedCmd, filterName, "dedup", outCap.total+errCap.total, len(ref), code)
 			_, _ = spool.Finalize(false)
@@ -347,8 +375,14 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	// kept for post-hoc inspection, not as a directly agent-recoverable artifact,
 	// so a backgrounded descendant cannot inflate the redemption counters the
 	// retrieval-feedback work reads as an over-filtering signal.
-	recovery := truncated || emptyTailFallback
-	if path, ok := spool.Finalize(code != 0 || recovery || incompleteIO); ok && (code != 0 || recovery) {
+	// A synthetic collapse always retains the spool, since the real output is not
+	// derivable from the message the agent sees. Unlike the incomplete-IO case,
+	// data genuinely was lost here, so a large collapse also earns a recovery
+	// pointer; below the threshold it retains silently, keeping the redemption
+	// counters meaningful for the retrieval-feedback work.
+	recovery := truncated || emptyTailFallback || collapsedRawBytes >= syntheticRecoveryHintBytes
+	keep := code != 0 || recovery || incompleteIO || collapsedRawBytes > 0
+	if path, ok := spool.Finalize(keep); ok && (code != 0 || recovery) {
 		footer := tee.Hint(path)
 		rawStdout, rawStderr := scrub.Scrub(out), scrub.Scrub(errOut)
 		switch {
@@ -602,15 +636,26 @@ const (
 )
 
 // jsonGuard implements the documented "JSON payloads are not reduced" guarantee
-// by content. When a filter has truncated a complete, valid JSON document on
-// stdout (and is not one that intentionally reduces JSON, e.g. jq), the
-// truncation almost certainly produced invalid JSON that would break a
-// downstream parser (a statusline's jq, a piped consumer). It returns the text
-// to emit instead: the whole scrubbed document under the ceiling, or a
-// replacement notice for an oversize one, never a mid-structure cut. ok is false
-// when the guard does not apply and normal filtering should stand.
-func jsonGuard(out string, truncated, filterStderr, reducesJSON bool) (text, mode string, ok bool) {
-	if !truncated || filterStderr || reducesJSON || !filter.IsCompleteJSON(out) {
+// by content. When a filter has ALTERED a complete, valid JSON document on
+// stdout (and is not one that intentionally reduces JSON, e.g. jq), the result
+// is almost certainly no longer a document a downstream parser accepts: a cap
+// cuts it mid-structure, and a match_output rule replaces it outright. It
+// returns the text to emit instead: the whole scrubbed document under the
+// ceiling, or a replacement notice for an oversize one, never a mid-structure
+// cut. ok is false when the guard does not apply and normal filtering stands.
+// filterAltered reports whether the filter changed its input at all. Truncation
+// is only one of the ways a filter can damage a structured document: a
+// match_output rule can replace it wholesale, and strip/keep/replace can leave
+// syntactically invalid JSON, neither of which sets Truncated.
+func filterAltered(input string, applied filter.ApplyResult) bool {
+	return applied.Truncated || applied.Output != input
+}
+
+// jsonGuard preserves a complete JSON document that the filter would otherwise
+// have altered. altered (not "truncated") is the trigger: gating on truncation
+// alone left match_output free to destroy a whole document silently.
+func jsonGuard(out string, altered, filterStderr, reducesJSON bool) (text, mode string, ok bool) {
+	if !altered || filterStderr || reducesJSON || !filter.IsCompleteJSON(out) {
 		return "", "", false
 	}
 	if len(out) <= filter.MaxJSONPassthrough {
