@@ -35,6 +35,12 @@ export const Stargazers = ({
   const count = Math.max(stars, stargazers.length);
   const shown = stargazers.slice(0, MAX_SHOWN);
   const extra = count - shown.length;
+  // The avatar list is best-effort and must NOT gate the count, which is the
+  // rule the worker already follows (GitHub 404s the stargazers endpoint even
+  // with a valid token, so an empty list is the EXPECTED state while the count
+  // stays correct). Gating the headline on the faces made the page announce
+  // "Be the first to star ctx-wire" while its own header read 77 stars.
+  const hasStars = count > 0;
   const hasFaces = shown.length > 0;
 
   return (
@@ -56,7 +62,7 @@ export const Stargazers = ({
         variants={reduce ? undefined : fadeUp}
         className="m-0 max-w-3xl font-display text-h2 font-extrabold text-head"
       >
-        {hasFaces ? (
+        {hasStars ? (
           <>
             Starred by <span className="text-green">{formatInt(count)}</span>{" "}
             {count === 1 ? "developer" : "developers"}.
