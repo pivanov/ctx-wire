@@ -101,7 +101,7 @@ export const TopBar = ({ installs, live, reports, stars, version }: TProps) => {
 
         <motion.a
           {...(reduce ? {} : TACTILE)}
-          href="https://github.com/pivanov/ctx-wire/stargazers"
+          href="https://github.com/pivanov/ctx-wire"
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-fg ring-1 ring-inset ring-line-soft transition-colors hover:bg-green/10 hover:text-white"

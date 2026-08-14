@@ -130,7 +130,7 @@ export const Footer = () => {
             </button>
             <div className="flex flex-wrap items-center gap-2">
               <a
-                href={`${REPO}/stargazers`}
+                href={REPO}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-full bg-green/10 px-3 py-1.5 font-mono text-2xs font-medium text-green ring-1 ring-inset ring-green/30 transition-colors hover:bg-green/20"

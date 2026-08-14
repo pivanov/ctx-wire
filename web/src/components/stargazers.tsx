@@ -36,10 +36,11 @@ export const Stargazers = ({
   const shown = stargazers.slice(0, MAX_SHOWN);
   const extra = count - shown.length;
   // The avatar list is best-effort and must NOT gate the count, which is the
-  // rule the worker already follows (GitHub 404s the stargazers endpoint even
-  // with a valid token, so an empty list is the EXPECTED state while the count
-  // stays correct). Gating the headline on the faces made the page announce
-  // "Be the first to star ctx-wire" while its own header read 77 stars.
+  // rule the worker follows too. The list DOES populate now (the worker reads it
+  // via GraphQL; REST's /stargazers is closed to tokens), but it still depends on
+  // a GITHUB_TOKEN that can expire or be rejected, while the count never does.
+  // Gating the headline on the faces made the page announce "Be the first to
+  // star ctx-wire" while its own header read 77 stars.
   const hasStars = count > 0;
   const hasFaces = shown.length > 0;
 
@@ -109,10 +110,10 @@ export const Stargazers = ({
           {extra > 0 ? (
             <motion.a
               variants={reduce ? undefined : facePop}
-              href={`${REPO}/stargazers`}
+              href={REPO}
               target="_blank"
               rel="noreferrer"
-              title="See every stargazer"
+              title={`${formatInt(count)} stargazers`}
               className="-ml-2 grid size-10 place-items-center rounded-full bg-green/10 font-mono text-2xs text-green ring-2 ring-bg transition-transform hover:z-10 hover:-translate-y-1"
             >
               +{formatInt(extra)}
@@ -125,7 +126,7 @@ export const Stargazers = ({
         variants={reduce ? undefined : fadeUp}
         whileHover={reduce ? undefined : { y: -1 }}
         whileTap={reduce ? undefined : { scale: 0.97 }}
-        href={`${REPO}/stargazers`}
+        href={REPO}
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center gap-2 rounded-full bg-green px-5 py-2.5 font-mono text-sm font-bold text-ink shadow-badge transition-colors hover:bg-teal"

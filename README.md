@@ -44,7 +44,7 @@ ctx-wire gain                                     # watch the savings add up
 On Windows (PowerShell), install per-user with no admin:
 
 ```powershell
-irm https://ctx-wire.dev/install.ps1 | iex        # add -Machine (elevated) for machine-wide
+irm https://www.ctx-wire.dev/install.ps1 | iex    # add -Machine (elevated) for machine-wide
 ctx-wire init copilot                             # or vscode, visualstudio, claude, ...
 ```
 

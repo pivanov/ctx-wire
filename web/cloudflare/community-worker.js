@@ -12,7 +12,13 @@ const DEFAULT_REPO = "pivanov/ctx-wire";
 // is therefore the only way to force a refresh before FRESH_TTL expires: do it
 // whenever a change alters the SHAPE of the payload or fixes a bug whose bad
 // result is already cached, otherwise a 6h-old wrong answer keeps being served.
-const CACHE_VERSION = "v1";
+//
+// NEVER bump it while GitHub is failing. The keys namespace the stale entry too,
+// so a bump throws away the last-good payload that the error path serves as a
+// fallback. That happened on 2026-08-07: a bad token broke the refresh, the bump
+// discarded the cached "77 stars", and the site dropped to zero instead of
+// riding out the outage on stale data. Bump only once upstream is healthy.
+const CACHE_VERSION = "v6";
 
 const FRESH_TTL = 21600; // serve a good value for 6h before refreshing (stars move slowly)
 const RETRY_TTL = 300; // after a failed refresh, wait 5m before hitting GitHub again

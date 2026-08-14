@@ -42,7 +42,30 @@ const TRUST = [
 
 const GRID_TOTAL = 140;
 
-const INSTALL = "curl -fsSL https://ctx-wire.dev/install.sh | sh";
+// macOS and Linux share one command, so the switch is two options, not three.
+// Windows must use www: the apex 308-redirects and Windows PowerShell 5.1 does
+// not follow 308, so the apex URL fails on the platform's default shell.
+const INSTALL = {
+  unix: {
+    label: "macOS/Linux",
+    prompt: "$",
+    command: "curl -fsSL https://ctx-wire.dev/install.sh | sh",
+  },
+  windows: {
+    label: "Windows",
+    prompt: ">",
+    command: "irm https://www.ctx-wire.dev/install.ps1 | iex",
+  },
+} as const;
+
+type TOS = keyof typeof INSTALL;
+
+// Default to the visitor's own platform so the common case needs no click. Only
+// Windows is worth detecting: everything else takes the curl line.
+const detectOS = (): TOS =>
+  typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent)
+    ? "windows"
+    : "unix";
 
 const AGENT_LABELS: Record<string, string> = {
   opencode: "OpenCode",
@@ -84,6 +107,7 @@ const flowItems = (stats: TImpactStats): TFlowItem[] => {
 
 export const Hero = ({ stats }: { stats: TImpactStats }) => {
   const [agent, setAgent] = useState("claude");
+  const [os, setOS] = useState<TOS>(detectOS);
   const reduce = useReducedMotion();
   const v = (variant: typeof fadeUp) => (reduce ? undefined : variant);
 
@@ -194,8 +218,16 @@ export const Hero = ({ stats }: { stats: TImpactStats }) => {
           className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-steps"
         >
           <div className="flex flex-col">
-            <StepLabel n={1} title="Download" />
-            <CommandBox command={INSTALL} reduce={Boolean(reduce)} />
+            <StepLabel
+              n={1}
+              title="Download"
+              right={<OSSwitch os={os} onSelect={setOS} />}
+            />
+            <CommandBox
+              command={INSTALL[os].command}
+              prompt={INSTALL[os].prompt}
+              reduce={Boolean(reduce)}
+            />
           </div>
           <div className="flex flex-col">
             <StepLabel n={2} title="Init" />
@@ -230,13 +262,60 @@ export const Hero = ({ stats }: { stats: TImpactStats }) => {
   );
 };
 
-const StepLabel = ({ n, title }: { n: number; title: string }) => {
+const StepLabel = ({
+  n,
+  title,
+  right,
+}: {
+  n: number;
+  title: string;
+  right?: React.ReactNode;
+}) => {
   return (
-    <div className="mb-2.5 flex items-center gap-2.5">
+    <div className="mb-2.5 flex min-h-7 items-center gap-2.5">
       <span className="grid size-6 place-items-center rounded-md bg-green font-mono text-2xs font-bold text-ink">
         {n}
       </span>
       <span className="font-mono text-cap font-bold text-head">{title}</span>
+      {right ? <span className="ml-auto">{right}</span> : null}
+    </div>
+  );
+};
+
+// Segmented control sized to sit inline with the step label without changing the
+// row height, so steps 2 and 3 stay aligned with step 1.
+const OSSwitch = ({
+  os,
+  onSelect,
+}: {
+  os: TOS;
+  onSelect: (next: TOS) => void;
+}) => {
+  return (
+    <div
+      role="tablist"
+      aria-label="Platform"
+      className="inline-flex items-center gap-0.5 rounded-full bg-white/3 p-0.5 ring-1 ring-inset ring-line-soft"
+    >
+      {(Object.keys(INSTALL) as TOS[]).map((key) => {
+        const active = key === os;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onSelect(key)}
+            className={`rounded-full px-2 py-0.5 font-mono text-2xs transition-colors ${
+              active
+                ? "bg-green font-bold text-ink"
+                : "text-label hover:text-fg"
+            }`}
+          >
+            {INSTALL[key].label}
+          </button>
+        );
+      })}
     </div>
   );
 };
@@ -244,10 +323,12 @@ const StepLabel = ({ n, title }: { n: number; title: string }) => {
 const CommandBox = ({
   agent,
   command,
+  prompt = "$",
   reduce,
 }: {
   agent?: string;
   command: string;
+  prompt?: string;
   reduce: boolean;
 }) => {
   const [copied, copy] = useCopy();
@@ -259,7 +340,7 @@ const CommandBox = ({
       title="Click to copy"
       className="install-shadow group relative flex w-full grow items-center gap-2.5 rounded-card border border-line-soft bg-linear-to-b from-panel to-screen px-4 py-3.5 pr-9 text-left font-mono text-cap transition-colors hover:border-green/30"
     >
-      <span className="shrink-0 select-none text-green">$</span>
+      <span className="shrink-0 select-none text-green">{prompt}</span>
       <code className="min-w-0 wrap-break-word leading-relaxed text-fg">
         {agent ? (
           <>
