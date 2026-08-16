@@ -193,7 +193,7 @@ func ensureClaudeMatcherEntry(path, event, matcher string, want bool) (changed b
 		pre = append(pre, map[string]any{
 			"matcher": matcher,
 			"hooks": []any{
-				map[string]any{"type": "command", "command": claudeHookCommand},
+				map[string]any{"type": "command", "command": hookCommand("claude")},
 			},
 		})
 	case !want && !has:
@@ -231,7 +231,7 @@ func claudeEntryMatches(e any, matcher string) bool {
 	hs, _ := m["hooks"].([]any)
 	for _, h := range hs {
 		hm, _ := h.(map[string]any)
-		if cmd, _ := hm["command"].(string); cmd == claudeHookCommand {
+		if cmd, _ := hm["command"].(string); isHookCommand(cmd, "claude") {
 			return true
 		}
 	}
@@ -255,7 +255,7 @@ func hasClaudeHook(pre []any) bool {
 		hs, _ := m["hooks"].([]any)
 		for _, h := range hs {
 			hm, _ := h.(map[string]any)
-			if cmd, _ := hm["command"].(string); cmd == claudeHookCommand {
+			if cmd, _ := hm["command"].(string); isHookCommand(cmd, "claude") {
 				return true
 			}
 		}

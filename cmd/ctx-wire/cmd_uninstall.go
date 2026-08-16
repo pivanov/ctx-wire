@@ -89,6 +89,13 @@ func cmdUninstall(args []string) int {
 		fmt.Printf("%s left existing non-ctx-wire files alone: %s\n", theme.Warn.Render("Skipped"), strings.Join(report.Skipped, ", "))
 	}
 
+	// Older Windows builds wrote an extensionless (dead) copy here; remove it too
+	// so an upgrade does not leave an unexecutable ctx-wire on PATH.
+	if legacy, lerr := install.LegacySelfInstallPath(); lerr == nil && legacy != "" && legacy != dest {
+		if gone, _ := install.UninstallSelf(legacy); gone {
+			fmt.Printf("%s stale ctx-wire from %s\n", theme.OK.Render("Removed"), theme.Path.Render(legacy))
+		}
+	}
 	removed, err := install.UninstallSelf(dest)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ctx-wire uninstall: %v\n", err)

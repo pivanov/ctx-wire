@@ -59,7 +59,7 @@ func InstallCursor(path string) (changed bool, err error) {
 		return false, nil
 	}
 	pre = append(pre, map[string]any{
-		"command": cursorHookCommand,
+		"command": hookCommand("cursor"),
 		"matcher": "Shell",
 	})
 	hooks["preToolUse"] = pre
@@ -77,7 +77,7 @@ func InstallCursor(path string) (changed bool, err error) {
 func hasCursorHook(pre []any) bool {
 	for _, e := range pre {
 		m, _ := e.(map[string]any)
-		if cmd, _ := m["command"].(string); cmd == cursorHookCommand {
+		if cmd, _ := m["command"].(string); isHookCommand(cmd, "cursor") {
 			return true
 		}
 	}

@@ -13,7 +13,36 @@ import (
 )
 
 // SelfInstallPath returns the default user-local binary path.
+//
+// The name MUST carry .exe on Windows. Without it the copy is not executable by
+// name: CreateProcess resolves a bare `ctx-wire` through PATHEXT and never
+// matches an extensionless file. `ctx-wire init` self-installs through this
+// path, so on Windows it used to drop a dead `%USERPROFILE%\.local\bin\ctx-wire`
+// next to the real ctx-wire.exe from install.ps1. Reported 2026-08-16 by a user
+// whose Copilot hook failed with "hook errored" on every tool call.
 func SelfInstallPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "bin", selfBinaryName()), nil
+}
+
+// selfBinaryName is ctx-wire's own executable name for the current platform.
+func selfBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "ctx-wire.exe"
+	}
+	return "ctx-wire"
+}
+
+// LegacySelfInstallPath returns the pre-fix, extensionless Windows path, so
+// uninstall can clean up the dead copy older versions left behind. It returns
+// "" on every other platform, where that path is the current one.
+func LegacySelfInstallPath() (string, error) {
+	if runtime.GOOS != "windows" {
+		return "", nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err

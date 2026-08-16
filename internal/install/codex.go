@@ -122,7 +122,7 @@ func ensureCodexHook(hooks map[string]any, event, path string) (bool, error) {
 	list = append(list, map[string]any{
 		"matcher": "Bash",
 		"hooks": []any{
-			map[string]any{"type": "command", "command": codexHookCommand},
+			map[string]any{"type": "command", "command": hookCommand("codex")},
 		},
 	})
 	hooks[event] = list
@@ -135,7 +135,7 @@ func hasCodexHook(pre []any) bool {
 		hs, _ := m["hooks"].([]any)
 		for _, h := range hs {
 			hm, _ := h.(map[string]any)
-			if cmd, _ := hm["command"].(string); cmd == codexHookCommand {
+			if cmd, _ := hm["command"].(string); isHookCommand(cmd, "codex") {
 				return true
 			}
 		}

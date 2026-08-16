@@ -107,7 +107,7 @@ var agentRegistry = []agentDescriptor{
 			return nil
 		},
 		ProbeKind:   WiringHook,
-		ProbeNeedle: claudeHookCommand,
+		ProbeNeedle: hookNeedle("claude"),
 		ProbePaths: func(workdir string) []string {
 			dirs, err := ClaudeConfigDirs()
 			if err != nil {
@@ -146,7 +146,7 @@ var agentRegistry = []agentDescriptor{
 			return nil
 		},
 		ProbeKind:   WiringHook,
-		ProbeNeedle: cursorHookCommand,
+		ProbeNeedle: hookNeedle("cursor"),
 		ProbePaths:  singleProbePath(CursorHooksPath),
 	},
 
@@ -201,7 +201,7 @@ var agentRegistry = []agentDescriptor{
 			return nil
 		},
 		ProbeKind:   WiringHook,
-		ProbeNeedle: codexHookCommand,
+		ProbeNeedle: hookNeedle("codex"),
 		ProbePaths:  singleProbePath(CodexHooksPath),
 	},
 

@@ -106,7 +106,7 @@ func InstallCopilotSettings(path string) (bool, error) {
 	}
 	hooks[copilotCLIHookEvent] = append(pre, map[string]any{
 		"type":    "command",
-		"command": copilotCLIHookCommand,
+		"command": hookCommand("copilot"),
 	})
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
@@ -118,7 +118,7 @@ func InstallCopilotSettings(path string) (bool, error) {
 func hasCopilotCLIHook(pre []any) bool {
 	for _, entry := range pre {
 		m, _ := entry.(map[string]any)
-		if cmd, _ := m["command"].(string); cmd == copilotCLIHookCommand {
+		if cmd, _ := m["command"].(string); isHookCommand(cmd, "copilot") {
 			return true
 		}
 	}
@@ -159,11 +159,11 @@ func removeCopilotCLIHooks(pre []any) ([]any, bool) {
 	for _, entry := range pre {
 		m, ok := entry.(map[string]any)
 		if ok {
-			if cmd, _ := m["bash"].(string); cmd == copilotCLIHookCommand {
+			if cmd, _ := m["bash"].(string); isHookCommand(cmd, "copilot") {
 				changed = true
 				continue
 			}
-			if cmd, _ := m["command"].(string); cmd == copilotCLIHookCommand {
+			if cmd, _ := m["command"].(string); isHookCommand(cmd, "copilot") {
 				changed = true
 				continue
 			}

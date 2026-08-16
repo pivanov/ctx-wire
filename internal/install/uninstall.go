@@ -75,11 +75,11 @@ func removeFileIfContent(path, want string) bool {
 // (the read-ceiling spike installs a PostToolUse entry) and preserves unrelated
 // Claude settings/hooks.
 func UninstallClaude(path string) (bool, error) {
-	pre, err := removeNestedCommandHook(path, "hooks", "PreToolUse", claudeHookCommand)
+	pre, err := removeNestedCommandHook(path, "hooks", "PreToolUse", agentHook("claude"))
 	if err != nil {
 		return false, err
 	}
-	post, err := removeNestedCommandHook(path, "hooks", "PostToolUse", claudeHookCommand)
+	post, err := removeNestedCommandHook(path, "hooks", "PostToolUse", agentHook("claude"))
 	if err != nil {
 		return false, err
 	}
@@ -89,17 +89,17 @@ func UninstallClaude(path string) (bool, error) {
 // UninstallCursor removes ctx-wire's Cursor preToolUse hook and preserves
 // unrelated Cursor hooks.
 func UninstallCursor(path string) (bool, error) {
-	return removeFlatCommandHook(path, "hooks", "preToolUse", cursorHookCommand)
+	return removeFlatCommandHook(path, "hooks", "preToolUse", agentHook("cursor"))
 }
 
 // UninstallCodexHooks removes ctx-wire's Codex PreToolUse and
 // PermissionRequest hooks, preserving unrelated hooks.
 func UninstallCodexHooks(path string) (bool, error) {
-	a, err := removeNestedCommandHook(path, "hooks", "PreToolUse", codexHookCommand)
+	a, err := removeNestedCommandHook(path, "hooks", "PreToolUse", agentHook("codex"))
 	if err != nil {
 		return false, err
 	}
-	b, err := removeNestedCommandHook(path, "hooks", "PermissionRequest", codexHookCommand)
+	b, err := removeNestedCommandHook(path, "hooks", "PermissionRequest", agentHook("codex"))
 	if err != nil {
 		return false, err
 	}
@@ -108,7 +108,7 @@ func UninstallCodexHooks(path string) (bool, error) {
 
 // UninstallGeminiSettings removes ctx-wire's Gemini BeforeTool entry.
 func UninstallGeminiSettings(path, hookPath string) (bool, error) {
-	return removeNestedCommandHook(path, "hooks", "BeforeTool", hookPath)
+	return removeNestedCommandHook(path, "hooks", "BeforeTool", exactCommand(hookPath))
 }
 
 // UninstallGeminiHook removes the managed Gemini hook wrapper. If the file
@@ -148,7 +148,7 @@ func UninstallCopilotHook(path string) (bool, error) {
 		}
 		return true, nil
 	}
-	return removeFlatCommandHook(path, "hooks", "PreToolUse", "ctx-wire hook copilot")
+	return removeFlatCommandHook(path, "hooks", "PreToolUse", agentHook("copilot"))
 }
 
 // UninstallMCP removes only the "ctx-wire" MCP server entry. If the file only
@@ -178,7 +178,7 @@ func UninstallMCP(path string) (bool, error) {
 	return writeObjectOrRemove(path, root, data)
 }
 
-func removeFlatCommandHook(path, objectKey, eventKey, command string) (bool, error) {
+func removeFlatCommandHook(path, objectKey, eventKey string, match cmdMatcher) (bool, error) {
 	root, data, err := readObjectFile(path)
 	if err != nil || root == nil {
 		return false, err
@@ -191,7 +191,7 @@ func removeFlatCommandHook(path, objectKey, eventKey, command string) (bool, err
 	if err != nil || list == nil {
 		return false, err
 	}
-	next, changed := removeEntriesByCommand(list, command)
+	next, changed := removeEntriesByCommand(list, match)
 	if !changed {
 		return false, nil
 	}
@@ -206,7 +206,7 @@ func removeFlatCommandHook(path, objectKey, eventKey, command string) (bool, err
 	return writeObjectOrRemove(path, root, data)
 }
 
-func removeNestedCommandHook(path, objectKey, eventKey, command string) (bool, error) {
+func removeNestedCommandHook(path, objectKey, eventKey string, match cmdMatcher) (bool, error) {
 	root, data, err := readObjectFile(path)
 	if err != nil || root == nil {
 		return false, err
@@ -236,7 +236,7 @@ func removeNestedCommandHook(path, objectKey, eventKey, command string) (bool, e
 			next = append(next, entry)
 			continue
 		}
-		kept, removed := removeEntriesByCommand(hooks, command)
+		kept, removed := removeEntriesByCommand(hooks, match)
 		if !removed {
 			next = append(next, entry)
 			continue
@@ -262,13 +262,13 @@ func removeNestedCommandHook(path, objectKey, eventKey, command string) (bool, e
 	return writeObjectOrRemove(path, root, data)
 }
 
-func removeEntriesByCommand(list []any, command string) ([]any, bool) {
+func removeEntriesByCommand(list []any, match cmdMatcher) ([]any, bool) {
 	next := make([]any, 0, len(list))
 	changed := false
 	for _, entry := range list {
 		m, ok := entry.(map[string]any)
 		if ok {
-			if cmd, _ := m["command"].(string); cmd == command {
+			if cmd, _ := m["command"].(string); match(cmd) {
 				changed = true
 				continue
 			}
