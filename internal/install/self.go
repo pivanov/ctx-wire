@@ -141,7 +141,34 @@ func UninstallSelf(dest string) (removed bool, err error) {
 		return false, fmt.Errorf("%s is a directory", dest)
 	}
 	if err := os.Remove(dest); err != nil {
+		// Windows refuses to delete a RUNNING executable, so `ctx-wire uninstall`
+		// could never remove its own binary and failed the whole command with a
+		// raw "Access is denied". It can, however, RENAME one (which is how
+		// selfupdate swaps itself). Move it aside instead: the name disappears
+		// from PATH, so the install is gone for every practical purpose, and the
+		// leftover is a best-effort cleanup rather than a hard failure.
+		if renamed, rerr := renameAsideRunningExe(dest); renamed {
+			return true, nil
+		} else if rerr != nil {
+			return false, fmt.Errorf("%w (also could not move it aside: %v)", err, rerr)
+		}
 		return false, err
+	}
+	return true, nil
+}
+
+// renameAsideRunningExe moves a locked Windows executable out of the way. It
+// reports renamed=false on non-Windows (where deleting a running binary works
+// fine, so a failure there is a real error worth surfacing).
+func renameAsideRunningExe(dest string) (renamed bool, err error) {
+	if runtime.GOOS != "windows" {
+		return false, nil
+	}
+	aside := dest + ".old"
+	// A previous uninstall may have left one; the rename below needs the slot.
+	_ = os.Remove(aside)
+	if rerr := os.Rename(dest, aside); rerr != nil {
+		return false, rerr
 	}
 	return true, nil
 }

@@ -11,6 +11,14 @@ import (
 // hookExeName is ctx-wire's own binary name, without any platform suffix.
 const hookExeName = "ctx-wire"
 
+// powershellHookAgents are the agents CONFIRMED to execute hook commands through
+// powershell.exe on Windows, which changes how a quoted path must be written.
+// Only add an agent here with evidence (its own error log naming the shell), not
+// by assumption: the call operator this enables is a command separator in cmd.
+var powershellHookAgents = map[string]bool{
+	"copilot": true,
+}
+
 // hookCommand returns the command string ctx-wire writes into an agent's hook
 // config.
 //
@@ -43,12 +51,25 @@ func hookCommand(agent string) string {
 	if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil {
 		exe = resolved
 	}
-	// Windows install paths routinely contain spaces (a user's display name ends
-	// up in %LOCALAPPDATA%), and the agent splits this string on whitespace.
-	if strings.ContainsAny(exe, " \t") {
-		exe = `"` + exe + `"`
+	// A path with no spaces needs no quoting and runs as-is under both cmd and
+	// PowerShell, so leave the common case exactly as it is.
+	if !strings.ContainsAny(exe, " \t") {
+		return exe + suffix
 	}
-	return exe + suffix
+	// Spaces DO need quoting (%LOCALAPPDATA% carries the user's display name, so
+	// "C:\Users\Ivan Mitev\..." is ordinary). But quoting alone is not enough for
+	// PowerShell: a command that starts with a quote parses as a STRING
+	// EXPRESSION, not an invocation, so `"C:\p ath\ctx-wire.exe" hook copilot`
+	// silently does nothing. It needs the call operator.
+	//
+	// Copilot is known to run hooks through powershell.exe: its own log reports
+	// `spawn powershell.exe EACCES` when the spawn is blocked (2026-08-16). For
+	// the agents whose shell we have not confirmed, keep plain quoting rather
+	// than guess, since `&` is a command separator in cmd.exe and would break it.
+	if powershellHookAgents[agent] {
+		return `& "` + exe + `"` + suffix
+	}
+	return `"` + exe + `"` + suffix
 }
 
 // hookNeedle is the substring doctor greps config files for to decide whether an

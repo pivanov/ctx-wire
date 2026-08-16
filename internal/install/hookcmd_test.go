@@ -82,3 +82,17 @@ func TestHookCommandQuotesSpacedPaths(t *testing.T) {
 		t.Errorf("hookCommand = %q: path contains spaces but is not quoted", cmd)
 	}
 }
+
+// A spaced Windows path for a PowerShell agent is written with the call
+// operator. Detection and uninstall must still recognize that form, or a
+// Copilot user with a space in their profile name gets an entry that init
+// re-adds and uninstall cannot remove.
+func TestIsHookCommandAcceptsCallOperatorForm(t *testing.T) {
+	cmd := `& "C:\Users\Ivan Mitev\AppData\Local\ctx-wire\bin\ctx-wire.exe" hook copilot`
+	if !isHookCommand(cmd, "copilot") {
+		t.Errorf("isHookCommand did not recognize the PowerShell call-operator form: %s", cmd)
+	}
+	if isHookCommand(cmd, "claude") {
+		t.Error("call-operator copilot entry must not match a different agent")
+	}
+}
