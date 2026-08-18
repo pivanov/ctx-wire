@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,5 +67,48 @@ func TestHookOrPluginCoverageConfiguredSiblingDir(t *testing.T) {
 
 	if !hookOrPluginCoverageConfigured(home) {
 		t.Error("hookOrPluginCoverageConfigured = false, want true (hook lives in sibling ~/.claude-main)")
+	}
+}
+
+// The shim advisory must see a Copilot install wired only in the per-user
+// ~/.copilot/settings.json. The hand-maintained needle list it used before
+// looked exclusively at the repo .github hook file, and matched on the literal
+// `ctx-wire hook copilot`, which stopped matching once Windows installs began
+// writing an absolute path.
+func TestHookCoverageSeesCopilotGlobalSettings(t *testing.T) {
+	home := t.TempDir()
+	copilotHome := filepath.Join(home, ".copilot")
+	if err := os.MkdirAll(copilotHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Point every agent's path resolution at empty temp dirs so only the file
+	// written below can satisfy the check.
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("COPILOT_HOME", copilotHome)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	workdir := t.TempDir()
+
+	if hookOrPluginCoverageConfigured(workdir) {
+		t.Fatal("coverage reported with no agent wired; the fixture is not isolated")
+	}
+
+	settings := filepath.Join(copilotHome, "settings.json")
+	absolute := `C:\Users\User Name\AppData\Local\ctx-wire\bin\ctx-wire.exe hook copilot`
+	body, err := json.Marshal(map[string]any{
+		"hooks": map[string]any{
+			"preToolUse": []any{map[string]any{"type": "command", "command": absolute}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settings, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !hookOrPluginCoverageConfigured(workdir) {
+		t.Error("copilot wired in ~/.copilot/settings.json was not detected as coverage")
 	}
 }

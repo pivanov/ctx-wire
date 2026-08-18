@@ -350,3 +350,30 @@ func TestDoctorMultiConfigOneUnhooked(t *testing.T) {
 		t.Errorf("unhooked config dir is a warning, not a failure; doctor should be healthy:\n%s", Format(r))
 	}
 }
+
+// Copilot is wired in either of two files, and current CLI releases read the
+// hook from the per-user ~/.copilot/settings.json rather than the repo
+// .github/hooks file. Checking only the first path reported a correctly-wired
+// install as unconfigured and told the user to re-run init for nothing.
+func TestHookCheckAcceptsAnyConfiguredPath(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "absent.json")
+	present := filepath.Join(dir, "settings.json")
+	needle := install.HookNeedle("copilot")
+	if err := os.WriteFile(present, []byte(`{"hooks":{"preToolUse":[{"command":"ctx-wire `+needle+`"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := hookCheck("copilot", []string{missing, present}, needle)
+	if got.Status != OK {
+		t.Errorf("status = %v (%s), want OK: the hook is present in the second path", got.Status, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "settings.json") {
+		t.Errorf("detail %q should name the file the hook was found in", got.Detail)
+	}
+
+	// Neither path wired stays Off, so the fix cannot mask a real gap.
+	if none := hookCheck("copilot", []string{missing}, needle); none.Status != Off {
+		t.Errorf("status = %v, want Off when no path carries the hook", none.Status)
+	}
+}

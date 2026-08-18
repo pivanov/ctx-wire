@@ -358,7 +358,7 @@ func probeCheck(p install.AgentProbe, workdir string) (Check, bool) {
 	case install.WiringPlugin:
 		return pluginCheck(p.Name, paths[0], p.Needle), true
 	default: // WiringHook
-		return hookCheck(p.Name, paths[0], p.Needle), true
+		return hookCheck(p.Name, paths, p.Needle), true
 	}
 }
 
@@ -387,7 +387,7 @@ func codexHookChecks(p install.AgentProbe, opts Options) []Check {
 	if len(paths) == 0 {
 		return nil
 	}
-	checks := []Check{hookCheck(p.Name, paths[0], p.Needle)}
+	checks := []Check{hookCheck(p.Name, paths, p.Needle)}
 	// Permission posture: ctx-wire is a filter, not a gate. By default it
 	// auto-approves the commands it wraps so codex runs uninterrupted; safety
 	// stays with codex's own approval policy. CTX_WIRE_CODEX_SAFE=1 restores
@@ -451,20 +451,21 @@ func pluginCheck(agent, path, needle string) Check {
 	}
 }
 
-func hookCheck(agent, path, needle string) Check {
+// hookCheck reports an agent wired when ANY of the locations its probe reports
+// carries the hook. It used to look only at the first, so a probe listing more
+// than one config file could call a correctly-wired install unconfigured and
+// tell the user to re-run init for nothing.
+func hookCheck(agent string, paths []string, needle string) Check {
 	// hookCheck is for hook-capable agents (claude/cursor/codex/gemini/copilot),
 	// which the shim no longer auto-wires under, so a missing hook here means this
 	// agent has NO coverage, not the silent shim fallback it used to get.
 	notConfigured := "not configured (run `ctx-wire init " + agent + "`); without it this agent gets no coverage, hook-capable agents are no longer auto-shimmed (set CTX_WIRE_SHIMS=1 to force)"
-	contains, err := fileContains(path, needle)
-	switch {
-	case err != nil:
-		return Check{agent, Off, notConfigured}
-	case contains:
-		return Check{agent, OK, "hook present in " + display(path)}
-	default:
-		return Check{agent, Off, notConfigured}
+	for _, path := range paths {
+		if contains, err := fileContains(path, needle); err == nil && contains {
+			return Check{agent, OK, "hook present in " + display(path)}
+		}
 	}
+	return Check{agent, Off, notConfigured}
 }
 
 // hookCheckMulti is like hookCheck but treats a real existing config dir

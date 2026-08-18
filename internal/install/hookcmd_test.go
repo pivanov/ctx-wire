@@ -15,9 +15,9 @@ func TestHookCommandRoundTrips(t *testing.T) {
 		if !isHookCommand(cmd, agent) {
 			t.Errorf("hookCommand(%q) = %q, which isHookCommand does not recognize", agent, cmd)
 		}
-		if !strings.Contains(cmd, hookNeedle(agent)) {
+		if !strings.Contains(cmd, HookNeedle(agent)) {
 			t.Errorf("hookCommand(%q) = %q, missing probe needle %q (doctor would report it unwired)",
-				agent, cmd, hookNeedle(agent))
+				agent, cmd, HookNeedle(agent))
 		}
 	}
 }
@@ -33,7 +33,7 @@ func TestIsHookCommandAcceptsBothForms(t *testing.T) {
 	}{
 		{"bare unix form", "ctx-wire hook claude", true},
 		{"absolute windows form", `C:\Users\x\AppData\Local\ctx-wire\bin\ctx-wire.exe hook claude`, true},
-		{"quoted windows path with spaces", `"C:\Users\Ivan Mitev\AppData\Local\ctx-wire\bin\ctx-wire.exe" hook claude`, true},
+		{"quoted windows path with spaces", `"C:\Users\User Name\AppData\Local\ctx-wire\bin\ctx-wire.exe" hook claude`, true},
 		{"absolute unix path", "/home/x/.local/bin/ctx-wire hook claude", true},
 		{"leading and trailing space", "  ctx-wire hook claude  ", true},
 
@@ -88,11 +88,85 @@ func TestHookCommandQuotesSpacedPaths(t *testing.T) {
 // Copilot user with a space in their profile name gets an entry that init
 // re-adds and uninstall cannot remove.
 func TestIsHookCommandAcceptsCallOperatorForm(t *testing.T) {
-	cmd := `& "C:\Users\Ivan Mitev\AppData\Local\ctx-wire\bin\ctx-wire.exe" hook copilot`
+	cmd := `& "C:\Users\User Name\AppData\Local\ctx-wire\bin\ctx-wire.exe" hook copilot`
 	if !isHookCommand(cmd, "copilot") {
 		t.Errorf("isHookCommand did not recognize the PowerShell call-operator form: %s", cmd)
 	}
 	if isHookCommand(cmd, "claude") {
 		t.Error("call-operator copilot entry must not match a different agent")
+	}
+}
+
+// Every agent whose hook command comes from hookCommand must have a ProbeNeedle
+// that actually matches it. Copilot's was left as the literal
+// "ctx-wire hook copilot" when the others moved to HookNeedle, so on Windows
+// (where the command is an absolute path) doctor reported a correctly-wired
+// install as unwired. Derive the check from the registry so a new hook agent
+// cannot reintroduce the drift.
+func TestHookProbeNeedlesMatchTheInstalledCommand(t *testing.T) {
+	// Gemini is the one WiringHook agent whose config holds a wrapper-script path
+	// rather than a `ctx-wire hook <agent>` invocation.
+	const scriptBased = "gemini"
+	seen := 0
+	for _, a := range agentRegistry {
+		if a.ProbeKind != WiringHook || a.Name == scriptBased {
+			continue
+		}
+		seen++
+		// Exact equality, not containment: on a non-Windows dev machine the
+		// command IS the bare form, so a hardcoded "ctx-wire hook <agent>" needle
+		// is still contained in it and the drift only shows up on Windows.
+		if want := HookNeedle(a.Name); a.ProbeNeedle != want {
+			t.Errorf("%s: ProbeNeedle = %q, want HookNeedle(%q) = %q; a literal needle stops matching the absolute-path command written on Windows",
+				a.Name, a.ProbeNeedle, a.Name, want)
+		}
+		if cmd := hookCommand(a.Name); !strings.Contains(cmd, a.ProbeNeedle) {
+			t.Errorf("%s: ProbeNeedle %q does not occur in the installed command %q; doctor would report it unwired",
+				a.Name, a.ProbeNeedle, cmd)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no hook agents found in the registry: the check is vacuous")
+	}
+}
+
+// Every Windows branch of the command builder, exercised on any host. The
+// platform-gated tests above skip on Unix, so before this table nothing in a
+// normal `go test ./...` run touched the absolute path, the quoting, or the
+// PowerShell call operator: all three were shipped-and-then-fixed in 0.1.66/67.
+func TestHookCommandForCoversEveryPlatformBranch(t *testing.T) {
+	const winPlain = `C:\Users\x\AppData\Local\ctx-wire\bin\ctx-wire.exe`
+	const winSpaced = `C:\Users\User Name\AppData\Local\ctx-wire\bin\ctx-wire.exe`
+
+	cases := []struct {
+		name  string
+		goos  string
+		exe   string
+		agent string
+		want  string
+	}{
+		{"unix stays bare", "darwin", "/usr/local/bin/ctx-wire", "claude", "ctx-wire hook claude"},
+		{"linux stays bare", "linux", "/usr/local/bin/ctx-wire", "copilot", "ctx-wire hook copilot"},
+		{"windows uses the absolute path", "windows", winPlain, "claude", winPlain + " hook claude"},
+		{"windows spaced path is quoted", "windows", winSpaced, "claude", `"` + winSpaced + `" hook claude`},
+		{"windows spaced path for a powershell agent gets the call operator", "windows", winSpaced, "copilot", `& "` + winSpaced + `" hook copilot`},
+		{"windows unspaced path needs no call operator", "windows", winPlain, "copilot", winPlain + " hook copilot"},
+		{"unknown own path falls back to PATH", "windows", "", "copilot", "ctx-wire hook copilot"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := hookCommandFor(c.goos, c.exe, c.agent)
+			if got != c.want {
+				t.Errorf("hookCommandFor(%q, %q, %q) = %q, want %q", c.goos, c.exe, c.agent, got, c.want)
+			}
+			// Whatever form we write, detection and uninstall must recognize it,
+			// or init re-adds an entry uninstall cannot remove.
+			if !isHookCommand(got, c.agent) {
+				t.Errorf("isHookCommand does not recognize %q", got)
+			}
+			if !strings.Contains(got, HookNeedle(c.agent)) {
+				t.Errorf("%q lacks probe needle %q: doctor would report it unwired", got, HookNeedle(c.agent))
+			}
+		})
 	}
 }

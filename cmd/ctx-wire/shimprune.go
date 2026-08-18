@@ -104,36 +104,24 @@ func fileHasNeedle(path, needle string) bool {
 }
 
 // hookOrPluginCoverageConfigured reports whether any hook/plugin-capable agent is
-// actually wired, the signal that shims are redundant coverage. Needles match the
-// install writers and the doctor checks.
+// actually wired, the signal that shims are redundant coverage.
+//
+// Driven off install.AgentProbes, the same table doctor uses, rather than a
+// hand-maintained copy of every agent's path and needle. The copy had already
+// drifted twice: it hardcoded `ctx-wire hook <agent>`, which stopped matching
+// once Windows installs began writing an absolute path, and it looked only at
+// Copilot's repo hook file, never at the ~/.copilot/settings.json that current
+// CLI releases actually read.
 func hookOrPluginCoverageConfigured(wd string) bool {
-	if dirs, err := install.ClaudeConfigDirs(); err == nil {
-		for _, d := range dirs {
-			if fileHasNeedle(filepath.Join(d, "settings.json"), "ctx-wire hook claude") {
+	for _, p := range install.AgentProbes() {
+		if p.Kind != install.WiringHook && p.Kind != install.WiringPlugin {
+			continue // rules files are steering, not command coverage
+		}
+		for _, path := range p.Paths(wd) {
+			if fileHasNeedle(path, p.Needle) {
 				return true
 			}
 		}
-	}
-	if p, err := install.CursorHooksPath(); err == nil && fileHasNeedle(p, "ctx-wire hook cursor") {
-		return true
-	}
-	if p, err := install.CodexHooksPath(); err == nil && fileHasNeedle(p, "ctx-wire hook codex") {
-		return true
-	}
-	if p, err := install.GeminiSettingsPath(); err == nil && fileHasNeedle(p, "ctx-wire-hook-gemini.sh") {
-		return true
-	}
-	if fileHasNeedle(install.CopilotHookPath(wd), "ctx-wire hook copilot") {
-		return true
-	}
-	if p, err := install.OpenCodePluginPath(); err == nil && fileHasNeedle(p, "ctx-wire") {
-		return true
-	}
-	if p, err := install.PiPluginPath(); err == nil && fileHasNeedle(p, "ctx-wire") {
-		return true
-	}
-	if d, err := install.HermesPluginDir(); err == nil && fileHasNeedle(filepath.Join(d, "__init__.py"), "ctx-wire") {
-		return true
 	}
 	return false
 }

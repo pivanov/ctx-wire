@@ -13,9 +13,6 @@ import (
 	"sort"
 )
 
-// claudeHookCommand is the hook entry ctx-wire installs.
-const claudeHookCommand = "ctx-wire hook claude"
-
 // ClaudeConfigDirs returns every Claude config directory that should be wired.
 // The result is deduplicated by filepath.Clean and never empty (at minimum the
 // default ~/.claude is returned, even if it does not exist yet).
@@ -188,7 +185,19 @@ func ensureClaudeMatcherEntry(path, event, matcher string, want bool) (changed b
 	has := hasClaudeMatcherEntry(pre, matcher)
 	switch {
 	case want && has:
-		return false, nil
+		// Present, but possibly in an older command form. Canonicalize rather
+		// than report "already configured" and leave a broken entry behind.
+		migrated := false
+		for _, e := range pre {
+			if em, ok := e.(map[string]any); ok && claudeEntryMatches(e, matcher) {
+				if migrateNestedHookCommands(em, "claude") {
+					migrated = true
+				}
+			}
+		}
+		if !migrated {
+			return false, nil
+		}
 	case want:
 		pre = append(pre, map[string]any{
 			"matcher": matcher,

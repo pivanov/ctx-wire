@@ -89,8 +89,8 @@ func TestInstallCopilot(t *testing.T) {
 	if data, err := os.ReadFile(CopilotInstructionsPath(dir)); err != nil || !strings.Contains(string(data), "ctx-wire run git status") {
 		t.Fatalf("instructions missing: %v %q", err, data)
 	}
-	if data, err := os.ReadFile(CopilotHookPath(dir)); err != nil || !strings.Contains(string(data), "ctx-wire hook copilot") {
-		t.Fatalf("hook missing: %v %q", err, data)
+	if _, err := os.Stat(CopilotHookPath(dir)); err == nil {
+		t.Fatal("install created the repo hook file; the Copilot integration is the per-user settings entry only")
 	}
 }
 
@@ -176,12 +176,8 @@ func TestInstallCopilotIdempotent(t *testing.T) {
 		t.Fatalf("instructions file contains %d ctx-wire block(s), want exactly 1:\n%s", count, data)
 	}
 
-	// The hook file must still contain exactly the managed JSON.
-	hookData, err := os.ReadFile(hookPath)
-	if err != nil {
-		t.Fatalf("read hook: %v", err)
-	}
-	if string(hookData) != copilotHookJSON {
-		t.Fatalf("hook file changed on second install:\ngot:  %q\nwant: %q", hookData, copilotHookJSON)
+	// And no repo hook file is created, on either run.
+	if _, err := os.Stat(hookPath); err == nil {
+		t.Fatal("install created the repo hook file; ctx-wire no longer ships team-wide repo hooks")
 	}
 }

@@ -79,9 +79,16 @@ jobs:
       # Windows (Toolhelp detection, live-process self-update swap, the shim gate,
       # the resolver, byte-exact passthrough, and the .cmd template). Explicit
       # -run patterns keep the Unix-tool-dependent tests in these packages out.
+      #
+      # internal/install earns a slot because every Windows-only branch in it
+      # (the .exe suffix, the absolute hook path, the PowerShell call operator)
+      # is invisible on a Unix runner: those assertions pass vacuously or skip.
+      # Four shipped Windows defects came out of this package; the compile sweep
+      # above cannot catch a wrong string.
       - name: Test (targeted)
         run: |
           go test ./internal/agent/... ./internal/selfupdate/...
           go test -run "ResolveRealExe|WindowsShimTemplate" ./internal/shim/...
           go test -run "RunRaw" ./internal/runner/...
           go test -run "ShimDecide" ./cmd/ctx-wire/...
+          go test -run "HookCommand|IsHookCommand|HookProbeNeedles|CopilotHook|SelfInstallPath|Upgrade" ./internal/install/...

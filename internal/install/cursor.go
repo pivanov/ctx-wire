@@ -9,9 +9,6 @@ import (
 	"path/filepath"
 )
 
-// cursorHookCommand is the hook entry ctx-wire installs for Cursor.
-const cursorHookCommand = "ctx-wire hook cursor"
-
 // CursorHooksPath returns the hooks.json path for Cursor (~/.cursor/hooks.json).
 func CursorHooksPath() (string, error) {
 	home, err := os.UserHomeDir()
@@ -56,12 +53,24 @@ func InstallCursor(path string) (changed bool, err error) {
 	}
 
 	if hasCursorHook(pre) {
-		return false, nil
+		// Present, but possibly in an older command form. Canonicalize it instead
+		// of reporting "already configured" and leaving an entry the agent cannot
+		// spawn (see migrateHookCommand).
+		migrated := false
+		for _, e := range pre {
+			if em, ok := e.(map[string]any); ok && migrateHookCommand(em, "cursor") {
+				migrated = true
+			}
+		}
+		if !migrated {
+			return false, nil
+		}
+	} else {
+		pre = append(pre, map[string]any{
+			"command": hookCommand("cursor"),
+			"matcher": "Shell",
+		})
 	}
-	pre = append(pre, map[string]any{
-		"command": hookCommand("cursor"),
-		"matcher": "Shell",
-	})
 	hooks["preToolUse"] = pre
 
 	out, err := json.MarshalIndent(root, "", "  ")

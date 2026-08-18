@@ -142,13 +142,77 @@ func UninstallCopilotHook(path string) (bool, error) {
 	default:
 		return false, err
 	}
-	if string(data) == copilotHookJSON {
+	// A file that holds nothing but our own hook is removed outright, so uninstall
+	// leaves no .bak litter in the user's committed .github directory. This used to
+	// byte-compare against one canonical string, which silently stopped matching
+	// once the hook command became platform-dependent (absolute path on Windows):
+	// the file then fell through to the entry-removal path and left a .bak behind.
+	// Decide on structure instead, so every command form is recognized.
+	if isManagedCopilotHookFile(data) {
 		if err := os.Remove(path); err != nil {
 			return false, err
 		}
 		return true, nil
 	}
-	return removeFlatCommandHook(path, "hooks", "PreToolUse", agentHook("copilot"))
+	// Files written before the schema fix use the PascalCase event key; both are
+	// valid per Copilot's reference, so uninstall must try each.
+	// Sweep BOTH keys rather than returning on the first hit: a file that
+	// accumulated one entry under each (an old install plus a new one) would
+	// otherwise keep the second, leaving a ctx-wire hook behind after uninstall.
+	anyChanged := false
+	for _, event := range copilotHookEvents {
+		changed, err := removeFlatCommandHook(path, "hooks", event, agentHook("copilot"))
+		if err != nil {
+			return anyChanged, err
+		}
+		anyChanged = anyChanged || changed
+	}
+	return anyChanged, nil
+}
+
+// copilotHookEvents are the event keys a ctx-wire-written Copilot hook file may
+// use: the camelCase name written now, and the PascalCase name written before.
+var copilotHookEvents = []string{copilotCLIHookEvent, "PreToolUse"}
+
+// isManagedCopilotHookFile reports whether data is a hook file whose ENTIRE
+// content is ctx-wire's own Copilot hook: one PreToolUse entry, ours, and no
+// other keys anywhere. Anything a user added makes it mixed, and only our entry
+// may be removed from it.
+func isManagedCopilotHookFile(data []byte) bool {
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return false
+	}
+	// A managed file holds "hooks" and, since the schema fix, "version". Anything
+	// else means the user added to it and only our entry may be removed.
+	for k := range root {
+		if k != "hooks" && k != "version" {
+			return false
+		}
+	}
+	if _, ok := root["hooks"]; !ok {
+		return false
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok || len(hooks) != 1 {
+		return false
+	}
+	var pre []any
+	for _, event := range copilotHookEvents {
+		if list, ok := hooks[event].([]any); ok {
+			pre = list
+			break
+		}
+	}
+	if len(pre) != 1 {
+		return false
+	}
+	entry, ok := pre[0].(map[string]any)
+	if !ok {
+		return false
+	}
+	cmd, _ := entry["command"].(string)
+	return isHookCommand(cmd, "copilot")
 }
 
 // UninstallMCP removes only the "ctx-wire" MCP server entry. If the file only

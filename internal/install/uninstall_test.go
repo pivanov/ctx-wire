@@ -311,14 +311,14 @@ func TestUninstallAgentRemovesOnlyTheNamedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read claude: %v", err)
 	}
-	if strings.Contains(string(claudeData), claudeHookCommand) {
+	if strings.Contains(string(claudeData), HookNeedle("claude")) {
 		t.Error("claude's ctx-wire hook should be removed")
 	}
 	cursorData, err := os.ReadFile(cursorPath)
 	if err != nil {
 		t.Fatalf("read cursor: %v", err)
 	}
-	if !strings.Contains(string(cursorData), cursorHookCommand) {
+	if !strings.Contains(string(cursorData), HookNeedle("cursor")) {
 		t.Error("cursor's ctx-wire hook must survive a claude-only uninstall")
 	}
 }

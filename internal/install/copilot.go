@@ -27,24 +27,25 @@ that still need tuning.
 ` + ctxWireBlockEnd + `
 `
 
-const copilotHookJSON = `{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "type": "command",
-        "command": "ctx-wire hook copilot",
-        "cwd": ".",
-        "timeout": 5
-      }
-    ]
-  }
-}
-`
+// copilotShellMatcher scopes our preToolUse hook to the one tool we actually
+// handle. Copilot documents these camelCase tool names for the camelCase event:
+// bash, powershell, create, edit, view, grep, glob, web_fetch, ask_user, task.
+//
+// It is deliberately NOT "bash|powershell". internal/hook/copilot's CLI path
+// accepts toolName == "bash" and nothing else, so matching powershell would
+// spawn a hook that returns no opinion: all of the risk, none of the benefit.
+// (Copilot CLI on Windows drives PowerShell, so ctx-wire does not cover it there
+// at all today. Fixing that means teaching the rewriter PowerShell, not widening
+// this matcher.)
+//
+// Scoping is blast-radius containment. A preToolUse command hook that exits
+// non-zero fails CLOSED and DENIES the tool call; only timeouts fail open. While
+// this entry carried no matcher, one unspawnable hook denied view, glob and task
+// as well, which is what a Windows user saw on 2026-08-18: every tool refused,
+// none of them tools ctx-wire touches.
+const copilotShellMatcher = "bash"
 
-const (
-	copilotCLIHookCommand = "ctx-wire hook copilot"
-	copilotCLIHookEvent   = "preToolUse"
-)
+const copilotCLIHookEvent = "preToolUse"
 
 func CopilotInstructionsPath(workdir string) string {
 	return filepath.Join(workdir, ".github", "copilot-instructions.md")
@@ -73,16 +74,32 @@ func CopilotSettingsPath() (string, error) {
 	return filepath.Join(dir, "settings.json"), nil
 }
 
+// InstallCopilot writes the project instructions and RETIRES the repo-local hook
+// file at hookPath.
+//
+// ctx-wire no longer installs .github/hooks/ctx-wire-rewrite.json. That file is
+// committed and shared, so it published a machine-local tool as team-wide repo
+// configuration: a teammate or cloud agent without ctx-wire on PATH got a
+// non-zero preToolUse result, and a non-zero preToolUse result fails CLOSED and
+// denies the shell tool. Copilot runs user and repository hooks together, so the
+// per-user entry could not rescue them. It also duplicated the per-user hook on
+// Unix, gave Windows nothing (the matcher is bash; Copilot drives PowerShell
+// there), and dirtied working trees.
+//
+// The per-user ~/.copilot/settings.json entry is the whole integration now.
+// Retiring an existing file is part of installing, not just uninstalling:
+// otherwise every already-wired repo keeps the hazard forever. Removal is
+// surgical, so a hook file a user has added to keeps their entries.
 func InstallCopilot(instructionsPath, hookPath string) (changed bool, err error) {
 	instructionsChanged, err := upsertInstructionBlock(instructionsPath, copilotInstructionsBlock)
 	if err != nil {
 		return false, err
 	}
-	hookChanged, err := writeFileIfChanged(hookPath, []byte(copilotHookJSON), 0o644)
+	hookRetired, err := UninstallCopilotHook(hookPath)
 	if err != nil {
 		return false, err
 	}
-	return instructionsChanged || hookChanged, nil
+	return instructionsChanged || hookRetired, nil
 }
 
 func InstallCopilotSettings(path string) (bool, error) {
@@ -102,10 +119,35 @@ func InstallCopilotSettings(path string) (bool, error) {
 		return false, err
 	}
 	if hasCopilotCLIHook(pre) {
-		return false, nil
+		migrated := false
+		for _, e := range pre {
+			em, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			if migrateHookCommand(em, "copilot") {
+				migrated = true
+			}
+			// An entry wired before the matcher existed fires on EVERY tool, so a
+			// hook that cannot spawn denies view/glob/task too. Scope it.
+			if cur, _ := em["command"].(string); !hasMatcher(em) && isHookCommand(cur, "copilot") {
+				em["matcher"] = copilotShellMatcher
+				migrated = true
+			}
+		}
+		if !migrated {
+			return false, nil
+		}
+		hooks[copilotCLIHookEvent] = pre
+		out, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return false, err
+		}
+		return true, writeAtomic(path, append(out, '\n'), len(data) > 0)
 	}
 	hooks[copilotCLIHookEvent] = append(pre, map[string]any{
 		"type":    "command",
+		"matcher": copilotShellMatcher,
 		"command": hookCommand("copilot"),
 	})
 	out, err := json.MarshalIndent(root, "", "  ")
@@ -173,15 +215,9 @@ func removeCopilotCLIHooks(pre []any) ([]any, bool) {
 	return next, changed
 }
 
-func writeFileIfChanged(path string, data []byte, perm os.FileMode) (bool, error) {
-	if current, err := os.ReadFile(path); err == nil && string(current) == string(data) {
-		return false, nil
-	}
-	if err := writeAtomic(path, data, true); err != nil {
-		return false, err
-	}
-	if err := os.Chmod(path, perm); err != nil {
-		return false, err
-	}
-	return true, nil
+// hasMatcher reports whether a hook entry already carries a matcher, so an
+// upgrade adds one without overwriting a matcher the user chose.
+func hasMatcher(entry map[string]any) bool {
+	m, ok := entry["matcher"].(string)
+	return ok && m != ""
 }

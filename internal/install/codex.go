@@ -117,7 +117,17 @@ func ensureCodexHook(hooks map[string]any, event, path string) (bool, error) {
 		return false, err
 	}
 	if hasCodexHook(list) {
-		return false, nil
+		migrated := false
+		for _, e := range list {
+			if em, ok := e.(map[string]any); ok && migrateNestedHookCommands(em, "codex") {
+				migrated = true
+			}
+		}
+		if !migrated {
+			return false, nil
+		}
+		hooks[event] = list
+		return true, nil
 	}
 	list = append(list, map[string]any{
 		"matcher": "Bash",

@@ -107,7 +107,7 @@ var agentRegistry = []agentDescriptor{
 			return nil
 		},
 		ProbeKind:   WiringHook,
-		ProbeNeedle: hookNeedle("claude"),
+		ProbeNeedle: HookNeedle("claude"),
 		ProbePaths: func(workdir string) []string {
 			dirs, err := ClaudeConfigDirs()
 			if err != nil {
@@ -146,7 +146,7 @@ var agentRegistry = []agentDescriptor{
 			return nil
 		},
 		ProbeKind:   WiringHook,
-		ProbeNeedle: hookNeedle("cursor"),
+		ProbeNeedle: HookNeedle("cursor"),
 		ProbePaths:  singleProbePath(CursorHooksPath),
 	},
 
@@ -201,7 +201,7 @@ var agentRegistry = []agentDescriptor{
 			return nil
 		},
 		ProbeKind:   WiringHook,
-		ProbeNeedle: hookNeedle("codex"),
+		ProbeNeedle: HookNeedle("codex"),
 		ProbePaths:  singleProbePath(CodexHooksPath),
 	},
 
@@ -318,7 +318,7 @@ var agentRegistry = []agentDescriptor{
 			return r.removeInstr("copilot instructions", CopilotInstructionsPath(workdir))
 		},
 		ProbeKind:   WiringHook,
-		ProbeNeedle: "ctx-wire hook copilot",
+		ProbeNeedle: HookNeedle("copilot"),
 		ProbePaths:  copilotProbePaths,
 	},
 
@@ -503,12 +503,18 @@ func singleProbePath(resolve func() (string, error)) func(string) []string {
 	}
 }
 
-func copilotProbePaths(workdir string) []string {
-	paths := []string{CopilotHookPath(workdir)}
-	if p, err := CopilotSettingsPath(); err == nil {
-		paths = append(paths, p)
+// copilotProbePaths reports only the per-user settings file. The repo-local
+// .github/hooks file is NOT valid coverage: ctx-wire stopped writing it (see
+// InstallCopilot), and a leftover one proves nothing about this machine, since
+// it is committed and arrives with a `git clone` on hosts that have no ctx-wire.
+// Counting it would let doctor and the shim advisory call an unwired machine
+// covered.
+func copilotProbePaths(string) []string {
+	p, err := CopilotSettingsPath()
+	if err != nil {
+		return nil
 	}
-	return paths
+	return []string{p}
 }
 
 // workdirProbePath adapts a workdir-relative path resolver (ClineRulesPath, etc.)
