@@ -71,6 +71,13 @@ jobs:
       # missing build tag, a bad syscall) fails CI; -run "^$" matches no test, so
       # nothing executes the Unix-tool-dependent suites.
       - name: Compile sweep
+        # shell: bash is load-bearing. The default on Windows runners is
+        # `pwsh -command`, whose exit status is the LAST line's, so a failing
+        # command anywhere above it is silently swallowed and the step reports
+        # success. That hid real internal/selfupdate failures across every green
+        # Windows run until a new final line happened to fail. bash runs with
+        # -eo pipefail, so the first failure fails the step.
+        shell: bash
         run: |
           go build ./...
           go vet ./...
@@ -86,6 +93,8 @@ jobs:
       # Four shipped Windows defects came out of this package; the compile sweep
       # above cannot catch a wrong string.
       - name: Test (targeted)
+        # See the Compile sweep step: pwsh reports only the last line's exit code.
+        shell: bash
         run: |
           go test ./internal/agent/... ./internal/selfupdate/...
           go test -run "ResolveRealExe|WindowsShimTemplate" ./internal/shim/...

@@ -164,9 +164,17 @@ file_has "$HOMEDIR/.gemini/hooks/ctx-wire-hook-gemini.sh" "ctx-wire hook gemini"
 file_has "$WORK/.clinerules" "ctx-wire run git status" "init cline"
 ( cd "$WORK" && cw init windsurf >/dev/null )
 file_has "$WORK/.windsurfrules" "ctx-wire run git status" "init windsurf"
+# Seed the repo hook file older versions wrote, so init is checked for RETIRING
+# it. That file is committed and shared, so a teammate or cloud agent without
+# ctx-wire on PATH got a non-zero preToolUse result, which fails closed and
+# denies their shell tools. The integration is the per-user settings entry now.
+mkdir -p "$WORK/.github/hooks"
+printf '{\n  "hooks": {\n    "PreToolUse": [\n      { "type": "command", "command": "ctx-wire hook copilot" }\n    ]\n  }\n}\n' \
+	> "$WORK/.github/hooks/ctx-wire-rewrite.json"
 ( cd "$WORK" && cw init copilot >/dev/null )
 file_has "$WORK/.github/copilot-instructions.md" "ctx-wire run git status" "init copilot instructions"
-file_has "$WORK/.github/hooks/ctx-wire-rewrite.json" "ctx-wire hook copilot" "init copilot hook"
+if [ ! -e "$WORK/.github/hooks/ctx-wire-rewrite.json" ]; then ok "init copilot retires the repo hook"; else bad "init copilot retires the repo hook"; fi
+file_has "$HOMEDIR/.copilot/settings.json" "hook copilot" "init copilot user hook"
 ( cd "$WORK" && cw init vscode >/dev/null )
 file_has "$WORK/.vscode/mcp.json" "ctx-wire" "init vscode"
 cw init visualstudio >/dev/null
@@ -190,6 +198,7 @@ file_lacks "$WORK/.clinerules" "ctx-wire" "uninstall cline rules"
 file_lacks "$WORK/.windsurfrules" "ctx-wire" "uninstall windsurf rules"
 file_lacks "$WORK/.github/copilot-instructions.md" "ctx-wire" "uninstall copilot instructions"
 if [ ! -e "$WORK/.github/hooks/ctx-wire-rewrite.json" ]; then ok "uninstall copilot hook"; else bad "uninstall copilot hook"; fi
+file_lacks "$HOMEDIR/.copilot/settings.json" "hook copilot" "uninstall copilot user hook"
 file_lacks "$WORK/.vscode/mcp.json" "ctx-wire" "uninstall vscode mcp"
 file_lacks "$HOMEDIR/.mcp.json" "ctx-wire" "uninstall visualstudio mcp"
 if [ ! -e "$HOMEDIR/.config/ctx-wire" ]; then ok "uninstall purges config dir"; else bad "uninstall purges config dir"; fi

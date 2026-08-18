@@ -6,14 +6,19 @@ import (
 	"testing"
 )
 
-// A hook entry ctx-wire writes must always be recognized by the code that
-// detects and removes it. If these ever disagree, `init` writes an entry that
-// `uninstall` cannot find, leaving a dead hook behind that denies tool calls.
-func TestHookCommandRoundTrips(t *testing.T) {
+// The live builder must name the right agent and stay greppable by doctor.
+//
+// It deliberately does NOT assert isHookCommand here. On Windows hookCommand
+// embeds os.Executable(), which under `go test` is the test binary
+// (…\b001\test.test.exe), not ctx-wire.exe, so the base-name check in
+// isHookCommand rejects it for reasons that have nothing to do with the code
+// under test. The round-trip guarantee is covered against realistic executable
+// paths by TestHookCommandForCoversEveryPlatformBranch.
+func TestHookCommandNamesTheAgent(t *testing.T) {
 	for _, agent := range []string{"claude", "codex", "cursor", "copilot"} {
 		cmd := hookCommand(agent)
-		if !isHookCommand(cmd, agent) {
-			t.Errorf("hookCommand(%q) = %q, which isHookCommand does not recognize", agent, cmd)
+		if !strings.HasSuffix(cmd, " hook "+agent) {
+			t.Errorf("hookCommand(%q) = %q, which does not invoke that agent's hook", agent, cmd)
 		}
 		if !strings.Contains(cmd, HookNeedle(agent)) {
 			t.Errorf("hookCommand(%q) = %q, missing probe needle %q (doctor would report it unwired)",

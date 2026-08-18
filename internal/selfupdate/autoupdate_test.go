@@ -3,6 +3,7 @@ package selfupdate
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -110,6 +111,12 @@ func TestMaybeBackgroundUpdateThrottlesAndSkipsDev(t *testing.T) {
 }
 
 func TestMaybeBackgroundUpdateStampsBeforeSpawning(t *testing.T) {
+	// MaybeBackgroundUpdate returns early on Windows by design: a silent
+	// background swap of a running .exe is not validated there (see autoupdate.go).
+	// Asserting a spawn on Windows tests the opposite of the intended policy.
+	if runtime.GOOS == "windows" {
+		t.Skip("background update is deliberately disabled on Windows")
+	}
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	now := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
@@ -145,6 +152,12 @@ func TestMaybeBackgroundUpdateStampsBeforeSpawning(t *testing.T) {
 }
 
 func TestMaybeBackgroundUpdateClaimLockSuppressesDuplicateAndRecoversStale(t *testing.T) {
+	// MaybeBackgroundUpdate returns early on Windows by design: a silent
+	// background swap of a running .exe is not validated there (see autoupdate.go).
+	// Asserting a spawn on Windows tests the opposite of the intended policy.
+	if runtime.GOOS == "windows" {
+		t.Skip("background update is deliberately disabled on Windows")
+	}
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	now := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
@@ -190,5 +203,24 @@ func TestMaybeBackgroundUpdateClaimLockSuppressesDuplicateAndRecoversStale(t *te
 	}
 	if got := readLastCheck(); !got.Equal(now) {
 		t.Fatalf("last check after stale recovery = %v, want %v", got, now)
+	}
+}
+
+// The Windows early return is a deliberate safety policy, not an accident, so
+// pin it: a background swap of a running .exe is not validated there and a
+// failed swap could leave a broken install. Manual `ctx-wire update` still works.
+func TestMaybeBackgroundUpdateStaysOffOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("policy applies to Windows only")
+	}
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	oldSpawn := spawnDetachedFunc
+	spawned := 0
+	spawnDetachedFunc = func() { spawned++ }
+	t.Cleanup(func() { spawnDetachedFunc = oldSpawn })
+
+	MaybeBackgroundUpdate("0.1.0", time.Hour)
+	if spawned != 0 {
+		t.Fatalf("spawned = %d, want 0: background update must stay disabled on Windows", spawned)
 	}
 }

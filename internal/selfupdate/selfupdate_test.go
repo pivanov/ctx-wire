@@ -101,8 +101,25 @@ func TestVerifyChecksum(t *testing.T) {
 
 // makeArchive builds a release-shaped .tar.gz containing the binary at
 // <dir>/ctx-wire, matching what pack.sh produces.
+// archiveExt is the release archive extension for the platform under test, which
+// is what Update actually asks the server for. The fixtures used to hardcode
+// .tar.gz, so every download test failed on Windows against a URL the stub did
+// not serve. That went unnoticed because the Windows CI step swallowed the exit
+// code of every command but its last.
+func archiveExt() string {
+	if runtime.GOOS == "windows" {
+		return ".zip"
+	}
+	return ".tar.gz"
+}
+
+// makeArchive builds a release archive in the platform's real format: a .zip
+// holding ctx-wire.exe on Windows, a .tar.gz holding ctx-wire everywhere else.
 func makeArchive(t *testing.T, dir string, bin []byte) []byte {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		return makeZipArchive(t, dir, bin)
+	}
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
@@ -116,6 +133,29 @@ func makeArchive(t *testing.T, dir string, bin []byte) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+func makeZipArchive(t *testing.T, dir string, bin []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	writeZip(t, zw, dir+"/README.md", []byte("readme"))
+	writeZip(t, zw, dir+"/ctx-wire.exe", bin)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func writeZip(t *testing.T, zw *zip.Writer, name string, data []byte) {
+	t.Helper()
+	w, err := zw.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(data); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeTar(t *testing.T, tw *tar.Writer, name string, data []byte) {
@@ -245,7 +285,7 @@ func TestUpdateApplies(t *testing.T) {
 	dir := fmt.Sprintf("ctx-wire_2.0.0_%s_%s", runtime.GOOS, runtime.GOARCH)
 	archive := makeArchive(t, dir, binWant)
 	sum := sha256.Sum256(archive)
-	checksum := []byte(hex.EncodeToString(sum[:]) + "  " + dir + ".tar.gz\n")
+	checksum := []byte(hex.EncodeToString(sum[:]) + "  " + dir + archiveExt() + "\n")
 
 	var got []byte
 	prev := replaceSelf
@@ -292,7 +332,7 @@ func stub(t *testing.T, releaseJSON string, archive, checksum []byte) func() {
 			return []byte(releaseJSON), nil
 		case strings.HasSuffix(url, ".sha256"):
 			return checksum, nil
-		case strings.HasSuffix(url, ".tar.gz"):
+		case strings.HasSuffix(url, ".tar.gz"), strings.HasSuffix(url, ".zip"):
 			return archive, nil
 		}
 		return nil, fmt.Errorf("unexpected url %q", url)
