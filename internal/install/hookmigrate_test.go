@@ -201,3 +201,76 @@ func nestedCommands(t *testing.T, path, objectKey, eventKey string) []string {
 	}
 	return out
 }
+
+// The managed matcher must upgrade in place, for the same reason the command
+// does: a value that only reaches NEW installs is a fix nobody receives. An
+// entry scoped to "bash" before PowerShell was supported would otherwise never
+// see a Windows shell call, because Copilot filters on toolName before the hook
+// runs at all.
+func TestInstallCopilotSettingsUpgradesManagedMatcher(t *testing.T) {
+	pinWindowsHookCommand(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	stale := copilotSettingsWith(t, "bash", hookCommand("copilot"))
+	if err := os.WriteFile(path, []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := InstallCopilotSettings(path)
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !changed {
+		t.Fatal("install reported no change; the stale managed matcher survives and Windows stays uncovered")
+	}
+	pre := readJSON(t, path)["hooks"].(map[string]any)["preToolUse"].([]any)
+	if len(pre) != 1 {
+		t.Fatalf("want 1 entry, got %d (the upgrade duplicated the hook)", len(pre))
+	}
+	if got, _ := pre[0].(map[string]any)["matcher"].(string); got != copilotShellMatcher {
+		t.Errorf("matcher = %q, want %q", got, copilotShellMatcher)
+	}
+}
+
+// A matcher the user chose is theirs. Upgrading it would silently override a
+// deliberate narrowing (or widening) of what ctx-wire is allowed to see.
+func TestInstallCopilotSettingsPreservesCustomMatcher(t *testing.T) {
+	pinWindowsHookCommand(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	const custom = "bash|powershell|task"
+	mine := copilotSettingsWith(t, custom, hookCommand("copilot"))
+	if err := os.WriteFile(path, []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := InstallCopilotSettings(path)
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if changed {
+		t.Error("install rewrote an already-correct entry carrying a custom matcher")
+	}
+	pre := readJSON(t, path)["hooks"].(map[string]any)["preToolUse"].([]any)
+	if got, _ := pre[0].(map[string]any)["matcher"].(string); got != custom {
+		t.Errorf("matcher = %q, want the user's %q left untouched", got, custom)
+	}
+}
+
+// copilotSettingsWith renders a settings file holding one ctx-wire entry. The
+// command must be JSON-encoded, not spliced: the Windows form is an absolute
+// path full of backslashes and may carry quotes.
+func copilotSettingsWith(t *testing.T, matcher, command string) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"hooks": map[string]any{
+			"preToolUse": []any{map[string]any{
+				"type": "command", "matcher": matcher, "command": command,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}

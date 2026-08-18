@@ -96,7 +96,11 @@ func copilotCLI(data []byte, w io.Writer) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return nil
 	}
-	if in.ToolName != "bash" || len(in.ToolArgs) == 0 {
+	// Copilot CLI names its shell tool after the shell it drives: "bash" on
+	// Unix, "powershell" on Windows. Handling only bash meant ctx-wire was a
+	// no-op for every Windows user, seeing each command and wrapping none.
+	rewriteLine, ok := copilotCLIRewriter(in.ToolName)
+	if !ok || len(in.ToolArgs) == 0 {
 		return nil
 	}
 	args, ok := parseCopilotCLIToolArgs(in.ToolArgs)
@@ -107,7 +111,7 @@ func copilotCLI(data []byte, w io.Writer) error {
 	if command == "" {
 		return nil
 	}
-	rewritten := rewrite.LineForAgent(command, "copilot")
+	rewritten := rewriteLine(command, "copilot")
 	if rewritten == command {
 		return nil
 	}
@@ -144,4 +148,19 @@ func parseCopilotCLIToolArgs(raw json.RawMessage) (map[string]any, bool) {
 		return nil, false
 	}
 	return args, true
+}
+
+// copilotCLIRewriter picks the rewriter for a Copilot CLI shell tool. The two
+// shells need different recognizers: PowerShell commands are mostly cmdlets
+// rather than executables, and its default aliases shadow real programs, so the
+// POSIX rewriter would wrap things that cannot be exec'd. Any other tool name
+// gets no rewriter and the hook returns no opinion.
+func copilotCLIRewriter(toolName string) (func(line, agentName string) string, bool) {
+	switch toolName {
+	case "bash":
+		return rewrite.LineForAgent, true
+	case "powershell":
+		return rewrite.PowerShellLineForAgent, true
+	}
+	return nil, false
 }

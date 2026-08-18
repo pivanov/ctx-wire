@@ -27,23 +27,20 @@ that still need tuning.
 ` + ctxWireBlockEnd + `
 `
 
-// copilotShellMatcher scopes our preToolUse hook to the one tool we actually
-// handle. Copilot documents these camelCase tool names for the camelCase event:
-// bash, powershell, create, edit, view, grep, glob, web_fetch, ask_user, task.
+// copilotShellMatcher scopes our preToolUse hook to the shell tools, using the
+// camelCase tool names Copilot documents for the camelCase event
+// (bash, powershell, create, edit, view, grep, glob, web_fetch, ask_user, task).
 //
-// It is deliberately NOT "bash|powershell". internal/hook/copilot's CLI path
-// accepts toolName == "bash" and nothing else, so matching powershell would
-// spawn a hook that returns no opinion: all of the risk, none of the benefit.
-// (Copilot CLI on Windows drives PowerShell, so ctx-wire does not cover it there
-// at all today. Fixing that means teaching the rewriter PowerShell, not widening
-// this matcher.)
+// Both shells are listed because internal/hook/copilot handles both: Copilot CLI
+// names its shell tool after the shell it drives, so Windows sends "powershell"
+// and Unix sends "bash". Matching only bash left Windows entirely uncovered.
 //
 // Scoping is blast-radius containment. A preToolUse command hook that exits
 // non-zero fails CLOSED and DENIES the tool call; only timeouts fail open. While
 // this entry carried no matcher, one unspawnable hook denied view, glob and task
 // as well, which is what a Windows user saw on 2026-08-18: every tool refused,
 // none of them tools ctx-wire touches.
-const copilotShellMatcher = "bash"
+const copilotShellMatcher = "bash|powershell"
 
 const copilotCLIHookEvent = "preToolUse"
 
@@ -129,8 +126,9 @@ func InstallCopilotSettings(path string) (bool, error) {
 				migrated = true
 			}
 			// An entry wired before the matcher existed fires on EVERY tool, so a
-			// hook that cannot spawn denies view/glob/task too. Scope it.
-			if cur, _ := em["command"].(string); !hasMatcher(em) && isHookCommand(cur, "copilot") {
+			// hook that cannot spawn denies view/glob/task too. Scope it, and
+			// upgrade an earlier managed matcher to the current one.
+			if cur, _ := em["command"].(string); isHookCommand(cur, "copilot") && needsMatcherUpgrade(em) {
 				em["matcher"] = copilotShellMatcher
 				migrated = true
 			}
@@ -215,9 +213,24 @@ func removeCopilotCLIHooks(pre []any) ([]any, bool) {
 	return next, changed
 }
 
-// hasMatcher reports whether a hook entry already carries a matcher, so an
-// upgrade adds one without overwriting a matcher the user chose.
-func hasMatcher(entry map[string]any) bool {
-	m, ok := entry["matcher"].(string)
-	return ok && m != ""
+// copilotManagedMatchers are every matcher value ctx-wire itself has written,
+// including the empty one (entries wired before scoping existed). Only these may
+// be replaced in place.
+//
+// This exists so a change to the managed matcher actually REACHES people. The
+// hook command had the identical bug: installers treated "ours, in any form" as
+// "already configured" and never upgraded it, so a fix shipped to nobody. A
+// matcher the user chose is theirs and is never overwritten, even though that
+// means their entry misses coverage for newly supported tools.
+var copilotManagedMatchers = map[string]bool{
+	"":                true, // absent: wired before scoping existed
+	"bash":            true, // scoped before PowerShell was supported
+	"bash|powershell": true, // current
+}
+
+// needsMatcherUpgrade reports whether entry's matcher is one of ours and out of
+// date. A custom matcher, or one already current, returns false.
+func needsMatcherUpgrade(entry map[string]any) bool {
+	cur, _ := entry["matcher"].(string)
+	return copilotManagedMatchers[cur] && cur != copilotShellMatcher
 }
