@@ -14,7 +14,10 @@ import (
 )
 
 type claudeInput struct {
-	SessionID     string          `json:"session_id"`
+	SessionID string `json:"session_id"`
+	// Cwd is the session's working directory. It follows the session into a
+	// worktree after EnterWorktree, which is how the hook recognizes one.
+	Cwd           string          `json:"cwd"`
 	ToolName      string          `json:"tool_name"`
 	ToolInput     json.RawMessage `json:"tool_input"`
 	ToolResponse  json.RawMessage `json:"tool_response"`
@@ -70,7 +73,19 @@ func claudeBash(in claudeInput, w io.Writer) error {
 	if json.Unmarshal(in.ToolInput, &ti) != nil || ti.Command == "" {
 		return nil
 	}
-	rewritten := rewrite.LineForAgent(ti.Command, "claude")
+	// Inside a worktree-isolated session Claude Code refuses any command that
+	// runs ctx-wire alongside git, even `git status`, because it cannot read what
+	// an unknown launcher does. So a line that mentions git is never wrapped
+	// there, and a wrapper the agent typed itself is removed so the command can
+	// run at all. See rewrite.MentionsGit and pivanov/ctx-wire#5. The regex runs
+	// first so the filesystem is only touched for lines that mention git.
+	isolatedGit := rewrite.MentionsGit(ti.Command) && inLinkedWorktree(in.Cwd)
+	var rewritten string
+	if isolatedGit {
+		rewritten = rewrite.UnwrapRuns(ti.Command)
+	} else {
+		rewritten = rewrite.LineForAgent(ti.Command, "claude")
+	}
 	if rewritten == ti.Command {
 		return nil // nothing to change
 	}
@@ -78,7 +93,13 @@ func claudeBash(in claudeInput, w io.Writer) error {
 	// auto-approve the rewritten (wrapped) command, bypassing rules that can no
 	// longer see the inner command. If a deny/ask rule matches, step aside (emit
 	// nothing) so Claude applies its own decision to the original command.
-	if permission.LoadClaude().Decide(ti.Command) != permission.Allow {
+	rules := permission.LoadClaude()
+	if rules.Decide(ti.Command) != permission.Allow {
+		return nil
+	}
+	// Unwrapping changes the command that runs from `ctx-wire run ... git push`
+	// to `git push`, so the rules must also approve what actually runs.
+	if isolatedGit && rules.Decide(rewritten) != permission.Allow {
 		return nil
 	}
 	return json.NewEncoder(w).Encode(claudeOutput{
