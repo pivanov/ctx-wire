@@ -59,6 +59,11 @@ GET  /health
 
 `POST /v1/telemetry` and `POST /v1/impact` are aliases.
 
+`GET /v1/stats` returns everything, including the `country_programs` and
+`version_programs` breakdowns used for analysis. `GET /v1/impact` is what the
+website polls, so it leaves those two out (they were 80% of its body and the
+two largest table scans). Both are edge-cached for 5 minutes.
+
 ## Abuse protection
 
 This is an anonymous, keyless public endpoint, so it cannot truly verify "only

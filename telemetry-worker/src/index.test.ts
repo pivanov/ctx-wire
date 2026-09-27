@@ -184,3 +184,42 @@ describe("sanitizeImpact", () => {
     expect(r.flags).toEqual([]);
   });
 });
+
+// statsEnv returns an Env whose D1 answers every stats query with one row and
+// records which tables were read, so each endpoint's query set can be checked.
+function statsEnv(queried: string[]) {
+  const stmt = (sql: string) => ({
+    first: async () => ({ installs: 1, commands: 1, raw_bytes: 1, emitted_bytes: 1, bytes_saved: 0, tokens_saved: 0, reports: 1 }),
+    all: async () => {
+      queried.push(/FROM (\w+)/.exec(sql)?.[1] ?? "?");
+      return { results: [{ row: 1 }] };
+    },
+  });
+  return { ctx_wire_telemetry: { prepare: (sql: string) => stmt(sql) } } as unknown as Parameters<typeof worker.fetch>[1];
+}
+
+describe("stats endpoints", () => {
+  const edgeCache = { match: async () => undefined, put: async () => {} };
+  (globalThis as unknown as { caches: unknown }).caches = { default: edgeCache };
+
+  it("keeps /v1/impact to what the website reads, skipping the breakdown scans", async () => {
+    const queried: string[] = [];
+    const res = await worker.fetch(new Request("https://telemetry.test/v1/impact"), statsEnv(queried), ctx);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toHaveProperty("programs");
+    expect(body).toHaveProperty("countries");
+    expect(body).toHaveProperty("agents");
+    expect(body).not.toHaveProperty("country_programs");
+    expect(body).not.toHaveProperty("version_programs");
+    expect(queried).not.toContain("country_program_stats");
+    expect(queried).not.toContain("version_program_stats");
+  });
+
+  it("serves the full breakdowns on /v1/stats", async () => {
+    const queried: string[] = [];
+    const res = await worker.fetch(new Request("https://telemetry.test/v1/stats"), statsEnv(queried), ctx);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toHaveProperty("country_programs");
+    expect(body).toHaveProperty("version_programs");
+  });
+});

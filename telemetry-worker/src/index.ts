@@ -476,7 +476,7 @@ async function cachedStats(request: Request, env: Env, ctx: ExecutionContext): P
     return served;
   }
 
-  const fresh = await readStats(env);
+  const fresh = await readStats(env, url.pathname === "/v1/stats");
   const cacheable = new Response(fresh.body, fresh);
   cacheable.headers.set("Cache-Control", `public, max-age=${STATS_CACHE_TTL_SECONDS}`);
   // Store the clean response (no cache-status header), then mark the one we serve
@@ -486,7 +486,13 @@ async function cachedStats(request: Request, env: Env, ctx: ExecutionContext): P
   return cacheable;
 }
 
-async function readStats(env: Env): Promise<Response> {
+// readStats builds the stats payload. The per-country and per-version program
+// breakdowns are for analysis on /v1/stats only: the website polls /v1/impact
+// every 30s and never reads them, yet they were 80% of its 452 kB body and the
+// two largest table scans, which pushed a cache miss past the free plan's 10 ms
+// CPU budget. /v1/impact skips those queries entirely.
+async function readStats(env: Env, detailed: boolean): Promise<Response> {
+  const none = Promise.resolve(undefined);
   const [totals, countries, programs, countryPrograms, agents, agentInstalls, versions, versionPrograms] = await Promise.all([
     env.ctx_wire_telemetry
       .prepare(
@@ -519,15 +525,17 @@ async function readStats(env: Env): Promise<Response> {
          LIMIT 100`,
       )
       .all(),
-    env.ctx_wire_telemetry
-      .prepare(
-        `SELECT country, program, runs, bytes_saved, tokens_saved, updated_at
-         , raw_bytes, emitted_bytes
-         FROM country_program_stats
-         ORDER BY runs DESC
-         LIMIT 500`,
-      )
-      .all(),
+    detailed
+      ? env.ctx_wire_telemetry
+          .prepare(
+            `SELECT country, program, runs, bytes_saved, tokens_saved, updated_at
+             , raw_bytes, emitted_bytes
+             FROM country_program_stats
+             ORDER BY runs DESC
+             LIMIT 500`,
+          )
+          .all()
+      : none,
     env.ctx_wire_telemetry
       .prepare(
         `SELECT agent, runs, bytes_saved, tokens_saved, updated_at
@@ -553,14 +561,16 @@ async function readStats(env: Env): Promise<Response> {
          LIMIT 100`,
       )
       .all(),
-    env.ctx_wire_telemetry
-      .prepare(
-        `SELECT version, program, runs, raw_bytes, emitted_bytes, bytes_saved, tokens_saved, updated_at
-         FROM version_program_stats
-         ORDER BY version DESC, runs DESC
-         LIMIT 2000`,
-      )
-      .all(),
+    detailed
+      ? env.ctx_wire_telemetry
+          .prepare(
+            `SELECT version, program, runs, raw_bytes, emitted_bytes, bytes_saved, tokens_saved, updated_at
+             FROM version_program_stats
+             ORDER BY version DESC, runs DESC
+             LIMIT 2000`,
+          )
+          .all()
+      : none,
   ]);
 
   return json({
@@ -576,11 +586,11 @@ async function readStats(env: Env): Promise<Response> {
     },
     countries: countries.results,
     programs: programs.results,
-    country_programs: countryPrograms.results,
+    ...(countryPrograms ? { country_programs: countryPrograms.results } : {}),
     agents: agents.results,
     agent_installs: agentInstalls.results,
     versions: versions.results,
-    version_programs: versionPrograms.results,
+    ...(versionPrograms ? { version_programs: versionPrograms.results } : {}),
   });
 }
 
