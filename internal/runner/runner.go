@@ -127,6 +127,15 @@ func Run(ctx context.Context, reg *filter.Registry, name string, args []string) 
 		return streamLive(ctx, execName, args, scrubbedCmd, spool, os.Stdout, os.Stderr, ceilingOff)
 	}
 
+	// `ctx-wire run sh -lc '<a && b; c>'` (agents type this form themselves, so
+	// no hook ever looks inside it): run the same shell with each segment of the
+	// script wrapped, so every inner command gets its own filter. The inner runs
+	// record their own gain; this outer run keeps only the ceiling as a backstop
+	// and records nothing, or its bytes would be counted twice.
+	if split, ok := shellSplitArgs(name, args); ok {
+		return streamLiveMode(ctx, execName, split, scrubbedCmd, spool, os.Stdout, os.Stderr, false, "")
+	}
+
 	matched := reg.Find(cmdline)
 
 	// No filter: stream output live (line-buffered, scrubbed) so long-running
@@ -161,6 +170,12 @@ func commandLine(name string, args []string) string {
 // full scrubbed output is spooled to disk and kept if the command fails. Used
 // for the passthrough path, where there is no filter that needs whole output.
 func streamLive(ctx context.Context, name string, args []string, scrubbedCmd string, spool *tee.Spool, stdout, stderr io.Writer, ceilingOff bool) (int, error) {
+	return streamLiveMode(ctx, name, args, scrubbedCmd, spool, stdout, stderr, ceilingOff, "passthrough")
+}
+
+// streamLiveMode is streamLive with the gain mode to record; an empty mode
+// records nothing (a split shell script whose inner runs record themselves).
+func streamLiveMode(ctx context.Context, name string, args []string, scrubbedCmd string, spool *tee.Spool, stdout, stderr io.Writer, ceilingOff bool, gainMode string) (int, error) {
 	emitOut := &countWriter{w: stdout}
 	emitErr := &countWriter{w: stderr}
 	// The passthrough ceiling sits between the scrubber and the agent: the head
@@ -206,7 +221,9 @@ func streamLive(ctx context.Context, name string, args []string, scrubbedCmd str
 	if incompleteIO {
 		fmt.Fprintln(stderr, incompleteIONote)
 	}
-	recordGain(scrubbedCmd, "", "passthrough", rawOut.n+rawErr.n, emitOut.n+emitErr.n, code)
+	if gainMode != "" {
+		recordGain(scrubbedCmd, "", gainMode, rawOut.n+rawErr.n, emitOut.n+emitErr.n, code)
+	}
 	// Keep the spool on failure or truncation, but only POINT at it when the
 	// ceiling actually omitted bytes. Passthrough already streamed the full scrubbed
 	// output live, so on a plain failure with nothing omitted the agent already has
