@@ -52,6 +52,13 @@ func TestLine(t *testing.T) {
 		{"bash long option before -c rewrites inner command", "bash --norc -c 'git status'", "bash --norc -c 'ctx-wire run git status'"},
 		{"bash option with argument before -c rewrites inner command", "bash -o pipefail -c 'git status'", "bash -o pipefail -c 'ctx-wire run git status'"},
 		{"bash -lc shell builtin inner passthrough", "bash -lc 'echo ok'", "bash -lc 'echo ok'"},
+		// '\'' embeds a quote in a single-quoted script. It used to be escaped a
+		// second time, turning a working command into a shell syntax error.
+		{"sh -c with embedded single quotes", `sh -c 'git log --format='\''%h %s'\'' -3'`,
+			`sh -c 'ctx-wire run git log --format='\''%h %s'\'' -3'`},
+		{"single-quoted $ expands in the inner shell, still rewritten", `bash -lc 'git -C $HOME status'`,
+			`bash -lc 'ctx-wire run git -C $HOME status'`},
+		{"double-quoted backslash kept literal", `bash -lc "grep 'a\.b' f"`, `bash -lc "ctx-wire run grep 'a\\.b' f"`},
 		{"dynamic shell command string passthrough", `bash -lc "$cmd"`, `bash -lc "$cmd"`},
 		{"command substitution shell command string passthrough", `bash -lc "$(echo git status)"`, `bash -lc "$(echo git status)"`},
 		{"dynamic command token passthrough", `$cmd`, `$cmd`},

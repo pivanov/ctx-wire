@@ -438,11 +438,15 @@ func rewriteShellCommandString(core, wrap string) (rewritten, inner string, chan
 			continue
 		}
 		if isShellCommandFlag(tok) {
-			command, quote, quoted := shellUnquoteToken(toks[i+1].text)
-			if !quoted {
+			command, dynamic, onlyDouble, ok := decodeShellWord(toks[i+1].text)
+			if !ok {
 				return "", "", false, true
 			}
-			if hasDynamicShellExpansion(command) {
+			// A $ or backtick outside single quotes is expanded by the OUTER shell
+			// before the inner one ever sees the script, so re-quoting it would move
+			// the expansion. Inside single quotes it is literal here and expands in
+			// the inner shell either way, so it is safe to rewrite around.
+			if dynamic {
 				return "", command, false, true
 			}
 			commandRewritten := lineWith(command, wrap)
@@ -450,7 +454,7 @@ func rewriteShellCommandString(core, wrap string) (rewritten, inner string, chan
 				return "", command, false, true
 			}
 			requoted := shellSingleQuote(commandRewritten)
-			if quote == '"' && !hasDynamicShellExpansion(commandRewritten) {
+			if onlyDouble && !hasDynamicShellExpansion(commandRewritten) {
 				requoted = shellDoubleQuote(commandRewritten)
 			}
 			return core[:toks[i+1].start] + requoted + core[toks[i+1].end:], command, true, true
@@ -515,6 +519,84 @@ func shellUnquoteToken(tok string) (string, byte, bool) {
 		b.WriteByte('\\')
 	}
 	return b.String(), q, true
+}
+
+// decodeShellWord returns the literal string a POSIX shell passes for one word,
+// resolving concatenated single-quoted, double-quoted and unquoted parts, so a
+// script that embeds a quote by closing the single quote, adding an escaped
+// quote and reopening decodes to the literal text instead of being re-escaped a
+// second time (which produced a shell syntax error). dynamic reports a $ or backtick the outer
+// shell would expand (outside single quotes). onlyDouble reports that the word
+// was a single double-quoted string, so the caller can keep that quoting style.
+// ok is false for anything the outer shell would transform in ways this cannot
+// reproduce (unquoted globs or tilde, an unterminated quote).
+func decodeShellWord(tok string) (decoded string, dynamic, onlyDouble, ok bool) {
+	var b strings.Builder
+	var quote byte
+	parts := 0
+	sawDouble, sawOther := false, false
+	for i := 0; i < len(tok); i++ {
+		c := tok[i]
+		switch quote {
+		case '\'':
+			if c == '\'' {
+				quote = 0
+				continue
+			}
+			b.WriteByte(c)
+		case '"':
+			switch {
+			case c == '"':
+				quote = 0
+			case c == '\\' && i+1 < len(tok) && strings.IndexByte("$`\"\\\n", tok[i+1]) >= 0:
+				i++
+				if tok[i] != '\n' {
+					b.WriteByte(tok[i])
+				}
+			default:
+				if c == '$' || c == '`' {
+					dynamic = true
+				}
+				b.WriteByte(c)
+			}
+		default:
+			switch {
+			case c == '\'':
+				quote = c
+				parts++
+				sawOther = true
+			case c == '"':
+				quote = c
+				parts++
+				sawDouble = true
+			case c == '\\':
+				if i+1 >= len(tok) {
+					return "", false, false, false
+				}
+				i++
+				if tok[i] != '\n' {
+					b.WriteByte(tok[i])
+				}
+				parts++
+				sawOther = true
+			case c == '$' || c == '`':
+				dynamic = true
+				b.WriteByte(c)
+				parts++
+				sawOther = true
+			case strings.IndexByte("*?[~{", c) >= 0:
+				return "", false, false, false
+			default:
+				b.WriteByte(c)
+				parts++
+				sawOther = true
+			}
+		}
+	}
+	if quote != 0 {
+		return "", false, false, false
+	}
+	return b.String(), dynamic, sawDouble && !sawOther && parts == 1, true
 }
 
 func shellSingleQuote(s string) string {
