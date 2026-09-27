@@ -783,11 +783,9 @@ func TestCaptureFilterTruncationKeepsFullSpool(t *testing.T) {
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}
-	if !strings.Contains(out, "filter output truncated") {
-		t.Errorf("expected filter truncation note, got %q", out)
-	}
-	if !strings.Contains(out, "[full output:") {
-		t.Errorf("expected full output hint, got %q", out)
+	// A plain head cut points at exactly the unseen lines of the spool.
+	if !strings.Contains(out, "[ctx-wire: showed lines 1-160 of 220; rest: ctx-wire fetch ") || !strings.Contains(out, " --lines 161-220]") {
+		t.Errorf("expected ranged remainder hint, got %q", out)
 	}
 	if strings.Contains(out, "line-200") {
 		t.Errorf("filtered output should not include capped tail line: %q", out)

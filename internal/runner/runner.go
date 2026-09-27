@@ -267,6 +267,8 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	filterTruncated := false
 	emptyTailFallback := false
 	collapsedRawBytes := 0
+	var headCut *filter.HeadCut
+	filterChanged := false
 	switch f := matched; {
 	case f == nil:
 		stdoutText = scrub.Scrub(out)
@@ -291,6 +293,8 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 			opts.MaxLinesOverride = &span
 		}
 		applied := applySafe(f, text, opts)
+		// Rejoining lines drops a trailing newline; that is not a change.
+		filterChanged = applied.Truncated || strings.TrimRight(applied.Output, "\n") != strings.TrimRight(text, "\n")
 		// The structured-output guard is evaluated against the RAW output, before
 		// the filter's result is consulted, because a filter can destroy a complete
 		// JSON document without ever setting Truncated. `match_output` is the sharp
@@ -315,7 +319,13 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 				collapsedRawBytes = len(text)
 			}
 			filterTruncated = applied.Truncated
-			stdoutText = withTrailingNewline(scrub.Scrub(maybeStripStack(applied.Output, &filterTruncated)))
+			stripped := maybeStripStack(applied.Output, &filterTruncated)
+			// The remainder of a clean head cut is addressable in the spool only
+			// when the spool is this stream alone and nothing else rewrote it.
+			if applied.HeadCut != nil && stripped == applied.Output && !f.FilterStderr && errCap.total == 0 && !outCap.truncated {
+				headCut = applied.HeadCut
+			}
+			stdoutText = withTrailingNewline(scrub.Scrub(stripped))
 			if !f.FilterStderr {
 				// Most language runtimes print stack traces to stderr, so strip it
 				// too when the filter did not already merge it into stdout.
@@ -340,6 +350,30 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 		}
 	}
 
+	// Output backstop: a filter bounds lines, not bytes, so a few huge lines (a
+	// crash dump, a minified bundle, a one-line JSON blob) could still flood the
+	// agent. Apply the passthrough ceiling to the final text, but only when that
+	// cannot corrupt what a program reads: when the agent is known to be the
+	// reader (a hook wraps only a pipeline's final stage, and MCP returns a tool
+	// result), or when a filter already rewrote plain text. Output a filter left
+	// untouched on purpose (go list -json, a whole JSON document) stays
+	// byte-exact for a manual `ctx-wire run ... | jq`. Output redirected to a
+	// file, and PATH-shim traffic (an IDE or script is the usual reader), are
+	// never cut.
+	if head, tail, ok := passthroughCeiling(); ok && !stdoutIsFile() && os.Getenv(shim.EnvName) == "" {
+		src := os.Getenv(EnvSource)
+		agentReader := src == "hook" || src == "mcp"
+		if agentReader || (mode == "filtered" && filterChanged) {
+			var cutOut, cutErr bool
+			stdoutText, cutOut = ceilText(stdoutText, head, tail)
+			stderrText, cutErr = ceilText(stderrText, head-min(len(stdoutText), head), tail)
+			if cutOut || cutErr {
+				filterTruncated = true
+				headCut = nil
+			}
+		}
+	}
+
 	truncated := outCap.truncated || errCap.truncated || filterTruncated
 	// Truncation notices and the spool hint are diagnostic metadata, not command
 	// output. They go on the hint channel (written to stderr by the CLI), so they
@@ -349,7 +383,7 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	if outCap.truncated || errCap.truncated {
 		meta = append(meta, fmt.Sprintf("[ctx-wire: in-memory output truncated at %d bytes per stream; full log spooled]", maxCapture))
 	}
-	if filterTruncated {
+	if filterTruncated && headCut == nil {
 		meta = append(meta, "[ctx-wire: filter output truncated; full log spooled]")
 	}
 	if emptyTailFallback {
@@ -383,6 +417,12 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 	keep := code != 0 || recovery || incompleteIO || collapsedRawBytes > 0
 	if path, ok := spool.Finalize(keep); ok && (code != 0 || recovery) {
 		footer := tee.Hint(path)
+		// The spool is scrubbed, and scrubbing can fold a multi-line secret into
+		// one line, which shifts every later line number. Point at a range only
+		// when the spool still has exactly the raw output's lines.
+		if headCut != nil && tee.LineCount(path) == strings.Count(out, "\n") {
+			footer = tee.RangeHint(path, headCut.Shown, headCut.Total)
+		}
 		rawStdout, rawStderr := scrub.Scrub(out), scrub.Scrub(errOut)
 		switch {
 		case recovery:

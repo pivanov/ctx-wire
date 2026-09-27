@@ -25,3 +25,10 @@ func shellSplitArgs(name string, args []string) ([]string, bool) {
 	return rewrite.ShellScriptArgs(name, args, rewrite.ShellSingleQuote(exe)+" run ")
 }
 
+// stdoutIsFile reports whether stdout is redirected to a regular file, where
+// the reader is whatever parses that file later, never the agent. A var so tests
+// are not affected by how the test binary's own stdout is attached.
+var stdoutIsFile = func() bool {
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode().IsRegular()
+}

@@ -165,3 +165,17 @@ func (w *ceilWriter) flush() (bool, error) {
 	w.tail = nil
 	return w.omitted > 0, err
 }
+
+// ceilText is the buffered form of the ceiling: s up to head bytes, an omission
+// marker, then the last tail bytes, cut on rune boundaries. Text at or under
+// head+tail is returned unchanged.
+func ceilText(s string, head, tail int) (string, bool) {
+	if len(s) <= head+tail {
+		return s, false
+	}
+	b := []byte(s)
+	h := snapDownRune(b, head)
+	t := snapUpRune(b, len(b)-tail)
+	marker := fmt.Sprintf("\n[ctx-wire: %d bytes omitted (over the %d-byte output ceiling); tail follows, full output spooled]\n", t-h, head+tail)
+	return s[:h] + marker + s[t:], true
+}

@@ -9,6 +9,7 @@
 package tee
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -204,6 +205,17 @@ func Hint(path string) string {
 	return fmt.Sprintf("[full output: %s]", displayPath(path))
 }
 
+// RangeHint is Hint for output whose first shown lines are exactly the spool's
+// first lines: it points at the unseen remainder only, so reading on does not
+// re-send what the agent already has. It falls back to Hint without a handle.
+func RangeHint(path string, shown, total int) string {
+	h := hashFromName(path)
+	if h == "" || shown < 1 || total <= shown {
+		return Hint(path)
+	}
+	return fmt.Sprintf("[ctx-wire: showed lines 1-%d of %d; rest: ctx-wire fetch %s --lines %d-%d]", shown, total, h[:handleLen], shown+1, total)
+}
+
 // PrimaryDir returns the primary spool directory for the current environment.
 // Exposed read-only for diagnostics (ctx-wire doctor).
 func PrimaryDir() (string, error) {
@@ -395,4 +407,26 @@ func displayPath(path string) string {
 		}
 	}
 	return path
+}
+
+// LineCount returns the number of newline characters in the spool file at path,
+// or -1 when it cannot be read.
+func LineCount(path string) int {
+	f, err := os.Open(path)
+	if err != nil {
+		return -1
+	}
+	defer f.Close()
+	n := 0
+	buf := make([]byte, 64<<10)
+	for {
+		k, err := f.Read(buf)
+		n += bytes.Count(buf[:k], []byte{'\n'})
+		if err == io.EOF {
+			return n
+		}
+		if err != nil {
+			return -1
+		}
+	}
 }

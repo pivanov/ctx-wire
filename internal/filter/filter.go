@@ -185,6 +185,17 @@ type ApplyResult struct {
 	// surfaced hash the agent cannot fetch it, so a large collapse also emits a
 	// recovery pointer.
 	Synthetic bool
+	// HeadCut is set when the only thing that dropped lines was the final
+	// max_lines cap keeping the first Shown of Total input lines, so output line
+	// N is input line N and the omitted remainder is exactly lines Shown+1..Total.
+	// The runner turns that into a ranged `ctx-wire fetch --lines` pointer, so
+	// an agent reading on fetches only what it has not seen.
+	HeadCut *HeadCut
+}
+
+// HeadCut describes a head-keeping max_lines cut over line-aligned output.
+type HeadCut struct {
+	Shown, Total int
 }
 
 // ApplyOptions controls context-sensitive parts of the pipeline. The default is
@@ -474,19 +485,36 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 		}
 	}
 
+	// countKept stays true while output line N is still input line N, which is
+	// what makes a head cut's remainder addressable by line number.
+	countKept := !ultraCompact
+	for _, rule := range f.replace {
+		if strings.Contains(rule.replacement, "\n") {
+			countKept = false
+		}
+	}
+
 	// 4. strip OR keep (mutually exclusive)
+	beforeLineFilter := len(lines)
 	switch f.lineFilterKind {
 	case lineFilterStrip:
 		lines = retain(lines, func(l string) bool { return !anyMatch(f.lineFilterSet, l) })
 	case lineFilterKeep:
 		lines = retain(lines, func(l string) bool { return anyMatch(f.lineFilterSet, l) })
 	}
+	if len(lines) != beforeLineFilter {
+		countKept = false
+	}
 
 	// 5. truncate_lines_at
+	firstLongLine := -1
 	if at := scaledCap(f.truncateLinesAt, opts.TruncateLevel); at != nil {
 		for i, l := range lines {
 			if utf8.RuneCountInString(l) > *at {
 				truncated = true
+				if firstLongLine < 0 {
+					firstLongLine = i
+				}
 			}
 			lines[i] = truncate(l, *at)
 		}
@@ -496,6 +524,9 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 	headCap := scaledCap(f.headLines, opts.TruncateLevel)
 	tailCap := scaledCap(f.tailLines, opts.TruncateLevel)
 	total := len(lines)
+	if (headCap != nil && total > *headCap) || (tailCap != nil && total > *tailCap) || f.groupBy != nil {
+		countKept = false
+	}
 	switch {
 	case headCap != nil && tailCap != nil:
 		head, tail := *headCap, *tailCap
@@ -543,9 +574,15 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 	if opts.MaxLinesOverride != nil {
 		lineCap = opts.MaxLinesOverride
 	}
+	var headCut *HeadCut
 	if m := lineCap; m != nil {
 		max := *m
 		if len(lines) > max {
+			// Only a clean cut qualifies: a shown line shortened by
+			// truncate_lines_at is not the spool's line, so the agent may need it.
+			if countKept && (firstLongLine < 0 || firstLongLine >= max) && !opts.KeepTailOnTruncate {
+				headCut = &HeadCut{Shown: max, Total: len(lines)}
+			}
 			truncated = true
 			omitted := len(lines) - max
 			msg := fmt.Sprintf("... (%d lines truncated)", omitted)
@@ -566,7 +603,7 @@ func ApplyWithMetaOptions(f *CompiledFilter, stdout string, opts ApplyOptions) A
 	if strings.TrimSpace(result) == "" && f.onEmpty != nil && !opts.SuppressSyntheticSuccess {
 		return ApplyResult{Output: *f.onEmpty, Truncated: truncated, Synthetic: true}
 	}
-	return ApplyResult{Output: result, Truncated: truncated}
+	return ApplyResult{Output: result, Truncated: truncated, HeadCut: headCut}
 }
 
 // ultraCompact, when set, applies an extra compaction pass to filtered output.
