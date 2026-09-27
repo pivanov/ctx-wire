@@ -11,7 +11,7 @@ const STEPS = [
   {
     n: 2,
     title: "Compress & scrub",
-    desc: "148 declarative filters shrink the output; secrets are scrubbed fail-closed; the full log stays on disk, and inspect shows exactly what was cut.",
+    desc: "149 declarative filters shrink the output; secrets are scrubbed fail-closed; the full log stays on disk, and inspect shows exactly what was cut.",
   },
   {
     n: 3,
@@ -42,7 +42,7 @@ const CAPS = [
     desc: "Coverage for agents without a hook (Cline, Windsurf, VS Code...); where a hook already rewrites, shims step aside.",
   },
   {
-    name: "148 filters · 400+ tests",
+    name: "149 filters · 400+ tests",
     desc: "Declarative TOML corpus, conformance-tested every release.",
   },
   {

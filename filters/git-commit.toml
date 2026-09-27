@@ -1,0 +1,26 @@
+[filters.git-commit]
+description = "Compact git commit output: keep the commit summary, hook and error output; drop the per-file create/delete/rename mode lines"
+match_command = "^git\\s+(?:(--no-pager|-C\\s+\\S+|-c\\s+\\S+)\\s+)*commit\\b"
+strip_ansi = true
+# A large commit prints one mode line per added, deleted or renamed file (a
+# 1,828-file amend printed 192 KB of nothing else). The agent staged those files
+# itself, the "N files changed" line keeps the scale, and `git show --summary`
+# lists them again, so only these lines go. Hook output and errors stay.
+strip_lines_matching = [
+  "^ (create|delete) mode [0-7]{6} ",
+  "^ mode change [0-7]{6} => [0-7]{6} ",
+  "^ (rename|copy) .+ \\(\\d+%\\)$",
+]
+truncate_lines_at = 500
+max_lines = 120
+
+[[tests.git-commit]]
+name = "mode lines dropped, summary kept"
+input = "[dev c258ef7] feat: split project\n 5 files changed, 12 insertions(+), 3 deletions(-)\n delete mode 100644 App_Start/BundleConfig.cs\n create mode 100644 client/src/main.ts\n rename {ClientApp => client}/src/app/app.module.ts (100%)\n rename {ClientApp => client}/src/app/app.component.ts (97%)\n mode change 100644 => 100755 scripts/build.sh"
+expected = "[dev c258ef7] feat: split project\n 5 files changed, 12 insertions(+), 3 deletions(-)"
+
+[[tests.git-commit]]
+name = "hook failure output kept"
+failed = true
+input = "lint-staged: running tasks...\n✖ eslint --fix:\n  src/app.ts\n    3:7  error  'x' is assigned a value but never used  no-unused-vars\nhusky - pre-commit hook exited with code 1 (error)"
+expected = "lint-staged: running tasks...\n✖ eslint --fix:\n  src/app.ts\n    3:7  error  'x' is assigned a value but never used  no-unused-vars\nhusky - pre-commit hook exited with code 1 (error)"
