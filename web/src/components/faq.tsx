@@ -13,11 +13,11 @@ const ITEMS = [
   },
   {
     q: "Can it corrupt something my agent parses?",
-    a: "That risk is engineered against. Command substitutions like $(cat config.json) are never rewritten, streaming and interactive commands are auto-detected and bypassed, and complete JSON output passes through whole (up to 1 MiB), never line-cut mid-structure. 400+ conformance tests pin every filter's behavior on each release.",
+    a: "That risk is engineered against. Command substitutions like $(cat config.json) are never rewritten, streaming and interactive commands are auto-detected and bypassed, and output a program reads stays byte-exact: a complete JSON document piped to jq or redirected to a file passes through whole (up to 1 MiB), never line-cut mid-structure. Only output headed to the agent itself is bounded, by the same ~64 KB head-and-tail ceiling, with the full copy on disk. 400+ conformance tests pin every filter's behavior on each release.",
   },
   {
     q: "What happens when a command fails?",
-    a: "The failure reaches your agent intact. Exit codes pass through, a failed command keeps its output, and a filter can never collapse a failure into a fake success. If filtering would leave a failed command with nothing visible, the runner falls back to the raw tail, and the full output is always kept on disk, recoverable with ctx-wire fetch <hash>.",
+    a: "The failure always reaches your agent. Exit codes pass through, a failed command keeps its output, and a filter can never collapse a failure into a fake success. A failure too big for one read (past roughly 64 KB) keeps its head and its tail, where the error usually is, with the middle marked. If filtering would leave a failed command with nothing visible, the runner falls back to the raw tail, and the full output is always kept on disk, recoverable with ctx-wire fetch <hash>.",
   },
   {
     q: "Will it block or interrupt my agent?",

@@ -33,7 +33,7 @@ const AGENTS = [
 const TRUST = [
   "149 filters, 400+ tests",
   "fail-closed scrubbing",
-  "failures pass through intact",
+  "failures never hidden",
   "inspect what's filtered",
   "runs fully local",
   "no sudo, installs to ~/.local/bin",
