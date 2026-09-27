@@ -1,6 +1,5 @@
 // Package recent stores a small, bounded, scrubbed record of recent `ctx-wire
-// run` outputs so `ctx-wire inspect` can show raw-vs-filtered (and, later, dedup
-// can detect unchanged output).
+// run` outputs so `ctx-wire inspect` can show raw-vs-filtered output.
 //
 // This is a deliberate exception to the codebase's "do not persist successful
 // output" stance, and it is constrained accordingly: off by default (opt-in),
@@ -103,8 +102,8 @@ func Record(opts Options, e Entry) {
 		return
 	}
 	// Hash the FULL emitted before clipping, so the stored hash represents the
-	// whole output the agent saw (robust for future dedup, no tail-difference
-	// false positive when output exceeds the body cap).
+	// whole output the agent saw (no tail-difference artifact when output
+	// exceeds the body cap).
 	e.Hash = hashString(e.Emitted)
 	e.Emitted = clip(e.Emitted)
 	if opts.RawBodies {
@@ -192,35 +191,6 @@ func List() []Entry {
 		return nil
 	}
 	return readEntries(p)
-}
-
-// Hash returns the content hash used for entries, so dedup can compare a fresh
-// output against a stored entry's Hash with the same function.
-func Hash(s string) string { return hashString(s) }
-
-// LastMatch returns the most recent entry whose command equals command and whose
-// timestamp is within `within` of now. ok is false when there is no such recent
-// entry. Used by dedup: a match means the same command produced this output
-// recently enough that the body is likely still in the agent's context.
-func LastMatch(command string, within time.Duration, now time.Time) (Entry, bool) {
-	entries := List()
-	for i := len(entries) - 1; i >= 0; i-- {
-		e := entries[i]
-		if e.Command != command {
-			continue
-		}
-		ts, err := time.Parse(time.RFC3339Nano, e.TS)
-		if err != nil {
-			return Entry{}, false
-		}
-		if now.Sub(ts) <= within {
-			return e, true
-		}
-		// The most recent match is already outside the window; older ones only
-		// get further away, so stop.
-		return Entry{}, false
-	}
-	return Entry{}, false
 }
 
 // readEntries decodes the JSONL store with a streaming decoder, so an entry of
