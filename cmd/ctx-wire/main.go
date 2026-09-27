@@ -73,17 +73,7 @@ func main() {
 			RawBodies:  cfg.Retention.RawBodies,
 			MaxEntries: cfg.Retention.MaxEntries,
 		}
-		// Dedup needs the recent store to compare against and to recover from, so
-		// it records (at least the lean tier) even if retention was not explicitly
-		// enabled. ApplyEnv runs last so the CTX_WIRE_RETENTION=0 kill switch still
-		// wins: it clears retentionOpts.Enabled, and maybeDedup is gated on that,
-		// so the kill switch disables dedup too.
-		dedupOn := cfg.Dedup.On()
-		if dedupOn {
-			ret.Enabled = true
-		}
 		runner.SetRetention(recent.ApplyEnv(ret))
-		runner.SetDedup(runner.DedupOptions{Enabled: dedupOn, Recency: cfg.Dedup.Recency()})
 	}
 	// Auto-update is opt-out and may be scheduled by any normal command, including
 	// hot agent paths. The foreground work is local and cheap; if a check is due,

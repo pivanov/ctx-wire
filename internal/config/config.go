@@ -24,28 +24,7 @@ type Config struct {
 	Output    Output    `toml:"output"`
 	Update    Update    `toml:"update"`
 	Retention Retention `toml:"retention"`
-	Dedup     Dedup     `toml:"dedup"`
 }
-
-// Dedup controls repeat-command dedup: when a read-only command re-runs with
-// byte-identical output, ctx-wire emits a short recoverable reference instead of
-// the body. ON by default. The command still runs; only the re-emission is saved.
-type Dedup struct {
-	// Enabled turns dedup on/off. nil (unset) means ON by default; set
-	// `enabled = false` to opt a machine out (CTX_WIRE_NO_DEDUP / `run --no-dedup`
-	// also disable per run). On implies the recent-outputs store records, so a
-	// reference can be compared and recovered via `ctx-wire inspect`.
-	Enabled *bool `toml:"enabled"`
-
-	// RecencyMinutes bounds how recent a prior run must be to dedup against it,
-	// the dead-pointer mitigation (default 60). A reference is only emitted when
-	// the unchanged body is likely still in the agent's context.
-	RecencyMinutes int `toml:"recency_minutes"`
-}
-
-// On reports whether dedup is enabled: ON by default (nil), honoring an explicit
-// `enabled = false`.
-func (d Dedup) On() bool { return d.Enabled == nil || *d.Enabled }
 
 // StripStacktracesOn reports whether stack-trace stripping is enabled: ON by
 // default (nil), honoring an explicit `strip_stacktraces = false`.
@@ -53,16 +32,8 @@ func (o Output) StripStacktracesOn() bool {
 	return o.StripStacktraces == nil || *o.StripStacktraces
 }
 
-// Recency returns the configured dedup recency window, or the 60-minute default.
-func (d Dedup) Recency() time.Duration {
-	if d.RecencyMinutes <= 0 {
-		return 60 * time.Minute
-	}
-	return time.Duration(d.RecencyMinutes) * time.Minute
-}
-
-// Retention controls the recent-outputs store that powers `ctx-wire inspect`
-// (and, later, dedup). It is a deliberate exception to "do not persist
+// Retention controls the recent-outputs store that powers `ctx-wire inspect`.
+// It is a deliberate exception to "do not persist
 // successful output", so it is OFF unless explicitly enabled.
 type Retention struct {
 	// Enabled turns the store on. Unset or false means off (the default): no

@@ -98,19 +98,6 @@ enabled = false
 raw_bodies = false
 # Cap on how many recent entries are kept (0 uses the built-in default).
 max_entries = 0
-
-[dedup]
-# When a read-only command re-runs with byte-identical output, emit a short
-# recoverable reference instead of the body (the command still runs; only the
-# re-emission is saved). ON by default; it implies the retention store above is
-# recording, so the reference can be recovered via `inspect`. Opt a machine out
-# by uncommenting `enabled = false`.
-# enabled = false
-# How recent the prior run must be to dedup against it (default 60), so a
-# reference is only emitted while the unchanged body is likely still in context.
-# Disable dedup for a single run with CTX_WIRE_NO_DEDUP=1 or `ctx-wire run
-# --no-dedup ...` (emit the full body instead of a reference).
-recency_minutes = 60
 ```
 
 ## Gain storage
@@ -212,7 +199,6 @@ directories. `ctx-wire doctor` reports which storage locations are writable.
 store behind `ctx-wire inspect`) for a single run; `CTX_WIRE_RETENTION_RAW=0`
 drops just the raw (pre-filter) tier, an escape hatch for a sensitive command.
 
-`CTX_WIRE_NO_DEDUP=1` disables repeat-command dedup for one run (same as
-`ctx-wire run --no-dedup`). `CTX_WIRE_KEEP_SHIMS=1` suppresses the advisory that
+`CTX_WIRE_KEEP_SHIMS=1` suppresses the advisory that
 suggests removing PATH shims a hook/plugin has made redundant, for users who
 deliberately keep their shims; it does not change which shims are installed.

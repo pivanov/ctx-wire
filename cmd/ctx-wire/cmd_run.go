@@ -43,7 +43,7 @@ func cmdMCP(args []string) int {
 func cmdRun(args []string) int {
 	if isHelpArg(args) {
 		printHelp(os.Stdout, helpDoc{
-			usage:   []string{"ctx-wire run [--no-dedup] [--agent <agent>] <cmd> [args]"},
+			usage:   []string{"ctx-wire run [--agent <agent>] <cmd> [args]"},
 			summary: "Run a command, then filter and scrub its output before printing it.",
 			examples: []string{
 				"ctx-wire run git status",
@@ -66,14 +66,15 @@ func cmdRun(args []string) int {
 	if args[0] == "--shim" {
 		return cmdRunShim(args[1:])
 	}
-	// --no-dedup forces this command's output to be shown in full even if it is
-	// unchanged from a recent run (the recoverable escape hatch for dedup).
+	// --no-dedup is accepted and ignored. Repeat-output dedup was removed (the
+	// agent re-ran for the real output about a third of the time), but agents
+	// and saved command allowlists still type the flag, and dropping it would
+	// turn their commands into "command not found".
 	for len(args) > 0 && args[0] == "--no-dedup" {
-		os.Setenv("CTX_WIRE_NO_DEDUP", "1")
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		usageLine(os.Stderr, "ctx-wire run [--no-dedup] [--agent <agent>] <cmd> [args]")
+		usageLine(os.Stderr, "ctx-wire run [--agent <agent>] <cmd> [args]")
 		return 2
 	}
 	agentName := ""

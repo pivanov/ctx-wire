@@ -342,24 +342,6 @@ func runBuffered(ctx context.Context, reg *filter.Registry, matched *filter.Comp
 		meta = append(meta, incompleteIONote)
 	}
 
-	// Dedup: if an eligible read-only command re-ran with byte-identical output,
-	// substitute a short recoverable reference for the body. Account the saved
-	// bytes against the real raw output size, keep the prior retained entry as the
-	// recoverable copy (do not record a new one), and discard the spool. Skipped
-	// when this run was truncated, so a truncation notice is never silently lost,
-	// and likewise when a descendant's post-exit output was dropped: the early
-	// return discards meta, which would take the incomplete-IO note with it.
-	// A synthetic collapse is excluded for a sharper reason: dedup discards the
-	// spool outright, which would undo the retention below and make the lost
-	// output unrecoverable again.
-	if !truncated && !incompleteIO && collapsedRawBytes == 0 {
-		if ref, ok := maybeDedup(name, args, scrubbedCmd, stdoutText+stderrText, code); ok {
-			recordGain(scrubbedCmd, filterName, "dedup", outCap.total+errCap.total, len(ref), code)
-			_, _ = spool.Finalize(false)
-			return ref, "", "", code, nil
-		}
-	}
-
 	// Spool retention + net-negative guard. The recovery footer earns its bytes
 	// only when content was actually omitted. On a failure with no truncation, if
 	// the filtered output plus the footer is not smaller than the full scrubbed
@@ -469,8 +451,8 @@ func gainSource() string {
 // output is not in memory to retain.
 var retentionOpts recent.Options
 
-// SetRetention configures the recent-outputs store used by `ctx-wire inspect`
-// (and, later, dedup). Disabled by default.
+// SetRetention configures the recent-outputs store used by `ctx-wire inspect`.
+// Disabled by default.
 func SetRetention(o recent.Options) { retentionOpts = o }
 
 // recordRecent stores the just-emitted command output, best-effort. No-op when
@@ -495,53 +477,6 @@ func recordRecent(cmd, filterName, mode string, outCap, errCap *capWriter, stdou
 		Emitted:   stdoutText + stderrText,
 		Raw:       raw,
 	})
-}
-
-// DedupOptions configures repeat-command dedup.
-type DedupOptions struct {
-	Enabled bool
-	Recency time.Duration
-}
-
-var dedupOpts DedupOptions
-
-// SetDedup configures repeat-command dedup. Off by default; main wires it from
-// config and ensures the recent store is recording when it is on.
-func SetDedup(o DedupOptions) { dedupOpts = o }
-
-// maybeDedup returns a recoverable reference to substitute for emitted when an
-// eligible read-only command re-ran with byte-identical output recently. ok is
-// false otherwise. The command still ran; this only avoids re-emitting the body.
-// It never dedups a failed command (code != 0): an error result should always be
-// shown.
-func maybeDedup(name string, args []string, scrubbedCmd, emitted string, code int) (string, bool) {
-	// Gating on retentionOpts.Enabled ties dedup to the store being operational,
-	// so CTX_WIRE_RETENTION=0 (which clears it via ApplyEnv) disables dedup too,
-	// even when prior entries still sit on disk.
-	if !dedupOpts.Enabled || !retentionOpts.Enabled || emitted == "" || code != 0 || dedupDisabledByEnv() {
-		return "", false
-	}
-	if !commandpolicy.IsDedupEligible(name, args) {
-		return "", false
-	}
-	prev, ok := recent.LastMatch(scrubbedCmd, dedupOpts.Recency, time.Now())
-	if !ok || prev.Hash != recent.Hash(emitted) {
-		return "", false
-	}
-	lines := strings.Count(strings.TrimRight(emitted, "\n"), "\n") + 1
-	when := prev.TS
-	if t, err := time.Parse(time.RFC3339Nano, prev.TS); err == nil {
-		when = t.Local().Format("15:04:05")
-	}
-	return fmt.Sprintf("[ctx-wire: unchanged since %s (%d lines); `ctx-wire inspect --list` then `ctx-wire inspect <n>` to recover it, or re-run with --no-dedup]\n", when, lines), true
-}
-
-func dedupDisabledByEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("CTX_WIRE_NO_DEDUP"))) {
-	case "1", "true", "yes", "on":
-		return true
-	}
-	return false
 }
 
 // Capture runs the command and returns its filtered, scrubbed output as a single
