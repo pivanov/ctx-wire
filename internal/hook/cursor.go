@@ -8,19 +8,13 @@ import (
 )
 
 type cursorInput struct {
-	ToolName  string `json:"tool_name"`
-	ToolInput struct {
-		Command string `json:"command"`
-	} `json:"tool_input"`
+	ToolName  string          `json:"tool_name"`
+	ToolInput json.RawMessage `json:"tool_input"`
 }
 
 type cursorOutput struct {
-	Permission   string              `json:"permission,omitempty"`
-	UpdatedInput *cursorUpdatedInput `json:"updated_input,omitempty"`
-}
-
-type cursorUpdatedInput struct {
-	Command string `json:"command"`
+	Permission   string          `json:"permission,omitempty"`
+	UpdatedInput json.RawMessage `json:"updated_input,omitempty"`
 }
 
 // Cursor handles a Cursor preToolUse payload for the Shell tool. If the command
@@ -44,15 +38,25 @@ func Cursor(r io.Reader, w io.Writer) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return abstain()
 	}
-	if in.ToolName != "Shell" || in.ToolInput.Command == "" {
+	var ti struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(in.ToolInput, &ti) != nil || ti.Command == "" {
 		return abstain()
 	}
-	rewritten := rewrite.LineForAgent(in.ToolInput.Command, "cursor")
-	if rewritten == in.ToolInput.Command {
+	if in.ToolName != "Shell" {
+		return abstain()
+	}
+	rewritten := rewrite.LineForAgent(ti.Command, "cursor")
+	if rewritten == ti.Command {
 		return abstain() // builtin, redirect, unattestable, ...: let Cursor decide
+	}
+	updated := toolInputWithCommand(in.ToolInput, rewritten)
+	if updated == nil {
+		return abstain()
 	}
 	return json.NewEncoder(w).Encode(cursorOutput{
 		Permission:   "allow",
-		UpdatedInput: &cursorUpdatedInput{Command: rewritten},
+		UpdatedInput: updated,
 	})
 }

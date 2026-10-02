@@ -27,6 +27,41 @@ func TestCodexGoldenRewrite(t *testing.T) {
 	}
 }
 
+// updatedInput replaces the tool input, so a rewrite must keep every original
+// field (run_in_background, timeout, description) with its JSON type intact.
+func TestCodexRewritePreservesToolInputFields(t *testing.T) {
+	t.Setenv("CTX_WIRE_CODEX_SAFE", "")
+	payload := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"go test ./...","run_in_background":true,"timeout":5400000,"description":"d"}}`
+	var out bytes.Buffer
+	if err := Codex(strings.NewReader(payload), &out); err != nil {
+		t.Fatalf("Codex: %v", err)
+	}
+	var got codexOutput
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output not JSON: %v\n%s", err, out.String())
+	}
+	h := got.HookSpecificOutput
+	if h.PermissionDecision != "allow" {
+		t.Fatalf("permissionDecision = %q, want allow", h.PermissionDecision)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(h.UpdatedInput, &fields); err != nil {
+		t.Fatalf("updatedInput is not an object: %v\n%s", err, h.UpdatedInput)
+	}
+	for key, want := range map[string]string{
+		"run_in_background": "true",
+		"timeout":           "5400000",
+		"description":       `"d"`,
+	} {
+		if got := string(fields[key]); got != want {
+			t.Errorf("key %q = %s, want %s (dropped or type-changed)", key, got, want)
+		}
+	}
+	if cmd := updatedCommand(t, h.UpdatedInput); !strings.Contains(cmd, "ctx-wire run") {
+		t.Errorf("command not rewritten: %q", cmd)
+	}
+}
+
 func TestCodexNoopForBuiltin(t *testing.T) {
 	var out bytes.Buffer
 	if err := Codex(strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"cd /tmp"}}`), &out); err != nil {
@@ -171,8 +206,8 @@ func TestCodexDefaultPreToolUseRewritesAndAllows(t *testing.T) {
 		if h.PermissionDecision != "allow" {
 			t.Errorf("default PreToolUse must auto-approve %q, got %q", cmd, h.PermissionDecision)
 		}
-		if h.UpdatedInput == nil || !strings.Contains(h.UpdatedInput.Command, "ctx-wire run") {
-			t.Errorf("default PreToolUse must rewrite %q for filtering, got %+v", cmd, h.UpdatedInput)
+		if h.UpdatedInput == nil || !strings.Contains(updatedCommand(t, h.UpdatedInput), "ctx-wire run") {
+			t.Errorf("default PreToolUse must rewrite %q for filtering, got %s", cmd, h.UpdatedInput)
 		}
 	}
 }

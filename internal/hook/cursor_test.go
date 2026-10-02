@@ -26,6 +26,20 @@ func TestCursorGoldenRewrite(t *testing.T) {
 	}
 }
 
+// updated_input replaces the tool input, so a rewrite must keep every original
+// field (run_in_background, timeout, ...) with its JSON type, not just command.
+func TestCursorRewritePreservesToolInputFields(t *testing.T) {
+	var out bytes.Buffer
+	in := `{"tool_name":"Shell","tool_input":{"command":"git status","run_in_background":true,"timeout":5400000,"description":"d"}}`
+	if err := Cursor(strings.NewReader(in), &out); err != nil {
+		t.Fatalf("Cursor: %v", err)
+	}
+	want := "{\"permission\":\"allow\",\"updated_input\":{\"command\":\"ctx-wire run --agent cursor git status\",\"description\":\"d\",\"run_in_background\":true,\"timeout\":5400000}}\n"
+	if out.String() != want {
+		t.Fatalf("output = %q, want %q", out.String(), want)
+	}
+}
+
 func TestCursorAbstainsForBuiltin(t *testing.T) {
 	var out bytes.Buffer
 	if err := Cursor(strings.NewReader(`{"tool_name":"Shell","tool_input":{"command":"cd /tmp"}}`), &out); err != nil {

@@ -110,7 +110,7 @@ func runClaudeHook(t *testing.T, cwd, command string) string {
 	if got.HookSpecificOutput.UpdatedInput == nil {
 		t.Fatalf("hook answered without an updated command: %s", out.String())
 	}
-	return got.HookSpecificOutput.UpdatedInput.Command
+	return updatedCommand(t, got.HookSpecificOutput.UpdatedInput)
 }
 
 // The reported bug: inside an isolated worktree, Claude Code refuses the

@@ -18,6 +18,20 @@ func TestCopilotVSCodeRewrite(t *testing.T) {
 	}
 }
 
+// The VS Code rewrite replaces the tool input with updatedInput, so every
+// original field must survive, not just command.
+func TestCopilotVSCodeRewritePreservesToolInputFields(t *testing.T) {
+	var out bytes.Buffer
+	in := `{"tool_name":"runTerminalCommand","tool_input":{"command":"git status","run_in_background":true,"timeout":5400000,"description":"d"}}`
+	if err := Copilot(strings.NewReader(in), &out); err != nil {
+		t.Fatalf("Copilot: %v", err)
+	}
+	want := "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"ctx-wire rewrite\",\"updatedInput\":{\"command\":\"ctx-wire run --agent copilot git status\",\"description\":\"d\",\"run_in_background\":true,\"timeout\":5400000}}}\n"
+	if out.String() != want {
+		t.Fatalf("output = %q, want %q", out.String(), want)
+	}
+}
+
 func TestCopilotCLIDenyWithSuggestionByDefault(t *testing.T) {
 	var out bytes.Buffer
 	in := `{"toolName":"bash","toolArgs":"{\"command\":\"git status\",\"description\":\"Run requested command\"}"}`

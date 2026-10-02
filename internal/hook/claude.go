@@ -29,14 +29,10 @@ type claudeOutput struct {
 }
 
 type claudeHookOutput struct {
-	HookEventName            string              `json:"hookEventName"`
-	PermissionDecision       string              `json:"permissionDecision"`
-	PermissionDecisionReason string              `json:"permissionDecisionReason,omitempty"`
-	UpdatedInput             *claudeUpdatedInput `json:"updatedInput,omitempty"`
-}
-
-type claudeUpdatedInput struct {
-	Command string `json:"command"`
+	HookEventName            string          `json:"hookEventName"`
+	PermissionDecision       string          `json:"permissionDecision"`
+	PermissionDecisionReason string          `json:"permissionDecisionReason,omitempty"`
+	UpdatedInput             json.RawMessage `json:"updatedInput,omitempty"`
 }
 
 // Claude handles a Claude Code PreToolUse payload. For Bash: if the command is
@@ -102,11 +98,15 @@ func claudeBash(in claudeInput, w io.Writer) error {
 	if isolatedGit && rules.Decide(rewritten) != permission.Allow {
 		return nil
 	}
+	updated := toolInputWithCommand(in.ToolInput, rewritten)
+	if updated == nil {
+		return nil
+	}
 	return json.NewEncoder(w).Encode(claudeOutput{
 		HookSpecificOutput: claudeHookOutput{
 			HookEventName:      "PreToolUse",
 			PermissionDecision: "allow",
-			UpdatedInput:       &claudeUpdatedInput{Command: rewritten},
+			UpdatedInput:       updated,
 		},
 	})
 }

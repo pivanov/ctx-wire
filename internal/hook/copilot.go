@@ -10,10 +10,8 @@ import (
 )
 
 type copilotVSCodeInput struct {
-	ToolName  string `json:"tool_name"`
-	ToolInput struct {
-		Command string `json:"command"`
-	} `json:"tool_input"`
+	ToolName  string          `json:"tool_name"`
+	ToolInput json.RawMessage `json:"tool_input"`
 }
 
 type copilotCLIInput struct {
@@ -32,14 +30,10 @@ type copilotVSCodeOutput struct {
 }
 
 type copilotHookOutput struct {
-	HookEventName            string              `json:"hookEventName"`
-	PermissionDecision       string              `json:"permissionDecision"`
-	PermissionDecisionReason string              `json:"permissionDecisionReason"`
-	UpdatedInput             copilotUpdatedInput `json:"updatedInput"`
-}
-
-type copilotUpdatedInput struct {
-	Command string `json:"command"`
+	HookEventName            string          `json:"hookEventName"`
+	PermissionDecision       string          `json:"permissionDecision"`
+	PermissionDecisionReason string          `json:"permissionDecisionReason"`
+	UpdatedInput             json.RawMessage `json:"updatedInput"`
 }
 
 // Copilot handles both VS Code Copilot Chat and GitHub Copilot CLI pre-tool
@@ -74,11 +68,18 @@ func copilotVSCode(data []byte, w io.Writer) error {
 	if in.ToolName != "runTerminalCommand" && in.ToolName != "Bash" && in.ToolName != "bash" {
 		return nil
 	}
-	if in.ToolInput.Command == "" {
+	var ti struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(in.ToolInput, &ti) != nil || ti.Command == "" {
 		return nil
 	}
-	rewritten := rewrite.LineForAgent(in.ToolInput.Command, "copilot")
-	if rewritten == in.ToolInput.Command {
+	rewritten := rewrite.LineForAgent(ti.Command, "copilot")
+	if rewritten == ti.Command {
+		return nil
+	}
+	updated := toolInputWithCommand(in.ToolInput, rewritten)
+	if updated == nil {
 		return nil
 	}
 	return json.NewEncoder(w).Encode(copilotVSCodeOutput{
@@ -86,7 +87,7 @@ func copilotVSCode(data []byte, w io.Writer) error {
 			HookEventName:            "PreToolUse",
 			PermissionDecision:       "allow",
 			PermissionDecisionReason: "ctx-wire rewrite",
-			UpdatedInput:             copilotUpdatedInput{Command: rewritten},
+			UpdatedInput:             updated,
 		},
 	})
 }

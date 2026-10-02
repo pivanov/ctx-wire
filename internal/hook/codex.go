@@ -11,11 +11,9 @@ import (
 )
 
 type codexInput struct {
-	HookEventName string `json:"hook_event_name"`
-	ToolName      string `json:"tool_name"`
-	ToolInput     struct {
-		Command string `json:"command"`
-	} `json:"tool_input"`
+	HookEventName string          `json:"hook_event_name"`
+	ToolName      string          `json:"tool_name"`
+	ToolInput     json.RawMessage `json:"tool_input"`
 }
 
 type codexOutput struct {
@@ -25,12 +23,8 @@ type codexOutput struct {
 type codexHookOutput struct {
 	HookEventName      string                `json:"hookEventName"`
 	PermissionDecision string                `json:"permissionDecision,omitempty"`
-	UpdatedInput       *codexUpdatedInput    `json:"updatedInput,omitempty"`
+	UpdatedInput       json.RawMessage       `json:"updatedInput,omitempty"`
 	Decision           *codexDecisionWrapper `json:"decision,omitempty"`
-}
-
-type codexUpdatedInput struct {
-	Command string `json:"command"`
 }
 
 type codexDecisionWrapper struct {
@@ -59,11 +53,17 @@ func Codex(r io.Reader, w io.Writer) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return nil
 	}
-	if in.ToolName != "Bash" || in.ToolInput.Command == "" {
+	var ti struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(in.ToolInput, &ti) != nil || ti.Command == "" {
+		return nil
+	}
+	if in.ToolName != "Bash" {
 		return nil
 	}
 	if in.HookEventName == "PermissionRequest" {
-		if !allowCodexPermissionCommand(in.ToolInput.Command) {
+		if !allowCodexPermissionCommand(ti.Command) {
 			return nil // not ours, or safe-mode declined → codex's own prompt
 		}
 		return json.NewEncoder(w).Encode(codexOutput{
@@ -76,8 +76,8 @@ func Codex(r io.Reader, w io.Writer) error {
 			},
 		})
 	}
-	rewritten := rewrite.LineForAgent(in.ToolInput.Command, "codex")
-	if rewritten == in.ToolInput.Command {
+	rewritten := rewrite.LineForAgent(ti.Command, "codex")
+	if rewritten == ti.Command {
 		return nil // not rewritable (already wrapped, a redirect, ...) → codex decides
 	}
 	// Codex REJECTS a PreToolUse response that carries updatedInput without
@@ -87,11 +87,15 @@ func Codex(r io.Reader, w io.Writer) error {
 	if !allowCodexPermissionCommand(rewritten) {
 		return nil
 	}
+	updated := toolInputWithCommand(in.ToolInput, rewritten)
+	if updated == nil {
+		return nil
+	}
 	return json.NewEncoder(w).Encode(codexOutput{
 		HookSpecificOutput: codexHookOutput{
 			HookEventName:      "PreToolUse",
 			PermissionDecision: "allow",
-			UpdatedInput:       &codexUpdatedInput{Command: rewritten},
+			UpdatedInput:       updated,
 		},
 	})
 }

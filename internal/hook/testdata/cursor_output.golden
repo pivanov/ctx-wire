@@ -1,1 +1,1 @@
-{"permission":"allow","updated_input":{"command":"ctx-wire run --agent cursor git status"}}
+{"permission":"allow","updated_input":{"command":"ctx-wire run --agent cursor git status","working_directory":"/work"}}
