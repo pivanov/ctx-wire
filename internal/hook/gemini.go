@@ -8,10 +8,8 @@ import (
 )
 
 type geminiInput struct {
-	ToolName  string `json:"tool_name"`
-	ToolInput struct {
-		Command string `json:"command"`
-	} `json:"tool_input"`
+	ToolName  string          `json:"tool_name"`
+	ToolInput json.RawMessage `json:"tool_input"`
 }
 
 type geminiOutput struct {
@@ -20,11 +18,7 @@ type geminiOutput struct {
 }
 
 type geminiHookOutput struct {
-	ToolInput geminiUpdatedInput `json:"tool_input"`
-}
-
-type geminiUpdatedInput struct {
-	Command string `json:"command"`
+	ToolInput json.RawMessage `json:"tool_input"`
 }
 
 // Gemini handles a Gemini CLI BeforeTool payload. If the command is rewritable
@@ -46,17 +40,27 @@ func Gemini(r io.Reader, w io.Writer) error {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return abstain()
 	}
-	if in.ToolName != "run_shell_command" || in.ToolInput.Command == "" {
+	var ti struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(in.ToolInput, &ti) != nil || ti.Command == "" {
 		return abstain()
 	}
-	rewritten := rewrite.LineForAgent(in.ToolInput.Command, "gemini")
-	if rewritten == in.ToolInput.Command {
+	if in.ToolName != "run_shell_command" {
+		return abstain()
+	}
+	rewritten := rewrite.LineForAgent(ti.Command, "gemini")
+	if rewritten == ti.Command {
 		return abstain() // builtin, redirect, unattestable, ...: let Gemini decide
+	}
+	updated := toolInputWithCommand(in.ToolInput, rewritten)
+	if updated == nil {
+		return abstain()
 	}
 	return json.NewEncoder(w).Encode(geminiOutput{
 		Decision: "allow",
 		HookSpecificOutput: &geminiHookOutput{
-			ToolInput: geminiUpdatedInput{Command: rewritten},
+			ToolInput: updated,
 		},
 	})
 }

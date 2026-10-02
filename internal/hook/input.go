@@ -2,6 +2,7 @@ package hook
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 )
@@ -31,4 +32,28 @@ func readHookInput(r io.Reader) ([]byte, error) {
 		return nil, errors.New("hook payload exceeds cap")
 	}
 	return bytes.TrimPrefix(data, utf8BOM), nil
+}
+
+// toolInputWithCommand returns toolInput with only its "command" key replaced by
+// command. Every other key is carried over byte-for-byte (booleans stay booleans,
+// numbers stay numbers, unknown future keys survive), because hosts like Claude
+// Code REPLACE the tool input with the hook's updatedInput rather than merging
+// it: emitting only {"command": ...} would silently drop fields such as
+// run_in_background, timeout, description, or dangerouslyDisableSandbox.
+// It returns nil when toolInput is not a JSON object; callers fail open.
+func toolInputWithCommand(toolInput json.RawMessage, command string) json.RawMessage {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(toolInput, &obj); err != nil || obj == nil {
+		return nil
+	}
+	raw, err := json.Marshal(command)
+	if err != nil {
+		return nil
+	}
+	obj["command"] = raw
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return nil
+	}
+	return out
 }
