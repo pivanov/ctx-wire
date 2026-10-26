@@ -2,7 +2,7 @@ module ctx-wire
 
 go 1.26
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/BurntSushi/toml v1.4.0
