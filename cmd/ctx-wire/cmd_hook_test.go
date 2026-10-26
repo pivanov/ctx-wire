@@ -97,6 +97,19 @@ func TestCmdRewriteFlags(t *testing.T) {
 			out:  "cd D:/src",
 		},
 		{
+			// pwsh is PowerShell too, never the bash recognizer (which wraps ls).
+			name: "pwsh is powershell",
+			args: []string{"--shell", "pwsh", "ls -la"},
+			code: 0,
+			out:  "ls -la",
+		},
+		{
+			// An unknown shell is an error, not a silent bash fallback.
+			name: "unknown shell is usage error",
+			args: []string{"--shell", "zsh", "ls -la"},
+			code: 2,
+		},
+		{
 			name: "no args is usage error",
 			args: []string{},
 			code: 2,
@@ -124,11 +137,13 @@ func TestCmdRewriteFlags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stdout, _ := captureStdio(t, func() {
-				if code := cmdRewrite(tt.args); code != tt.code {
-					t.Fatalf("cmdRewrite(%q) exit = %d, want %d", tt.args, code, tt.code)
-				}
-			})
+			// Assert after captureStdio returns: a t.Fatalf inside fn would skip
+			// restoring os.Stdout for every later test in the package.
+			var code int
+			stdout, _ := captureStdio(t, func() { code = cmdRewrite(tt.args) })
+			if code != tt.code {
+				t.Fatalf("cmdRewrite(%q) exit = %d, want %d", tt.args, code, tt.code)
+			}
 			if tt.out != "" {
 				if got := strings.TrimSpace(stdout); got != tt.out {
 					t.Errorf("cmdRewrite(%q) = %q, want %q", tt.args, got, tt.out)

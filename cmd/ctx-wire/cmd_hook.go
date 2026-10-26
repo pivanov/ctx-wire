@@ -106,9 +106,20 @@ func cmdRewrite(args []string) int {
 		usageLine(os.Stderr, "ctx-wire rewrite [--shell <shell>] <command line>")
 		return 2
 	}
+	// An unknown shell must not fall back to bash: the bash recognizer wraps
+	// `ls` or `curl`, which PowerShell resolves to its own aliases.
+	powershell := false
+	switch strings.ToLower(shell) {
+	case "bash":
+	case "powershell", "pwsh":
+		powershell = true
+	default:
+		fmt.Fprintf(os.Stderr, "ctx-wire rewrite: unknown shell %q (want bash or powershell)\n", shell)
+		return 2
+	}
 
 	line := strings.Join(args, " ")
-	if strings.EqualFold(shell, "powershell") {
+	if powershell {
 		fmt.Println(rewrite.PowerShellLineForAgent(line, agentName))
 		return 0
 	}
